@@ -4,8 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Rift &amp; Sail — Age of Sail Empire</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0c2b38">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rift &amp; Sail">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<style>
+/* Cinzel (OFL — fonts.google.com/specimen/Cinzel), self-hosted so the chart engraves offline too */
+@font-face{font-family:'Cinzel';font-style:normal;font-weight:600 800;font-display:swap;
+  src:url('assets/fonts/cinzel-latinext.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;}
+@font-face{font-family:'Cinzel';font-style:normal;font-weight:600 800;font-display:swap;
+  src:url('assets/fonts/cinzel-latin.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+</style>
 <script type="importmap">
-{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+{"imports":{"three":"./assets/vendor/three.module.min.js","three/addons/":"./assets/vendor/addons/"}}
 </script>
 <style>
   :root{
@@ -218,6 +235,11 @@
   #topbar b.pulse{display:inline-block; animation:numPulse .5s ease;}
   @keyframes numPulse{0%{transform:scale(1)} 35%{transform:scale(1.24); color:#ffe9a8; text-shadow:0 0 10px rgba(255,217,122,.85)} 100%{transform:scale(1)}}
   .chip{transition:opacity .18s ease;}
+  /* ---------- engraved display type (Cinzel, OFL) ---------- */
+  #title-cell,#sheet h3,.card h2,.card h3,#start h1,#aims h4,#clockbar .cdate,.chip.name{
+    font-family:'Cinzel',Georgia,'Times New Roman',serif; letter-spacing:.06em;}
+  .chip.name{text-shadow:0 1px 0 rgba(255,248,225,.55);}
+  .chip.sea{font-style:italic;}
   #sheet{transition:transform .28s cubic-bezier(.22,.9,.26,1);}
   #hint.show{animation:hintin .35s ease-out, hintGlow 2.8s ease-in-out .4s infinite;}
   @keyframes hintGlow{0%,100%{box-shadow:0 8px 26px rgba(0,0,0,.55)} 50%{box-shadow:0 8px 30px rgba(217,185,106,.35)}}
@@ -375,7 +397,7 @@ const rr=(a,b)=>a+rnd()*(b-a);
 const pick=a=>a[Math.floor(rnd()*a.length)];
 
 // ---------- world definition ----------
-const WORLD_W=6000, WORLD_H=4000; // the grandeur chart — authored small below, stretched by WS
+const WORLD_W=8040, WORLD_H=5360; // the 10x chart — authored small below, stretched by WS (was 6000×4000)
 const SEASONS=['Spring','Summer','Autumn','Winter'];
 
 // terrains: plains, forest, hills, coast handled by isPort, marsh
@@ -459,8 +481,9 @@ const SEA_DEFS=[
 ];
 // ---------- grandeur scale ----------
 // REGION_DEFS / SEA_DEFS / LAND_PATHS are authored on a compact 2400×1600 chart.
-// WS stretches every anchor into a vast 6000×4000 world: same graph, real distances.
-const WS=2.5;
+// WS stretches every anchor into a vast 8040×5360 world: same graph, real distances.
+// 10x pass: 2.5 → 3.35 — settlements keep their size, the spaces between them grow.
+const WS=3.35;
 REGION_DEFS.forEach(d=>{ d[1]*=WS; d[2]*=WS; });
 SEA_DEFS.forEach(d=>{ d[1]*=WS; d[2]*=WS; });
 // uninhabited islets — pure scenery (chart units, scaled here): x, y, radius
@@ -468,7 +491,9 @@ const ISLETS=[[980,980,55],[1240,620,45],[700,1470,60],[1660,1520,40],[430,1460,
 ISLETS.forEach(d=>{ d[0]*=WS; d[1]*=WS; d[2]*=WS; });
 // Travel-time model, in world units per day. The movement graph (buildGraph) and
 // the future real-time engine both reason in DAYS of travel, not per-season jumps.
-const TRAVEL={marchPerDay:120, sailPerDay:300, daysPerSeason:90};
+// speeds scale with the chart so travel DAYS stay sane on the bigger world:
+// capital→far-corner still reads ~4–6 weeks at 1× (161/day land, 402/day sea).
+const TRAVEL={marchPerDay:Math.round(120*WS/2.5), sailPerDay:Math.round(300*WS/2.5), daysPerSeason:90};
 function landDays(a,b){ return Math.max(1,Math.round(Math.hypot(a.x-b.x,a.y-b.y)/TRAVEL.marchPerDay)); }
 function seaDays(a,b){ return Math.max(1,Math.round(Math.hypot(a.x-b.x,a.y-b.y)/TRAVEL.sailPerDay)); }
 
@@ -570,7 +595,7 @@ function rebuildIndex(){ rById={}; G.regions.forEach(r=>rById[r.id]=r); seaById=
    units with a current node (fleet.node === 's<zoneId>') and a live
    position (fleet.pos, world coords) — see syncUnits().
    ============================================================ */
-const WORLD_VER=5; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle)
+const WORLD_VER=6; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle, 6 = the 8040×5360 10x chart)
 let WORLD_GRAPH=null;
 // the world's two narrow seas — Western↔Eastern Med (Sicily) and North Sea↔Baltic (the Danish straits)
 function weldSeaNeighbors(seas){
@@ -677,6 +702,15 @@ function migrateSave(s){
       }
     });
     s.wv=5;
+  }
+  if(s.wv===5){ // 10x pass: the chart grew 2.5→3.35 — re-derive every position from the atlas by name
+    const byR={}; REGION_DEFS.forEach(d=>{ byR[d[0]]=d; });
+    (s.regions||[]).forEach(r=>{ const d=byR[r.name]; if(d){ r.x=d[1]; r.y=d[2]; } });
+    const byS={}; SEA_DEFS.forEach(d=>{ byS[d[0]]=d; });
+    (s.seas||[]).forEach(z=>{ const d=byS[z.name]; if(d){ z.x=d[1]; z.y=d[2]; } });
+    (s.fleets||[]).forEach(f=>{ f.at=null; });
+    (s.armies||[]).forEach(a=>{ if(a.at){ a.atRegion = a.destRegion!=null? a.destRegion : a.fromRegion; a.at=null; a.path=null; } });
+    s.wv=6;
   }
   return s;
 }
@@ -2401,16 +2435,41 @@ try{
   const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.5));
   renderer.setSize(innerWidth, innerHeight);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; // lifts saturation toward the reference render
+  renderer.toneMappingExposure = 1.12;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0d4258);
-  scene.fog = new THREE.Fog(0x0d4258, 1000, 2400);
-  const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.5, 5000);
+  scene.fog = new THREE.FogExp2(0x8fb0c2, 0.00030); // horizon haze — distant shores fade, the chart feels bigger
+  const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.5, 6000);
 
-  scene.add(new THREE.HemisphereLight(0xfff1cf, 0x1d4a5c, 1.05));
-  const sun = new THREE.DirectionalLight(0xffe3ae, 1.5);
-  sun.position.set(120, 190, 60); scene.add(sun);
+  // warm "pure sky" ambient baked from a gradient equirect (the CC0 HDRI's job, at zero payload)
+  try{
+    const ec=document.createElement('canvas'); ec.width=512; ec.height=256;
+    const ex=ec.getContext('2d');
+    const gr=ex.createLinearGradient(0,0,0,256);
+    gr.addColorStop(0,'#7fb2d9'); gr.addColorStop(0.52,'#cfe3ea'); gr.addColorStop(0.58,'#f4e3bb'); gr.addColorStop(0.66,'#8aa383'); gr.addColorStop(1,'#4c5a44');
+    ex.fillStyle=gr; ex.fillRect(0,0,512,256);
+    const eqTex=new THREE.CanvasTexture(ec); eqTex.mapping=THREE.EquirectangularReflectionMapping;
+    if('colorSpace' in eqTex) eqTex.colorSpace=THREE.SRGBColorSpace;
+    const pmrem=new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromEquirectangular(eqTex).texture;
+    eqTex.dispose(); pmrem.dispose();
+  }catch(e){ /* ambient bake is garnish — hemisphere light still carries the scene */ }
+
+  const hemi = new THREE.HemisphereLight(0xcfe5ef, 0x5c6b46, 0.95); // sky / ground per the art-direction pass
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffe3ae, 1.6);
+  sun.position.set(120, 190, 60);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.near = 10; sun.shadow.camera.far = 900;
+  sun.shadow.camera.left=-160; sun.shadow.camera.right=160; sun.shadow.camera.top=160; sun.shadow.camera.bottom=-160;
+  sun.shadow.bias = -0.0006;
+  scene.add(sun); scene.add(sun.target);
   const fill = new THREE.DirectionalLight(0xbfd9e8, 0.35);
   fill.position.set(-90, 80, -120); scene.add(fill);
 
@@ -2445,6 +2504,131 @@ try{
   }
   const hash=n=>{ const x=Math.sin(n*127.1)*43758.5453; return x-Math.floor(x); };
 
+  /* ================================================================
+     KIT LAYER — modeled CC0 kits (Kenney Pirate/Town/Castle/Nature,
+     meshopt-compressed, see assets/manifest.json) loaded LAZILY after
+     first frame. Until they land — or if they fail — the procedural
+     models below carry the game. Kit geometry is merged with UVs so
+     a whole town stays a handful of draw calls per material family.
+     ================================================================ */
+  const KIT = { ready:false, geo:{}, mats:{}, ships:[null,null,null], houses:[], smokeTex:null, detailTex:null };
+  const GS = WS/2.5; // world growth factor vs the 6000×4000 chart (spread pass)
+  function TB(mat){ this.pos=[]; this.nor=[]; this.uv=[]; this.col=[]; this.mat=mat||null; }
+  TB.prototype.add = function(geo, matrix, tint){
+    const g = geo.index? geo.toNonIndexed() : geo.clone();
+    g.applyMatrix4(matrix);
+    const p=g.attributes.position, n=g.attributes.normal, u=g.attributes.uv, c=new THREE.Color(tint||'#ffffff');
+    for(let i=0;i<p.count;i++){ this.pos.push(p.getX(i),p.getY(i),p.getZ(i)); this.nor.push(n.getX(i),n.getY(i),n.getZ(i));
+      this.uv.push(u? u.getX(i):0, u? u.getY(i):0); this.col.push(c.r,c.g,c.b); }
+    g.dispose();
+  };
+  TB.prototype.mesh = function(matOverride){
+    if(!this.pos.length) return null;
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos,3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor,3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv,2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col,3));
+    const m=new THREE.Mesh(g, matOverride||this.mat);
+    m.castShadow=true; m.receiveShadow=true; m.matrixAutoUpdate=false;
+    return m;
+  };
+  function xg(geo, x,y,z, ry=0, sx=1, sy=1, sz=1){ // transformed clone of a prepared kit geometry
+    const g = geo.index? geo.toNonIndexed() : geo.clone();
+    g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(0,ry,0)), new THREE.Vector3(sx,sy,sz)));
+    return g;
+  }
+  function prepMerged(rootObj, filter){ // bake a loaded model into ONE merged geometry (uv kept, tangents stripped)
+    const parts=[];
+    rootObj.updateMatrixWorld(true);
+    rootObj.traverse(o=>{
+      if(!o.isMesh) return;
+      if(filter && !filter(o.name)) return;
+      // Kenney exports carry normalized/quantized attributes restored by node matrices —
+      // float-ify through the (denormalizing) getters BEFORE baking, or hulls squash to a cube
+      const src=o.geometry, sp=src.attributes.position, sn=src.attributes.normal, su=src.attributes.uv, n=sp.count;
+      const g=new THREE.BufferGeometry();
+      const pos=new Float32Array(n*3), nor=new Float32Array(n*3), uv=new Float32Array(n*2);
+      for(let i=0;i<n;i++){ pos[i*3]=sp.getX(i); pos[i*3+1]=sp.getY(i); pos[i*3+2]=sp.getZ(i);
+        if(sn){ nor[i*3]=sn.getX(i); nor[i*3+1]=sn.getY(i); nor[i*3+2]=sn.getZ(i); }
+        if(su){ uv[i*2]=su.getX(i); uv[i*2+1]=su.getY(i); } }
+      g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+      g.setAttribute('normal', new THREE.BufferAttribute(nor,3));
+      g.setAttribute('uv', new THREE.BufferAttribute(uv,2));
+      if(src.index) g.setIndex(src.index.clone());
+      g.applyMatrix4(o.matrixWorld);
+      const ng = g.index? g.toNonIndexed() : g;
+      const cnt = ng.attributes.position.count, colArr = new Float32Array(cnt*3).fill(1); // white base — district tints multiply in
+      ng.setAttribute('color', new THREE.BufferAttribute(colArr,3));
+      parts.push(ng);
+    });
+    if(!parts.length) return null;
+    const mg = window.__mergeGeometries;
+    const out = parts.length===1? parts[0] : mg(parts, false);
+    parts.forEach(p=>{ if(p!==out) p.dispose(); });
+    out.computeBoundingBox();
+    return out;
+  }
+  async function initKits(){
+    try{
+      const [{GLTFLoader}, {mergeGeometries}, {MeshoptDecoder}] = await Promise.all([
+        import('three/addons/loaders/GLTFLoader.js'),
+        import('three/addons/utils/BufferGeometryUtils.js'),
+        import('three/addons/libs/meshopt_decoder.module.js')]);
+      window.__mergeGeometries = mergeGeometries;
+      const man = await (await fetch('assets/manifest.json')).json();
+      const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+      const url = k => (man.models[k]||{}).file;
+      const load = async k => { const g = await loader.loadAsync(url(k)); return g.scene; };
+      const names = ['ship_sloop','ship_frigate','ship_line','town_wall','town_wallwood','town_door','town_roof','town_roofpoint','town_windmill','town_stall','castle_tower','castle_wall','nat_tree','nat_pine','nat_rock'];
+      const scenes = {};
+      await Promise.all(names.map(async k=>{ try{ scenes[k]=await load(k); }catch(e){ scenes[k]=null; } }));
+      const matFrom = sc => { let m=null; sc && sc.traverse(o=>{ if(!m && o.isMesh && o.material && o.material.map) m=o.material.map; }); return m; };
+      const lambert = tex => { const m=new THREE.MeshLambertMaterial({map:tex||null, vertexColors:true}); return m; };
+      // per-family materials (vertex colours multiply the kit colormap: roof/district tints live there)
+      const famTex = {};
+      [['pirate','ship_line'],['town','town_wall'],['castle','castle_tower'],['nature','nat_tree']].forEach(([fam,k])=>{ const t=matFrom(scenes[k]); if(t){ if('colorSpace' in t) t.colorSpace=THREE.SRGBColorSpace; famTex[fam]=t; } });
+      KIT.mats = { pirate: lambert(famTex.pirate), town: lambert(famTex.town), castle: lambert(famTex.castle), nature: lambert(famTex.nature) };
+      // ships: hull+flags merged, sails separate (furled = hidden)
+      ['ship_sloop','ship_frigate','ship_line'].forEach((k,i)=>{
+        if(!scenes[k]) return;
+        const body = prepMerged(scenes[k], n=>!/^sail/.test(n));
+        const sails = prepMerged(scenes[k], n=>/^sail/.test(n));
+        if(body) KIT.ships[i] = {body, sails};
+      });
+      // town pieces: centre the wall slabs on their cell so houses assemble cleanly
+      const piece = (k, tx=0) => { const g = prepMerged(scenes[k], null); if(g && tx) g.translate(tx,0,0); return g; };
+      KIT.geo.wall = piece('town_wall', -0.45); KIT.geo.wallwood = piece('town_wallwood', -0.45); KIT.geo.door = piece('town_door', -0.45);
+      KIT.geo.roof = piece('town_roof'); KIT.geo.roofpoint = piece('town_roofpoint');
+      KIT.geo.windmill = piece('town_windmill'); if(KIT.geo.windmill) KIT.geo.windmill.translate(0, -KIT.geo.windmill.boundingBox.min.y, 0);
+      KIT.geo.stall = piece('town_stall');
+      KIT.geo.tower = piece('castle_tower'); KIT.geo.cwall = piece('castle_wall'); if(KIT.geo.cwall) KIT.geo.cwall.translate(0.25,0,0);
+      KIT.geo.tree = piece('nat_tree'); KIT.geo.pine = piece('nat_pine'); KIT.geo.rock = piece('nat_rock');
+      // assembled houses: 4 slabs + roof, stone / wood / two-storey-with-door
+      const houseFrom = (wallG, roofG, stories, doorG) => {
+        const parts=[];
+        for(let s=0;s<stories;s++){
+          parts.push(xg(wallG, 0, s, 0.45, Math.PI/2), xg(wallG, 0, s, -0.45, Math.PI/2), xg(wallG, -0.45, s, 0, 0), xg(wallG, 0.45, s, 0, 0));
+          if(s===0 && doorG) parts[parts.length-4] = xg(doorG, 0, 0, 0.45, Math.PI/2);
+        }
+        parts.push(xg(roofG, 0, stories, 0, 0));
+        const mg = window.__mergeGeometries;
+        const out = mg(parts, false); parts.forEach(p=>p.dispose());
+        out.computeBoundingBox(); return out;
+      };
+      if(KIT.geo.wall && KIT.geo.roof) KIT.houses.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 1, null));
+      if(KIT.geo.wallwood && KIT.geo.roofpoint) KIT.houses.push(houseFrom(KIT.geo.wallwood, KIT.geo.roofpoint, 1, null));
+      if(KIT.geo.wall && KIT.geo.roof && KIT.geo.door) KIT.houses.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 2, KIT.geo.door));
+      // smoke sprite + terrain detail (optional garnish — failure just skips them)
+      try{ const t = await new THREE.TextureLoader().loadAsync((man.textures||{}).smoke_a || 'assets/textures/smoke_puff_a.edbf08c4.png'); KIT.smokeTex=t; }catch(e){}
+      try{ const t = await new THREE.TextureLoader().loadAsync((man.textures||{}).detail_grass || 'assets/textures/detail_grass.5a6996c2.jpg'); t.wrapS=t.wrapT=THREE.RepeatWrapping; KIT.detailTex=t; if(window.__landMat){ window.__landMat.userData.uDetail.value=t; window.__landMat.userData.uDetailOn.value=1; } }catch(e){}
+      window.__kitDiag = { ships: KIT.ships.map(s=>!!s), houses: KIT.houses.length,
+        geo: Object.keys(KIT.geo).filter(k=>!!KIT.geo[k]), smoke: !!KIT.smokeTex, detail: !!KIT.detailTex };
+      if(KIT.ships.some(Boolean) && KIT.houses.length) { KIT.ready=true; window.__kitReady=true; kitSwapIn(); }
+    }catch(e){ if(window.console) console.warn('Rift & Sail kit layer unavailable, procedural models stand:', e); }
+  }
+
   /* ---------- land truth for placement (continents from LAND_PATHS, sampled) ---------- */
   let LANDPOLY=[]; // continent outlines in 3D coords (subsampled) — is this point on land?
   function pipXZ(x,z,poly){ let inside=false;
@@ -2452,7 +2636,7 @@ try{
       if(((zi>z)!==(zj>z)) && (x<(xj-xi)*(z-zi)/(zj-zi)+xi)) inside=!inside; }
     return inside; }
   function onLand(x,z,r){ // r optional: island regions test against their own ellipse blob
-    if(r && r.group==='I'){ const dx=(x-SX(r.x))/23.7, dz=(z-SZ(r.y))/17.5; return dx*dx+dz*dz<1; }
+    if(r && r.group==='I'){ const dx=(x-SX(r.x))/(23.7*GS), dz=(z-SZ(r.y))/(17.5*GS); return dx*dx+dz*dz<1; }
     for(const poly of LANDPOLY) if(pipXZ(x,z,poly)) return true;
     return false;
   }
@@ -2462,13 +2646,14 @@ try{
      One canvas texture over the whole chart: deep forest greens, wheat plains,
      olive hills, grey rock around the ranges, sandier south — parchment beneath. */
   function biomeTexture(){
-    const W=1200, H=800, cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+    // saturated biome bands per the art-direction palette — lush, not parchment-washed
+    const W=1600, H=1067, cv=document.createElement('canvas'); cv.width=W; cv.height=H;
     const c=cv.getContext('2d');
-    c.fillStyle='#d9c28c'; c.fillRect(0,0,W,H);
+    c.fillStyle='#cbb277'; c.fillRect(0,0,W,H); // warm sand base under everything
     const PX=x=>x/WORLD_W*W, PY=y=>y/WORLD_H*H;
     // 'coast' in the data is a location, not a biome — derive the land's colour
     // from what grows and what's dug there: timber country is forest, grain is wheat.
-    const bio={forest:['#3c632a','#527a37'],plains:['#8a9140','#aba55a'],hills:['#6f7040','#86814a'],marsh:['#556c41','#677d4f'],dry:['#a8904b','#bfa55c'],rock:['#6b5f50','#857763']};
+    const bio={forest:['#2e6b38','#3f7d43'],plains:['#6fa84f','#7fb45c'],hills:['#7a8148','#8f9455'],marsh:['#4f7a52','#5f8a5f'],dry:['#d9b878','#e2c88e'],rock:['#8a8d91','#9aa0a3']};
     const MTN=['Caucasus','Anatolia','Muscovy','Dalmatia','Rome States','Greece','Hungary','Catalonia','Navarre'];
     G.regions.forEach(r=>{
       const cols = MTN.includes(r.name)? bio.rock
@@ -2477,19 +2662,19 @@ try{
         : r.terrain==='hills'? bio.hills
         : r.specialty==='sugar'? bio.dry
         : bio.plains;
-      const rad=(r.group==='I'? 170:440)*(W/WORLD_W), x=PX(r.x), y=PY(r.y);
+      const rad=(r.group==='I'? 210:540)*(W/WORLD_W), x=PX(r.x), y=PY(r.y);
       const g=c.createRadialGradient(x,y,8,x,y,rad);
       g.addColorStop(0,cols[0]); g.addColorStop(0.6,cols[1]); g.addColorStop(1,'rgba(217,194,140,0)');
       c.fillStyle=g; c.beginPath(); c.arc(x,y,rad,0,7); c.fill();
     });
-    const sg=c.createLinearGradient(0,PY(2820),0,PY(4000));
-    sg.addColorStop(0,'rgba(226,194,120,0)'); sg.addColorStop(1,'rgba(226,194,120,0.6)');
+    const sg=c.createLinearGradient(0,PY(2820*WS/2.5),0,PY(WORLD_H));
+    sg.addColorStop(0,'rgba(226,194,120,0)'); sg.addColorStop(1,'rgba(217,184,120,0.55)'); // southern shores run arid
     c.fillStyle=sg; c.fillRect(0,PY(2820),W,H-PY(2820));
     c.globalAlpha=0.055;
     for(let i=0;i<2600;i++){ c.fillStyle=i%3?'#5a4a26':'#fff3d0'; c.fillRect((hash(i*3.31)*W)|0,(hash(i*7.77)*H)|0,2.2,2.2); }
     c.globalAlpha=1;
     const tex=new THREE.CanvasTexture(cv);
-    tex.repeat.set(1/600,1/400); tex.offset.set(0.5,0.5); tex.anisotropy=2;
+    tex.repeat.set(10/WORLD_W,10/WORLD_H); tex.offset.set(0.5,0.5); tex.anisotropy=4;
     if('colorSpace' in tex) tex.colorSpace=THREE.SRGBColorSpace;
     return tex;
   }
@@ -2581,7 +2766,110 @@ try{
   function isCapitalOf(r){ return CAPITALS.includes(r.name) && r.owner && EMPIRES.find(e=>e.capital===r.name && e.id===r.owner); }
 
   const ROOFS3D=['#8a4a34','#9c3d2e','#74572c','#46586e','#6e3b52','#87652c','#5d6e3a'];
+
+  /* ---------- modelled towns: kit houses/walls/ships + district colour code ----------
+     market = amber, harbour = slate, walls = owner-tinted stone, cathedral = white.
+     Towns keep their size on the bigger chart — only the spaces between them grew. */
+  function buildKitSettlement(r){
+    const bx=SX(r.x), bz=SZ(r.y), by=BASE_Y;
+    const e = r.owner? emp(r.owner) : null;
+    const ownerCol = e? e.color : '#8a6d3b';
+    const capital = !!isCapitalOf(r);
+    const ft=new TB(KIT.mats.town);
+    const wallMat = KIT.mats.castle.clone(); wallMat.__own=true;
+    if(e) wallMat.color.set(new THREE.Color(e.color).lerp(new THREE.Color('#ffffff'), 0.55)); // walls wear the owner's stone
+    const ca=new TB(null), caWhite=new TB(KIT.mats.castle);
+    const b=new Batch(); // procedural garnish: dome, awnings, quay, standards
+    const objs=[];
+    const nH = 6 + r.tier*2 + (capital?4:0);
+    for(let i=0;i<nH;i++){
+      const a=i*2.35+r.id*1.7, d=(3.6+(i%4)*2.7)*1.38*0.8;
+      const hx=bx+Math.cos(a)*d, hz=bz+Math.sin(a)*d*0.85;
+      if(!onLand(hx, hz, r)) continue; // no houses in the harbour
+      const sc=(1.42+(i%3)*0.26 + r.tier*0.14 + (capital?0.12:0)) * 2.3;
+      if(i===4 && r.tier>=2 && KIT.geo.windmill){ ft.add(KIT.geo.windmill, M4(hx, by, hz, 0, hash(r.id+i)*6.28, 0, 2.3, 2.3, 2.3)); continue; }
+      ft.add(KIT.houses[i%KIT.houses.length], M4(hx, by, hz, 0, hash(r.id*7+i*13)*6.28, 0, sc, sc, sc),
+        ['#ffffff','#f7ead2','#e9dec6','#e3ecf2'][i%4]);
+    }
+    if(r.tier>=1){ // church tower (white) + market stalls under amber awnings, clear of the cathedral plot
+      if(KIT.geo.tower) caWhite.add(KIT.geo.tower, M4(bx-3.4, by, bz-2.2, 0, 0.4, 0, 2.3, 5.0, 2.3), '#f7f2df');
+      b.add(new THREE.CircleGeometry(4.2, 22).rotateX(-Math.PI/2), M4(bx-0.8, by+0.1, bz+4.9), '#cbb98a');
+      if(KIT.geo.stall) for(let i=0;i<4;i++){ const a2=i*1.7+r.id;
+        const sx2=bx-0.8+Math.cos(a2)*2.7, sz2=bz+4.9+Math.sin(a2)*2.2;
+        ft.add(KIT.geo.stall, M4(sx2, by, sz2, 0, a2, 0, 2.2, 2.2, 2.2));
+        b.add(new THREE.BoxGeometry(1.9,0.16,1.7), M4(sx2, by+2.8, sz2, 0.35, a2, 0.25), '#d9903f'); } // amber = market
+    }
+    if((r.tier>=2 || r.hasWall) && KIT.geo.cwall){ // curtain wall ring with corner towers
+      const nB=14, rad=10.6;
+      for(let i=0;i<nB;i++){ const a=i/nB*Math.PI*2;
+        ca.add(KIT.geo.cwall, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, -a, 0, 1.7, 1.8, 4.6)); }
+      if(KIT.geo.tower) for(let i=0;i<4;i++){ const a=(i+0.5)/4*Math.PI*2;
+        ca.add(KIT.geo.tower, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, a, 0, 2.0, 2.5, 2.0)); }
+    }
+    if(r.tier>=3 || capital){ // cathedral skyline — capitals always read as capitals
+      if(KIT.geo.tower){
+        caWhite.add(KIT.geo.tower, M4(bx+4.1, by, bz-3.8, 0, 0.2, 0, 2.4, 4.6, 2.4), '#fbf6e6');
+        caWhite.add(KIT.geo.tower, M4(bx-5.6, by, bz+3.1, 0, -0.3, 0, 2.0, 3.8, 2.0), '#fbf6e6');
+      }
+      b.add(new THREE.BoxGeometry(7.2,3.4,3.4), M4(bx+0.5,by+1.7,bz+0.8), '#e6dbc0');
+      b.add(new THREE.ConeGeometry(3.1,3.4,4), M4(bx+0.5,by+5.1,bz+0.8,0,Math.PI/4,0), '#5e4718'); // cathedral roof over the nave
+    }
+    if(capital){ // golden dome + soaring spire — the skyline that dwarfs hamlets
+      b.add(new THREE.SphereGeometry(2.1,10,8), M4(bx+0.5, by+8.6, bz+0.8), '#e9c96e');
+      b.add(new THREE.CylinderGeometry(0.4,0.66,4.4,6), M4(bx+0.5, by+10.8, bz+0.8), '#c9a24b');
+      b.add(new THREE.ConeGeometry(1.8,10.2,6), M4(bx+0.5, by+17.6, bz+0.8), '#e9c96e');
+    }
+    if(r.hasFort && KIT.geo.tower) ca.add(KIT.geo.tower, M4(bx+6.4, by, bz-4.6, 0, 0.9, 0, 2.2, 2.8, 2.2));
+    let harbor=null;
+    if(r.isPort){
+      const z=seaById[r.seaZone]; let dx=SX(z.x)-bx, dz=SZ(z.y)-bz; const len=Math.hypot(dx,dz)||1; dx/=len; dz/=len;
+      const ang=Math.atan2(dz,dx);
+      b.add(new THREE.BoxGeometry(6.4,0.55,2.6), M4(bx+dx*6.4, by+0.1, bz+dz*6.4, 0, -ang, 0), '#46586e'); // slate quay — harbour code
+      if(r.tier>=3){
+        b.add(new THREE.BoxGeometry(0.4,3.6,0.4), M4(bx+dx*5.2-dz*1.8, by+1.8, bz+dz*5.2+dx*1.8), '#5e4718');
+        b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*6.1-dz*1.8, by+3.5, bz+dz*6.1+dx*1.8, 0, -ang, 0), '#5e4718');
+      }
+      if(r.tier>=2) for(let i=-2;i<=2;i++)
+        b.add(new THREE.BoxGeometry(2.3,0.85,1.15), M4(bx+dx*14.5-dz*i*2.7, 0.5, bz+dz*14.5+dx*i*2.7, 0, -ang, 0), '#7d7466');
+      if(r.tier>=2 && (r.name==='Gibraltar'||r.name==='London'||r.name==='Havana')){
+        b.add(new THREE.CylinderGeometry(0.75,1.0,4.8,7), M4(bx-dx*5.5, by+2.4, bz-dz*5.5), '#efe6cc');
+        b.add(new THREE.SphereGeometry(0.62,8,6), M4(bx-dx*5.5, by+5.1, bz-dz*5.5), '#ffd97a');
+      }
+      const dtier = r.tier>=3?2 : r.tier>=1?1 : 0;
+      const nShips = r.tier>=3?4 : r.tier>=2?3 : r.tier>=1?2 : 1;
+      harbor = new THREE.Group();
+      for(let i=0;i<nShips;i++){
+        const ship = kitShipGroup(dtier, true, null); // furled at anchor — harbour mode
+        ship.position.set(bx+dx*(11+i*5.0)-dz*(3-i*6), 0.55, bz+dz*(11+i*5.0)+dx*(3-i*6));
+        ship.rotation.y = Math.atan2(-dx, -dz) + hash(r.id*31+i)*0.3;
+        harbor.add(ship);
+      }
+    }
+    if(r.troops>=500){ // army standard in owner colours
+      b.add(new THREE.CylinderGeometry(0.11,0.13,6.4,5), M4(bx+2.2, by+3.2, bz-5.6), '#3a2812');
+      b.add(new THREE.BoxGeometry(3.1,1.85,0.16), M4(bx+3.75, by+5.35, bz-5.6), ownerCol);
+    }
+    // satellite hamlets spread WIDER on the big chart (spread is the point)
+    const sb=new TB(KIT.mats.town);
+    const sats=Math.min(r.towns,2);
+    for(let i=0;i<sats;i++){
+      const a=i*2.7+r.id*1.3, hx=bx+Math.cos(a)*32, hz=bz+Math.sin(a)*24;
+      if(!onLand(hx, hz, r)) continue;
+      sb.add(KIT.houses[(i+1)%KIT.houses.length], M4(hx, by, hz, 0, hash(r.id*3+i)*6.28, 0, 2.4, 2.4, 2.4));
+      sb.add(KIT.houses[i%KIT.houses.length], M4(hx+5.2, by, hz+2.2, 0, hash(r.id*5+i)*6.28, 0, 2.0, 2.0, 2.0));
+    }
+    const satMesh = sb.mesh();
+    const ftm=ft.mesh(); if(ftm) objs.push(ftm);
+    const cam=ca.mesh(wallMat); if(cam) objs.push(cam);
+    const cwm=caWhite.mesh(); if(cwm) objs.push(cwm);
+    objs.push(b.mesh());
+    if(harbor) objs.push(harbor);
+    if(satMesh) objs.push(satMesh);
+    return {objs, sat: satMesh};
+  }
+
   function buildSettlement(r){
+    if(KIT.ready && KIT.houses.length) return buildKitSettlement(r);
     const b=new Batch();        // main settlement — always visible
     const sb=new Batch();       // satellite hamlets — hidden at far zoom
     const bx=SX(r.x), bz=SZ(r.y), by=BASE_Y;
@@ -2659,8 +2947,12 @@ try{
       b.add(new THREE.BoxGeometry(3.1,1.85,0.16), M4(bx+3.75, by+5.35, bz-5.6), ownerCol);
     }
     const rig = linesMesh(b);
-    return {main:b.mesh(), rig, sat: sb.pos.length? sb.mesh() : null};
+    const satMesh = sb.pos.length? sb.mesh() : null;
+    const objs=[b.mesh()]; if(rig) objs.push(rig); if(satMesh) objs.push(satMesh);
+    return {objs, sat: satMesh};
   }
+
+  const NAT3 = { tree:null, rock:null, treePos:null, rockPos:null }; // kit nature swaps these instanced meshes once models land
 
   /* ---------- world statics: table, water, land ---------- */
   const worldGroup = new THREE.Group(); scene.add(worldGroup);
@@ -2670,10 +2962,76 @@ try{
     const rim = new THREE.Mesh(new THREE.BoxGeometry(1920, 3.2, 1520), new THREE.MeshLambertMaterial({color:0x54391c}));
     rim.position.y=-2.7; worldGroup.add(rim);
   }
-  const waterGeo = new THREE.PlaneGeometry(1560, 1120, 76, 54);
+  /* ---------- stylized water: gerstner-lite swell + fresnel sky + baked shore foam ----------
+     One plane, one shader, no reflection target. The shore-distance mask is baked from the
+     traced coastlines; ships sample the same wave function on CPU so hulls ride the swell. */
+  function shoreTexture(){
+    const W=1024, H=683, cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+    const c=cv.getContext('2d'); c.fillStyle='#000'; c.fillRect(0,0,W,H); c.fillStyle='#fff';
+    const PX=x=>x/WORLD_W*W, PY=y=>y/WORLD_H*H;
+    LAND_PATHS.forEach(path=>{ c.beginPath(); path.forEach((p,i)=>{ const x=PX(p[0]),y=PY(p[1]); i? c.lineTo(x,y) : c.moveTo(x,y); }); c.closePath(); c.fill(); });
+    G.regions.filter(r=>r.group==='I').forEach(r=>{ c.beginPath(); c.ellipse(PX(r.x),PY(r.y),95*WS/WORLD_W*W*0.95,70*WS/WORLD_H*H*0.95,0,0,7); c.fill(); });
+    ISLETS.forEach(it=>{ c.beginPath(); c.ellipse(PX(it[0]),PY(it[1]),Math.max(3,it[2]/WORLD_W*W),Math.max(2,it[2]*0.72/WORLD_H*H),0,0,7); c.fill(); });
+    const cv2=document.createElement('canvas'); cv2.width=W; cv2.height=H; const c2=cv2.getContext('2d');
+    try{ c2.filter='blur(7px)'; }catch(e){}
+    c2.drawImage(cv,0,0); c2.drawImage(cv,0,0); // double pass = smooth shore-distance gradient
+    const tex=new THREE.CanvasTexture(cv2); return tex;
+  }
+  const WAVE = { n:3 }; // mirrored on CPU by waveH() below — keep constants in step
+  function waveH(x, z, t){ return Math.sin(x*0.11 + t*1.1)*0.32 + Math.cos(z*0.09 + t*0.8)*0.26 + Math.sin((x+z)*0.045 + t*0.55)*0.18; }
+  const waterUniforms = {
+    uTime:{value:0}, uShore:{value:shoreTexture()},
+    uDeep:{value:new THREE.Color('#14486b')}, uShallow:{value:new THREE.Color('#2e7fa3')},
+    uSky:{value:new THREE.Color('#cfe8e4')}, uFoam:{value:new THREE.Color('#eaf7f2')},
+    fogColor:{value:new THREE.Color(0x8fb0c2)}, fogDensity:{value:0.00030}
+  };
+  const waterMat = new THREE.ShaderMaterial({
+    uniforms: waterUniforms,
+    vertexShader: `
+      uniform float uTime;
+      varying vec3 vWp; varying vec3 vN; varying float vCrest;
+      float wheight(vec2 p, float t){
+        return sin(p.x*0.11 + t*1.1)*0.32 + cos(p.y*0.09 + t*0.8)*0.26 + sin((p.x+p.y)*0.045 + t*0.55)*0.18;
+      }
+      void main(){
+        vec4 wp = modelMatrix * vec4(position,1.0);
+        float t = uTime;
+        float h = wheight(wp.xz, t);
+        float e = 1.6;
+        float hx = wheight(wp.xz+vec2(e,0.0), t) - h;
+        float hz = wheight(wp.xz+vec2(0.0,e), t) - h;
+        wp.y += h;
+        vN = normalize(vec3(-hx/e, 1.0, -hz/e));
+        vCrest = h;
+        vWp = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform sampler2D uShore; uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uFoam;
+      uniform float uTime; uniform vec3 fogColor; uniform float fogDensity;
+      varying vec3 vWp; varying vec3 vN; varying float vCrest;
+      void main(){
+        vec2 uv = vec2(vWp.x/${(WORLD_W/10).toFixed(1)} + 0.5, 0.5 - vWp.z/${(WORLD_H/10).toFixed(1)});
+        float shore = texture2D(uShore, uv).r;
+        vec3 col = mix(uDeep, uShallow, smoothstep(0.03, 0.62, shore));
+        vec3 V = normalize(cameraPosition - vWp);
+        float fres = pow(1.0 - max(dot(V, normalize(vN)), 0.0), 3.0);
+        col = mix(col, uSky, fres*0.55);
+        float foamBand = smoothstep(0.34, 0.47, shore) * (1.0 - smoothstep(0.52, 0.66, shore));
+        float lap = 0.55 + 0.45*sin(uTime*1.7 + shore*36.0 + vWp.x*0.35 + vWp.z*0.22);
+        float crest = smoothstep(0.58, 0.8, vCrest) * 0.16; // whisper of white on the swell, never faceted slabs
+        col = mix(col, uFoam, clamp(foamBand*lap*0.85 + crest*(1.0-shore), 0.0, 1.0));
+        float depth = length(cameraPosition - vWp);
+        float f2 = 1.0 - exp(-fogDensity*fogDensity*depth*depth*1.44);
+        col = mix(col, fogColor, clamp(f2,0.0,1.0));
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`
+  });
+  const waterGeo = new THREE.PlaneGeometry(1560, 1120, 128, 92);
   waterGeo.rotateX(-Math.PI/2);
-  const waterBase = waterGeo.attributes.position.array.slice();
-  const water = new THREE.Mesh(waterGeo, new THREE.MeshPhongMaterial({color:0x14607a, specular:0x8fc3dd, shininess:110, transparent:true, opacity:0.97}));
+  const water = new THREE.Mesh(waterGeo, waterMat);
   water.position.y = 0; worldGroup.add(water);
 
   function smoothShape(pts, close=true){
@@ -2689,6 +3047,20 @@ try{
   }
   { // landmasses + inked coastlines
     const landMat = new THREE.MeshStandardMaterial({map:biomeTexture(), roughness:1, metalness:0});
+    landMat.envMapIntensity = 0.4;
+    // seasons wash over the land (EU4's seasonal colormaps in one uniform) + optional CC0 detail grain
+    landMat.userData.uSeason = {value:new THREE.Color(0xffffff)};
+    landMat.userData.uDetail = {value:null};
+    landMat.userData.uDetailOn = {value:0};
+    const _uS=landMat.userData.uSeason, _uD=landMat.userData.uDetail, _uDO=landMat.userData.uDetailOn;
+    landMat.onBeforeCompile = sh=>{
+      sh.uniforms.uSeasonTint=_uS; sh.uniforms.uDetailTex=_uD; sh.uniforms.uDetailOn=_uDO;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp;')
+        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWp = (modelMatrix * vec4(transformed,1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWp;\nuniform vec3 uSeasonTint;\nuniform sampler2D uDetailTex;\nuniform float uDetailOn;')
+        .replace('#include <map_fragment>', '#include <map_fragment>\n if(uDetailOn>0.5){ vec3 dg = texture2D(uDetailTex, vWp.xz*0.055).rgb; diffuseColor.rgb *= mix(vec3(1.0), dg*1.55, 0.38); }\n diffuseColor.rgb *= uSeasonTint;');
+    };
+    window.__landMat = landMat;
     const landPolys = []; // smoothed continent outlines in 3D coords — countryside scatter lives inside these
     LAND_PATHS.forEach(path=>{
       const smooth = smoothShape(path);
@@ -2766,14 +3138,14 @@ try{
         placed++;
       }
     }
-    landPolys.forEach(poly=>{ scatterCountry(poly,420,treePos,true,14); scatterCountry(poly,140,hillPos,false,17); scatterCountry(poly,48,rockPos,false,15); });
+    landPolys.forEach(poly=>{ scatterCountry(poly,700,treePos,true,14); scatterCountry(poly,230,hillPos,false,17); scatterCountry(poly,84,rockPos,false,15); });
     ISLETS.forEach(it=>{ treePos.push([SX(it[0])+2.5, SZ(it[1])+1.5]); treePos.push([SX(it[0])-3, SZ(it[1])-1]); });
     const treeIM = new THREE.InstancedMesh(new THREE.ConeGeometry(0.95, 2.8, 6), new THREE.MeshLambertMaterial({color:0x3f612e}), Math.max(treePos.length,1));
     treePos.forEach((p,i)=> treeIM.setMatrixAt(i, M4(p[0], BASE_Y+1.55, p[1], 0, hash(i)*3, 0, 1.5, 1.35+hash(i*3)*0.75, 1.5)));
-    treeIM.instanceMatrix.needsUpdate=true; worldGroup.add(treeIM);
+    treeIM.instanceMatrix.needsUpdate=true; worldGroup.add(treeIM); NAT3.tree=treeIM; NAT3.treePos=treePos;
     const rockIM = new THREE.InstancedMesh(new THREE.ConeGeometry(1.6, 2.2, 5), new THREE.MeshLambertMaterial({color:0x8d8272}), Math.max(rockPos.length,1));
     rockPos.forEach((p,i)=> rockIM.setMatrixAt(i, M4(p[0], BASE_Y+0.8, p[1], 0, hash(i*7)*3, 0, p[2], p[2], p[2])));
-    rockIM.instanceMatrix.needsUpdate=true; worldGroup.add(rockIM);
+    rockIM.instanceMatrix.needsUpdate=true; worldGroup.add(rockIM); NAT3.rock=rockIM; NAT3.rockPos=rockPos;
     const hillIM = new THREE.InstancedMesh(new THREE.ConeGeometry(3.4, 2.2, 7), new THREE.MeshLambertMaterial({color:0xa8945e}), Math.max(hillPos.length,1));
     hillPos.forEach((p,i)=> hillIM.setMatrixAt(i, M4(p[0], BASE_Y+1.05*p[2], p[1], 0, hash(i*11)*3, 0, p[2], p[2], p[2])));
     hillIM.instanceMatrix.needsUpdate=true; worldGroup.add(hillIM);
@@ -2868,6 +3240,8 @@ try{
     }
   }
 
+  worldGroup.traverse(o=>{ if(o.isMesh) o.receiveShadow = true; }); // the one fitted shadow caster plays over everything static
+
   /* ---------- dynamic layers ---------- */
   const discs = new Map(), settlements = new Map(), fleetVis = new Map();
   let laneGroup = null, laneCurves = [], laneSig = '';
@@ -2879,35 +3253,57 @@ try{
   const coachRing = new THREE.Mesh(new THREE.RingGeometry(13.6, 15.3, 44).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color:0xd9b96a, transparent:true, opacity:0.9, depthWrite:false}));
   coachRing.visible=false; scene.add(coachRing);
 
+  // soft political wash: owner colour melts INTO the terrain (EU4's trick) — no more hard discs.
+  // A shared radial-fade texture under a per-region tint; the ring stays as the surveyed border.
+  let washTex = null;
+  function getWashTex(){
+    if(washTex) return washTex;
+    const cv=document.createElement('canvas'); cv.width=cv.height=128;
+    const c=cv.getContext('2d');
+    const g=c.createRadialGradient(64,64,6,64,64,64);
+    g.addColorStop(0,'rgba(255,255,255,0.95)'); g.addColorStop(0.62,'rgba(255,255,255,0.55)'); g.addColorStop(1,'rgba(255,255,255,0)');
+    c.fillStyle=g; c.fillRect(0,0,128,128);
+    washTex = new THREE.CanvasTexture(cv); return washTex;
+  }
   function discFor(r){
     let d = discs.get(r.id);
     if(!d){
-      const rad = (r.group==='I'? 8.2 : 10.2) + (CAPITALS.includes(r.name)? 2.6 : 0);
-      const fill = new THREE.Mesh(new THREE.CircleGeometry(rad, 40).rotateX(-Math.PI/2),
-        new THREE.MeshBasicMaterial({transparent:true, opacity:0.44, depthWrite:false}));
-      const ring = new THREE.Mesh(new THREE.RingGeometry(rad, rad+1.15, 40).rotateX(-Math.PI/2),
-        new THREE.MeshBasicMaterial({transparent:true, opacity:0.9, depthWrite:false}));
-      fill.position.set(SX(r.x), BASE_Y+0.06, SZ(r.y)); ring.position.set(SX(r.x), BASE_Y+0.1, SZ(r.y));
+      const rad = ((r.group==='I'? 8.2 : 10.2) + (CAPITALS.includes(r.name)? 2.6 : 0)) * GS;
+      const fill = new THREE.Mesh(new THREE.PlaneGeometry(rad*2.35, rad*2.35).rotateX(-Math.PI/2),
+        new THREE.MeshBasicMaterial({map:getWashTex(), transparent:true, opacity:0.4, depthWrite:false}));
+      const ring = new THREE.Mesh(new THREE.RingGeometry(rad, rad+1.3, 44).rotateX(-Math.PI/2),
+        new THREE.MeshBasicMaterial({transparent:true, opacity:0.85, depthWrite:false}));
+      fill.position.set(SX(r.x), BASE_Y+0.07, SZ(r.y)); ring.position.set(SX(r.x), BASE_Y+0.11, SZ(r.y));
+      fill.renderOrder=1; ring.renderOrder=2;
       scene.add(fill); scene.add(ring);
       d = {fill, ring, owner: undefined}; discs.set(r.id, d);
     }
     if(d.owner !== r.owner){
       d.owner = r.owner;
       const e = r.owner? emp(r.owner) : null;
-      d.fill.material.color.set(e? e.color : '#786034'); d.fill.material.opacity = e? 0.5 : 0.15;
-      d.ring.material.color.set(e? e.dark : '#7a5c2e'); d.ring.material.opacity = e? 0.95 : 0.4;
+      d.fill.material.color.set(e? e.color : '#786034'); d.fill.material.opacity = e? 0.5 : 0.13;
+      d.ring.material.color.set(e? e.dark : '#7a5c2e'); d.ring.material.opacity = e? 0.9 : 0.35;
     }
     return d;
   }
-  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0].join('|'); }
+  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0, KIT.ready?1:0].join('|'); }
+  function disposeBuilt(o){ // kit ship hulls share geometry across the world — never dispose those
+    o.traverse(n=>{
+      let p=n, shared=false;
+      while(p){ if(p.userData && p.userData.sharedGeo){ shared=true; break; } p=p.parent; }
+      if(shared) return;
+      if(n.geometry) n.geometry.dispose();
+      if(n.material && n.material.__own) n.material.dispose();
+    });
+  }
   function refreshSettlements(){
     G.regions.forEach(r=>{
       discFor(r);
       const sig = settleSig(r), cur = settlements.get(r.id);
       if(!cur || cur.sig !== sig){
-        if(cur){ scene.remove(cur.mesh); cur.mesh.geometry.dispose(); if(cur.rig){ scene.remove(cur.rig); cur.rig.geometry.dispose(); } if(cur.sat){ scene.remove(cur.sat); cur.sat.geometry.dispose(); } }
-        const built = buildSettlement(r); scene.add(built.main); if(built.rig) scene.add(built.rig); if(built.sat) scene.add(built.sat);
-        settlements.set(r.id, {mesh: built.main, rig: built.rig, sat: built.sat, sig});
+        if(cur) cur.objs.forEach(o=>{ scene.remove(o); disposeBuilt(o); });
+        const built = buildSettlement(r); built.objs.forEach(o=>scene.add(o));
+        settlements.set(r.id, {objs: built.objs, sat: built.sat, sig});
       }
     });
   }
@@ -2940,12 +3336,29 @@ try{
     }));
     scene.add(laneGroup);
   }
+  /* ---------- kit ships: modeled hulls, owner ensign, sails that furl in harbour ---------- */
+  const KIT_SHIP_ROT = -Math.PI/2; // the kit's bow rides −Z; turn it onto the fleet's +X bow line
+  function kitShipGroup(tier, furled, ensignCol){
+    const def = KIT.ships[tier] || KIT.ships[1] || KIT.ships[0];
+    if(!def) return new THREE.Group();
+    const wrap = new THREE.Group(); wrap.userData.sharedGeo = true;
+    const inner = new THREE.Group(); inner.rotation.y = KIT_SHIP_ROT;
+    const body = new THREE.Mesh(def.body, KIT.mats.pirate); body.castShadow = true; inner.add(body);
+    if(def.sails){ const sails = new THREE.Mesh(def.sails, KIT.mats.pirate); sails.castShadow = true; sails.visible = !furled; inner.add(sails); }
+    if(ensignCol){
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.3,0.78), new THREE.MeshBasicMaterial({color:ensignCol, side:THREE.DoubleSide}));
+      flag.position.set(0, 8.7, -0.84); flag.rotation.y = Math.PI/2; inner.add(flag);
+    }
+    wrap.add(inner);
+    wrap.scale.setScalar([1.18, 1.34, 1.52][tier] || 1.25);
+    return wrap;
+  }
   function refreshFleets(){
     const seen = new Set();
     G.fleets.forEach((f, idx)=>{
       seen.add(f.id);
       let v = fleetVis.get(f.id);
-      const sig = f.ships + '|' + f.owner + '|' + emp(f.owner).shipTech + '|' + (f.at? 'sail':'dock');
+      const sig = f.ships + '|' + f.owner + '|' + emp(f.owner).shipTech + '|' + (f.at? 'sail':'dock') + '|' + (KIT.ready? 'K':'P');
       if(!v || v.sig !== sig){
         if(v) scene.remove(v.group);
         const group = new THREE.Group();
@@ -2953,12 +3366,18 @@ try{
         const n = Math.min(4, Math.max(1, Math.ceil(f.ships/3)));
         const tier = e.shipTech; // sloops → frigates → ships of the line, visibly
         for(let i=0;i<n;i++){
-          const b=new Batch();
           // loose LINE ASTERN — never stacked on one point
-          shipBatch(b, -i*8.6, 0, (i%2? 3.4 : -2.8), 2.05, 0, f.owner==='player'?'#6a4020':'#54401f', '#ffffff',
-            {tier, flag: i===0? e.color : null});
-          group.add(b.mesh());
-          const rig = linesMesh(b); if(rig) group.add(rig);
+          if(KIT.ready && KIT.ships[tier]){
+            const ship = kitShipGroup(tier, !f.at, i===0? e.color : null);
+            ship.position.set(-i*8.6, 0, (i%2? 3.4 : -2.8));
+            group.add(ship);
+          } else {
+            const b=new Batch();
+            shipBatch(b, -i*8.6, 0, (i%2? 3.4 : -2.8), 2.05, 0, f.owner==='player'?'#6a4020':'#54401f', '#ffffff',
+              {tier, flag: i===0? e.color : null});
+            group.add(b.mesh());
+            const rig = linesMesh(b); if(rig) group.add(rig);
+          }
         }
         // soft wake ribbon trailing the flagship while under way
         const wake = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 26),
@@ -3088,10 +3507,19 @@ try{
   const LIS0 = G.regions.find(r=>r.name==='Lisbon');
   let target = new THREE.Vector3(SX(LIS0.x), 0, SZ(LIS0.y)); // open on the player's Lisbon — coast, harbour and hinterland in one frame
   let dist = 150;
+  /* adaptive quality: frame-time EMA steps DPR → shadows → smoke; the sim is never touched */
+  let quality=0, emaMs=16, qTimer=0;
+  const _seasonTint = new THREE.Color(1,1,1);
+  const SEASON_TINTS = [[1,1,1],[1.05,1.01,0.9],[1.07,0.9,0.74],[0.87,0.94,1.07]];
+  function applyQuality(q){
+    quality=q;
+    renderer.setPixelRatio([Math.min(window.devicePixelRatio||1,1.5), 1.25, 1.1, 1.0][q]);
+    sun.castShadow = q<2;
+  }
   function fitDist(){
     const t = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
     const dv = (WORLD_H/20)/t, dh = (WORLD_W/20)/(t*camera.aspect);
-    return THREE.MathUtils.clamp(Math.max(dv, dh)*1.06, 90, 880);
+    return THREE.MathUtils.clamp(Math.max(dv, dh)*1.06, 90, 1150);
   }
   function clampTarget(){ target.x = THREE.MathUtils.clamp(target.x, -(WORLD_W/20+60), WORLD_W/20+60); target.z = THREE.MathUtils.clamp(target.z, -(WORLD_H/20+60), WORLD_H/20+60); }
   function updateCamera(){
@@ -3103,7 +3531,7 @@ try{
   let camAnim = null;
   function flyTo(t, d, ms){
     camAnim = {t0: performance.now(), dur: ms||600, fromT: target.clone(), fromD: dist,
-      toT: t.clone(), toD: THREE.MathUtils.clamp(d, 40, 880)};
+      toT: t.clone(), toD: THREE.MathUtils.clamp(d, 40, 1150)};
   }
   R3.flyWorld = (x, y, dd)=>{ flyTo(new THREE.Vector3(SX(x), 0, SZ(y)), dd||170, 800); }; // world coords → framed flight (army list, clash framing)
   function stepCam(now){
@@ -3123,7 +3551,7 @@ try{
   function zoomAnchored(f, cx, cy){
     camAnim = null; // direct input always wins over a programmed flight
     const before = (cx!==undefined)? groundPoint(cx, cy) : null;
-    dist = THREE.MathUtils.clamp(dist/f, 40, 880);
+    dist = THREE.MathUtils.clamp(dist/f, 40, 1150);
     updateCamera();
     if(before){ const after = groundPoint(cx, cy);
       if(after){ target.x += before.x-after.x; target.z += before.z-after.z; updateCamera(); } }
@@ -3331,15 +3759,10 @@ try{
   function frame(){
     requestAnimationFrame(frame);
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
-    // water swell
+    // water swell (shader-side now; the foam rim pulses with the same lap rhythm)
+    waterUniforms.uTime.value = t;
     const foamO = 0.3 + 0.16*(0.5+0.5*Math.sin(t*1.6));
     foamMats.forEach(m=>{ m.opacity = foamO; });
-    const pos = waterGeo.attributes.position;
-    for(let i=0;i<pos.count;i++){
-      const x=waterBase[i*3], z=waterBase[i*3+2];
-      pos.setY(i, Math.sin(x*0.11 + t*1.1)*0.32 + Math.cos(z*0.09 + t*0.8)*0.26);
-    }
-    pos.needsUpdate=true; waterGeo.computeVertexNormals();
     // fleets LIVE at their true positions — sailing ships glide, anchored ones bob
     G.fleets.forEach((f,i)=>{
       const v=fleetVis.get(f.id); if(!v) return;
@@ -3351,10 +3774,10 @@ try{
       const dx=tx-v.group.position.x, dz=tz-v.group.position.z;
       v.group.position.x += dx*k;
       v.group.position.z += dz*k;
-      v.group.position.y = 0.35 + Math.sin(t*1.4 + f.id*1.7)*0.16;
+      v.group.position.y = 0.35 + waveH(v.group.position.x, v.group.position.z, t)*0.85; // hulls ride the same swell the shader draws
       if(f.at){
-        // head where she's going, heel into the wind, wake astern
-        const want=Math.atan2(dx, dz);
+        // head where she's going, heel into the wind, wake astern (bow rides +X in group space)
+        const want=Math.atan2(-dz, dx);
         let dd=want-v.group.rotation.y; dd=((dd+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
         v.group.rotation.y += dd*k;
         v.group.rotation.z = 0.055 + Math.sin(t*1.6 + f.id)*0.02;
@@ -3382,22 +3805,39 @@ try{
     // selection + coach rings
     if(selected && selected.type==='region'){ const r=rById[selected.id];
       selRing.visible=true; selRing.position.set(SX(r.x), BASE_Y+0.22, SZ(r.y));
-      const s=1+Math.sin(t*3.2)*0.03; selRing.scale.set(s,1,s);
+      const s=(1+Math.sin(t*3.2)*0.03)*GS; selRing.scale.set(s,1,s);
     } else selRing.visible=false;
     if(window.__coachRegion!=null && rById[window.__coachRegion]){ const r=rById[window.__coachRegion];
       coachRing.visible=true; coachRing.position.set(SX(r.x), BASE_Y+0.22, SZ(r.y));
-      const s=1+Math.sin(t*2.6)*0.09; coachRing.scale.set(s,1,s);
+      const s=(1+Math.sin(t*2.6)*0.09)*GS; coachRing.scale.set(s,1,s);
       coachRing.material.opacity=0.65+Math.sin(t*2.6)*0.3;
     } else coachRing.visible=false;
     // satellite hamlets only exist up close — far zoom stays clean
-    const showSats = dist < 360;
-    discs.forEach(d=>{ if(d.owner) d.fill.material.opacity = dist>330? 0.62 : 0.5; }); // empires deepen as you pull back
+    const showSats = dist < 480; // spreads further on the big chart, so hamlets earn their keep from further out
+    discs.forEach(d=>{ if(d.owner) d.fill.material.opacity = dist>330? 0.56 : 0.42; }); // the wash deepens as you pull back
     settlements.forEach(v=>{ if(v.sat && v.sat.visible !== showSats) v.sat.visible = showSats; });
     // periodic state diffing (ownership, tiers, lanes, fleets)
     diffT+=dt;
     if(diffT>0.35){ diffT=0; refreshSettlements(); refreshLanes(); refreshFleets(); }
     stepCam(performance.now());
     updateCamera(); updateChips();
+    // seasons wash over the land (one tint uniform, lerped so winters creep in)
+    { const st=SEASON_TINTS[G.seasonIdx&3]||SEASON_TINTS[0]; _seasonTint.setRGB(st[0],st[1],st[2]);
+      if(window.__landMat) window.__landMat.userData.uSeason.value.lerp(_seasonTint, 0.03); }
+    // the single shadow caster rides with the camera target, frustum fitted to the view
+    sun.position.set(target.x+120, 190, target.z+60); sun.target.position.copy(target);
+    { const ext=THREE.MathUtils.clamp(dist*0.45, 70, 260), sc=sun.shadow.camera;
+      if(Math.abs(sc.right-ext)>4){ sc.left=-ext; sc.right=ext; sc.top=ext; sc.bottom=-ext; sc.updateProjectionMatrix(); } }
+    if(sun.castShadow) sun.target.updateMatrixWorld();
+    updateSmoke(t);
+    // adaptive quality from the frame-time EMA; readout for QA + the parent report
+    // (wall-clock based: the capped sim dt would run the governor in slow-motion on weak GPUs)
+    const _nowMs = performance.now(), _rawSec = Math.min((_nowMs-(frame._pw||_nowMs))/1000, 0.25); frame._pw=_nowMs;
+    emaMs = emaMs*0.92 + Math.min(_rawSec*1000, 120)*0.08;
+    qTimer+=_rawSec;
+    if(qTimer>3){ qTimer=0;
+      if(emaMs>27 && quality<3) applyQuality(quality+1);
+      else if(emaMs<13 && quality>0) applyQuality(quality-1); }
     renderer.render(scene, camera);
   }
 
@@ -3407,7 +3847,65 @@ try{
   R3.home = () => { flyTo(new THREE.Vector3(0,0,0), fitDist(), 700); };
   R3.pick = pick;
   R3.resize = () => { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); };
-  R3.rebuild = () => { settlements.forEach(v=>{ scene.remove(v.mesh); v.mesh.geometry.dispose(); if(v.sat){ scene.remove(v.sat); v.sat.geometry.dispose(); } }); settlements.clear();
+  initKits(); // CC0 kits stream in behind the first frame; the world upgrades itself when they land
+  setInterval(()=>{ const ri=renderer.info.render; // QA/readout hook — last completed frame, fps-independent
+    window.__renderInfo={calls:ri.calls, tris:ri.triangles, geoms:renderer.info.memory.geometries, textures:renderer.info.memory.textures, quality, emaMs:Math.round(emaMs*10)/10, dist:Math.round(dist)}; }, 1000);
+  /* ---------- kit swap-in: once the CC0 models land, towns/fleets/nature rebuild from them ---------- */
+  function kitSwapIn(){
+    settlements.forEach(v=>{ v.sig='__kit'; }); // stale signature forces a kit rebuild of every town
+    refreshSettlements(); refreshFleets();
+    try{
+      if(NAT3.tree && NAT3.treePos && KIT.geo.tree){ // modelled trees split broadleaf / pine over the same scatter
+        worldGroup.remove(NAT3.tree); NAT3.tree.geometry.dispose();
+        const pos=NAT3.treePos;
+        const leaf=new THREE.InstancedMesh(KIT.geo.tree, KIT.mats.nature, Math.max(pos.length,1));
+        const pine=new THREE.InstancedMesh(KIT.geo.pine||KIT.geo.tree, KIT.mats.nature, Math.max(pos.length,1));
+        let li=0, pi=0;
+        pos.forEach((p,i)=>{ const m=M4(p[0], BASE_Y, p[1], 0, hash(i)*3, 0, 2.1, 2.1, 2.1);
+          if(i%3===2) pine.setMatrixAt(pi++, m); else leaf.setMatrixAt(li++, m); });
+        leaf.count=li; pine.count=pi;
+        leaf.instanceMatrix.needsUpdate=true; pine.instanceMatrix.needsUpdate=true;
+        worldGroup.add(leaf); worldGroup.add(pine); NAT3.tree=leaf;
+      }
+      if(NAT3.rock && NAT3.rockPos && KIT.geo.rock){
+        worldGroup.remove(NAT3.rock); NAT3.rock.geometry.dispose();
+        const pos=NAT3.rockPos;
+        const rk=new THREE.InstancedMesh(KIT.geo.rock, KIT.mats.nature, Math.max(pos.length,1));
+        pos.forEach((p,i)=> rk.setMatrixAt(i, M4(p[0], BASE_Y, p[1], 0, hash(i*7)*3, 0, p[2]*2.6, p[2]*2.2, p[2]*2.6)));
+        rk.instanceMatrix.needsUpdate=true; worldGroup.add(rk); NAT3.rock=rk;
+      }
+    }catch(e){ /* the cone forest stands if anything here fails */ }
+    buildSmoke();
+  }
+
+  /* chimney smoke — the cheapest "someone lives here" signal: one Points cloud, tier scales the count */
+  let smokePts=null, smokeSrc=[];
+  function buildSmoke(){
+    if(!KIT.smokeTex) return;
+    if(smokePts){ scene.remove(smokePts); smokePts.geometry.dispose(); smokePts.material.dispose(); smokePts=null; }
+    smokeSrc=[];
+    G.regions.forEach(r=>{
+      const n = 1 + r.tier + (isCapitalOf(r)? 2:0);
+      for(let i=0;i<n;i++) for(let s=0;s<3;s++)
+        smokeSrc.push([SX(r.x)+(hash(r.id*13+i*7)-0.5)*7, BASE_Y+6.6+s*1.2+hash(i*3+r.id)*0.8, SZ(r.y)+(hash(r.id*17+i*3)-0.5)*7, hash(r.id*19+i)*6.28]);
+    });
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(smokeSrc.length*3), 3));
+    smokePts=new THREE.Points(g, new THREE.PointsMaterial({map:KIT.smokeTex, size:5.4, transparent:true, opacity:0.32, depthWrite:false, sizeAttenuation:true, color:0xf2ede2}));
+    smokePts.frustumCulled=false; scene.add(smokePts);
+    updateSmoke(0);
+  }
+  function updateSmoke(t){
+    if(!smokePts) return;
+    smokePts.visible = dist < 430 && quality < 2; // zoom-band life: chimneys only earn pixels up close
+    if(!smokePts.visible) return;
+    const pos=smokePts.geometry.attributes.position;
+    for(let i=0;i<smokeSrc.length;i++){ const s=smokeSrc[i];
+      pos.setXYZ(i, s[0] + Math.sin(t*0.5+s[3])*0.55, s[1] + Math.sin(t*0.35+s[3]*2)*0.35, s[2]); }
+    pos.needsUpdate=true;
+  }
+
+  R3.rebuild = () => { settlements.forEach(v=>{ v.objs.forEach(o=>{ scene.remove(o); disposeBuilt(o); }); }); settlements.clear();
     laneSig=''; refreshSettlements(); refreshLanes(); refreshFleets();
     const lis = G.regions.find(r=>r.name==='Lisbon');
     if(lis) flyTo(new THREE.Vector3(SX(lis.x), 0, SZ(lis.y)), 150, 700); };
