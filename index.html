@@ -522,7 +522,7 @@ function freshState(){
   const regions=REGION_DEFS.map((d,i)=>({
     id:i, name:d[0], x:d[1], y:d[2], terrain:d[3], specialty:d[4], isPort:d[5], group:d[6],
     owner:null, tier:0, // 0 hamlet 1 town 2 city 3 great port/city
-    hasWall:false, hasFort:false, hasShipyard:false, hasMarket:false,
+    hasWall:false, hasFort:false, hasShipyard:false, hasMarket:false, greatWork:null,
     pop:Math.round(rr(3000,7000)), troops:0, towns:Math.floor(rr(2,5)),
     flashUntil:0, neighbors:[]
   }));
@@ -595,7 +595,18 @@ function rebuildIndex(){ rById={}; G.regions.forEach(r=>rById[r.id]=r); seaById=
    units with a current node (fleet.node === 's<zoneId>') and a live
    position (fleet.pos, world coords) — see syncUnits().
    ============================================================ */
-const WORLD_VER=6; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle, 6 = the 8040×5360 10x chart)
+const WORLD_VER=7; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle, 6 = the 8040×5360 10x chart, 7 = town detail + great works)
+// Great works: ONE landmark per crown seat, raised from the city sheet. The hook is deliberately
+// a toy, not a spreadsheet — a flag on the region, read by income/battle/ship-cost code below.
+const GREAT_WORKS=[
+ {id:'light',    icon:'🏮', name:'The Grand Light',         cost:350, hook:'Pilotage dues +8g a season — and a turning beam over your harbour'},
+ {id:'cathedral',icon:'⛪', name:'Cathedral of the Tides', cost:450, hook:'Pilgrim offerings +8g a season beneath twin spires'},
+ {id:'arsenal',  icon:'⚙️', name:'The Royal Arsenal',       cost:420, hook:'Warships built here cost 25% less'},
+ {id:'customs',  icon:'🧮', name:'The Customs House',       cost:380, hook:'Tolls +12g a season at this port'},
+ {id:'admiralty',icon:'⚓', name:'The Admiralty',            cost:400, hook:'Your squadrons fight +8% in every sea battle'},
+ {id:'citadel',  icon:'♜', name:'The Citadel',              cost:500, hook:'Defenders here fight +30% — the bastions must crack first'},
+];
+const CAPITAL_NAMES=EMPIRES.map(e=>e.capital);
 let WORLD_GRAPH=null;
 // the world's two narrow seas — Western↔Eastern Med (Sicily) and North Sea↔Baltic (the Danish straits)
 function weldSeaNeighbors(seas){
@@ -712,6 +723,10 @@ function migrateSave(s){
     (s.armies||[]).forEach(a=>{ if(a.at){ a.atRegion = a.destRegion!=null? a.destRegion : a.fromRegion; a.at=null; a.path=null; } });
     s.wv=6;
   }
+  if(s.wv===6){ // town-detail pass: every region gains a great-work slot (empty until a crown raises one)
+    (s.regions||[]).forEach(r=>{ if(r.greatWork===undefined) r.greatWork=null; });
+    s.wv=7;
+  }
   return s;
 }
 function emp(id){ return G.empires[id]; }
@@ -756,6 +771,9 @@ function tradeIncome(id){
 function regionIncome(r){
   let v = 14 + r.tier*10 + Math.round(r.pop/900);
   if(r.hasMarket) v+=10;
+  if(r.greatWork==='cathedral') v+=8; // pilgrims' offerings under the twin spires
+  if(r.greatWork==='customs' && r.isPort) v+=12; // tolls on the lanes that touch this port
+  if(r.greatWork==='light' && r.isPort) v+=8; // pilotage and harbour dues
   return v;
 }
 </script>
@@ -1431,8 +1449,9 @@ function fleetsOffPort(port){
 }
 function navalBattle(a, d, port){
   // squadron action off a harbour mouth — ships and gunnery (tech) decide
-  const aP=a.ships*(1+emp(a.owner).shipTech*0.4)*rr(0.85,1.2);
-  const dP=d.ships*(1+emp(d.owner).shipTech*0.4)*rr(0.85,1.2);
+  const admP=id=> G.regions.some(r=>r.owner===id && r.greatWork==='admiralty')? 1.08 : 1; // the Admiralty: charts, signals, better captains
+  const aP=a.ships*(1+emp(a.owner).shipTech*0.4)*admP(a.owner)*rr(0.85,1.2);
+  const dP=d.ships*(1+emp(d.owner).shipTech*0.4)*admP(d.owner)*rr(0.85,1.2);
   const total=aP+dP||1;
   const aLoss=Math.min(a.ships, Math.round(a.ships*(dP/total)*rr(0.5,0.95)));
   const dLoss=Math.min(d.ships, Math.round(d.ships*(aP/total)*rr(0.5,0.95)));
@@ -1692,7 +1711,7 @@ function aiMonthlyOps(){
       hostile.sort((x,y)=>x.troops-y.troops);
       const target=hostile[0];
       const myPower=a.men*(1+e.armyTech*0.35);
-      const defPower=target.troops*(1+(target.owner?emp(target.owner).armyTech*0.3:0))*(target.hasFort?1.45:1)*(target.hasWall?1.25:1);
+      const defPower=target.troops*(1+(target.owner?emp(target.owner).armyTech*0.3:0))*(target.hasFort?1.45:1)*(target.hasWall?1.25:1)*(target.greatWork==='citadel'?1.3:1);
       if(target.owner && myPower<defPower*0.95) { // too strong — dig in instead of dying
         if(target.owner==='player' && rnd()<0.4) a.stance='hold', a.holdUntil=1e9;
         return;
@@ -1803,6 +1822,7 @@ function selectRegion(r){
     ['🪙 Income','+'+regionIncome(r)+'/season'],
     ...(r.isPort?[['⛵ Trade', isBlockaded(r)?'⛓ BLOCKADED':'flowing']]:[]),
     ...(r.hasWall?[['🧱','Walls']]:[]), ...(r.hasFort?[['♜','Fort']]:[]),
+    ...(r.greatWork?[['🏛', (GREAT_WORKS.find(w=>w.id===r.greatWork)||{}).name||'Great Work']]:[]),
     ...(r.hasShipyard?[['🔨','Shipyard']]:[]), ...(r.hasMarket?[['⚖','Market']]:[]),
   ]);
   const acts=$('#sheet-acts'); acts.innerHTML='';
@@ -1849,10 +1869,29 @@ function selectRegion(r){
     if(!r.hasFort) acts.appendChild(actBtn('♜ Build Fort','Strong defence · slows invaders · 110g',()=>{ pay(110); r.hasFort=true; toast('A fort guards '+r.name); selectRegion(r); refreshHUD(); },'',cant(110)));
     if(r.isPort&&!r.hasShipyard) acts.appendChild(actBtn('🔨 Build Shipyard','Required to build warships · 150g',()=>{ pay(150); r.hasShipyard=true; toast('Shipyard opened at '+r.name); selectRegion(r); refreshHUD(); },'sea',cant(150)));
     if(!r.hasMarket) acts.appendChild(actBtn('⚖ Build Market','+10 income each season · 80g',()=>{ pay(80); r.hasMarket=true; toast('Market square built in '+r.name); selectRegion(r); refreshHUD(); },'',cant(80)));
+    // a crown seat may raise ONE great work — the landmark the whole coast knows it by (visual-first, hook is a flag)
+    if(CAPITAL_NAMES.includes(r.name)){
+      if(r.greatWork){
+        const gw=GREAT_WORKS.find(w=>w.id===r.greatWork);
+        acts.appendChild(actBtn('🏛 '+(gw? gw.name : 'Great Work'),(gw? gw.hook : 'Built and beloved.')+' This is '+r.name+'’s glory now.',()=>{},'',true));
+      } else if(window.__gwPick===r.id){
+        GREAT_WORKS.forEach(w=>{
+          acts.appendChild(actBtn(w.icon+' Raise '+w.name, w.hook+' · '+w.cost+'g',
+            ()=>{ pay(w.cost); r.greatWork=w.id; window.__gwPick=null;
+              toast(w.icon+' '+w.name+' rises at '+r.name+'!');
+              pushEvent('🏛 <b>The '+w.name+'</b> is raised at '+r.name+'. The whole coast will know this skyline.');
+              selectRegion(r); refreshHUD(); save(); },'',cant(w.cost)));
+        });
+        acts.appendChild(actBtn('↩ Not yet','Counsel can wait for a richer season',()=>{ window.__gwPick=null; selectRegion(r); },''));
+      } else {
+        acts.appendChild(actBtn('🏛 Raise a Great Work…','One landmark for this crown seat: light, cathedral, arsenal, customs, admiralty or citadel',
+          ()=>{ window.__gwPick=r.id; selectRegion(r); },''));
+      }
+    }
     if(r.towns<7) acts.appendChild(actBtn('🏠 Found a Town','New settlement in this region · 70g',()=>{ pay(70); r.towns++; r.pop+=600; toast('A new town is founded in '+r.name); selectRegion(r); refreshHUD(); },'',cant(70)));
-    if(r.isPort) acts.appendChild(actBtn('⛵ Build Warships','+2 '+SHIP_TECH[me.shipTech]+' · '+(SHIP_COST*2)+'g · joins nearest fleet',
+    if(r.isPort) acts.appendChild(actBtn('⛵ Build Warships','+2 '+SHIP_TECH[me.shipTech]+' · '+shipPairCost(r)+'g · joins nearest fleet',
       ()=>{ doBuildShips(r); },'sea', !r.hasShipyard? 'build a shipyard here first' :
-        (me.gold<SHIP_COST*2? 'needs '+(SHIP_COST*2)+'g in the treasury' : '')));
+        (me.gold<shipPairCost(r)? 'needs '+shipPairCost(r)+'g in the treasury' : '')));
   } else {
     const rel=r.owner? emp('player').relations[r.owner] : null;
     acts.appendChild(actBtn('👁 Scout Report',
@@ -2037,10 +2076,11 @@ function doMuster(r){
   coachAdvance(0);
   selectRegion(r); refreshHUD();
 }
+function shipPairCost(r){ return r.greatWork==='arsenal'? Math.round(SHIP_COST*2*0.75) : SHIP_COST*2; } // the Royal Arsenal lays keels cheaper
 function doBuildShips(r){
-  const me=emp('player'); if(me.gold<SHIP_COST*2) return;
+  const me=emp('player'); if(me.gold<shipPairCost(r)) return;
   if(!r.hasShipyard){ toast('No shipyard at '+r.name+' — build one before laying keels'); return; }
-  pay(SHIP_COST*2);
+  pay(shipPairCost(r));
   let f=G.fleets.find(f=>f.owner==='player'&&f.zone===r.seaZone);
   if(!f){ f={id:newUnitId(),owner:'player',zone:r.seaZone,node:'s'+r.seaZone,pos:{x:seaById[r.seaZone].x,y:seaById[r.seaZone].y},at:null,ships:0,stance:'patrol',name:'Home Squadron'}; G.fleets.push(f); }
   f.ships+=2; anims.push({type:'sail',x1:r.x,y1:r.y,x2:seaById[r.seaZone].x,y2:seaById[r.seaZone].y,t0:performance.now(),dur:900});
@@ -2051,6 +2091,7 @@ function battle(attacker, atkTroops, defRegion){
   const dTech=1+ (defRegion.owner? emp(defRegion.owner).armyTech*0.3:0);
   let defMult=dTech;
   if(defRegion.hasFort) defMult*=1.45; if(defRegion.hasWall) defMult*=1.25;
+  if(defRegion.greatWork==='citadel') defMult*=1.3; // the Citadel — a besieger must crack the bastion ring first
   if(defRegion.terrain==='hills') defMult*=1.15; if(defRegion.terrain==='marsh') defMult*=0.9;
   const aPower=atkTroops*aTech*rr(0.85,1.2), dPower=defRegion.troops*defMult*rr(0.85,1.2);
   const total=aPower+dPower||1;
@@ -2436,14 +2477,14 @@ try{
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.5));
   renderer.setSize(innerWidth, innerHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping; // lifts saturation toward the reference render
-  renderer.toneMappingExposure = 1.12;
+  renderer.toneMappingExposure = 1.1;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap; // golden hour wants long, soft edges on the shadows
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0d4258);
-  scene.fog = new THREE.FogExp2(0x8fb0c2, 0.00030); // horizon haze — distant shores fade, the chart feels bigger
+  scene.background = new THREE.Color(0x274b5e);
+  scene.fog = new THREE.FogExp2(0xe3c298, 0.00026); // warm horizon haze — the golden hour swallows distant shores
   const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.5, 6000);
 
   // warm "pure sky" ambient baked from a gradient equirect (the CC0 HDRI's job, at zero payload)
@@ -2451,7 +2492,7 @@ try{
     const ec=document.createElement('canvas'); ec.width=512; ec.height=256;
     const ex=ec.getContext('2d');
     const gr=ex.createLinearGradient(0,0,0,256);
-    gr.addColorStop(0,'#7fb2d9'); gr.addColorStop(0.52,'#cfe3ea'); gr.addColorStop(0.58,'#f4e3bb'); gr.addColorStop(0.66,'#8aa383'); gr.addColorStop(1,'#4c5a44');
+    gr.addColorStop(0,'#6f9ccb'); gr.addColorStop(0.45,'#c3d6e2'); gr.addColorStop(0.56,'#f8d69a'); gr.addColorStop(0.66,'#b39a68'); gr.addColorStop(1,'#57492f');
     ex.fillStyle=gr; ex.fillRect(0,0,512,256);
     const eqTex=new THREE.CanvasTexture(ec); eqTex.mapping=THREE.EquirectangularReflectionMapping;
     if('colorSpace' in eqTex) eqTex.colorSpace=THREE.SRGBColorSpace;
@@ -2460,17 +2501,18 @@ try{
     eqTex.dispose(); pmrem.dispose();
   }catch(e){ /* ambient bake is garnish — hemisphere light still carries the scene */ }
 
-  const hemi = new THREE.HemisphereLight(0xcfe5ef, 0x5c6b46, 0.95); // sky / ground per the art-direction pass
+  const hemi = new THREE.HemisphereLight(0x9db8d9, 0x6b5a44, 0.95); // cool sky over warm earth — the golden-hour split
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffe3ae, 1.6);
-  sun.position.set(120, 190, 60);
+  const sun = new THREE.DirectionalLight(0xffbe78, 1.9); // low amber key, ~24° off the horizon
+  sun.position.set(205, 95, 55);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.near = 10; sun.shadow.camera.far = 900;
   sun.shadow.camera.left=-160; sun.shadow.camera.right=160; sun.shadow.camera.top=160; sun.shadow.camera.bottom=-160;
   sun.shadow.bias = -0.0006;
+  sun.shadow.normalBias = 0.8; // grazing sunlight would otherwise acne every rooftop
   scene.add(sun); scene.add(sun.target);
-  const fill = new THREE.DirectionalLight(0xbfd9e8, 0.35);
+  const fill = new THREE.DirectionalLight(0x87a6cf, 0.3);
   fill.position.set(-90, 80, -120); scene.add(fill);
 
   /* ---------- tiny geometry batcher (vertex-coloured, merged) ---------- */
@@ -2511,15 +2553,69 @@ try{
      models below carry the game. Kit geometry is merged with UVs so
      a whole town stays a handful of draw calls per material family.
      ================================================================ */
-  const KIT = { ready:false, geo:{}, mats:{}, ships:[null,null,null], houses:[], smokeTex:null, detailTex:null };
+  const KIT = { ready:false, geo:{}, mats:{}, ships:[null,null,null], houses:[], housesByBiome:{}, sailMat:null, smokeTex:null, detailTex:null };
+
+  /* ---- ONE palette ramp for every roofline in the world (PixPal discipline):
+     biome picks the row; the crown's colour NEVER touches roofs or houses —
+     owner tint lives on walls, banners and domes only. ---- */
+  // roof rows are OVERDRIVE multipliers [r,g,b] (>1 allowed): the kit atlas roof swatch is teal-slate,
+  // so a polite hex tint only makes mud — the red channel has to shout to land terracotta.
+  const ROOF_PAL={ slate:[2.0,1.1,1.5], terracotta:[5.2,0.62,0.22], wheat:[4.2,0.85,0.25], olive:[3.8,0.7,0.22], rock:[3.4,2.2,1.8], forest:[1.7,1.15,0.3], sand:[5.6,2.1,0.9], palm:[1.3,1.5,0.5] };
+  const ROOF_HEX={ slate:'#5d7186', terracotta:'#b45a32', wheat:'#9a6c34', olive:'#8f6132', rock:'#8d867c', forest:'#66743c', sand:'#dda96e', palm:'#548257' }; // flat display hexes — the procedural fallback paints cones with these
+  const WALL_PAL={ slate:'#e8e2d2', terracotta:'#f2e6cf', wheat:'#efe3c8', olive:'#ece0c4', rock:'#e3ddd0', forest:'#e9dfc6', sand:'#f4e8d2', palm:'#f6efdd' };
+  function biomeKey(r){
+    if(r.group==='I') return 'palm';
+    if(r.terrain==='forest') return 'forest';
+    if(r.terrain==='hills') return 'rock';
+    if(r.terrain==='marsh') return 'slate';
+    const south=r.y>WORLD_H*0.52;
+    if(r.specialty==='sugar'&&south) return 'sand';
+    if(r.isPort) return south? 'terracotta':'slate';
+    if(r.terrain==='plains') return south? 'sand':'wheat';
+    return 'olive';
+  }
+
+  /* ---- one wind clock for everything that flutters (flags, sails, awnings) ---- */
+  const WIND_U = { value:0 };
+  function windify(mat, amp, freq){
+    mat.onBeforeCompile = sh=>{
+      sh.uniforms.uTime = WIND_U;
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uTime;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed.z += sin(uTime*3.1 + position.y*'+freq.toFixed(2)+' + position.x*0.35) * '+amp.toFixed(3)+' * smoothstep(0.2, 2.6, position.y);');
+    };
+    mat.customProgramCacheKey = ()=>'wind'+amp;
+    return mat;
+  }
+  const flagMatCache={};
+  function flagMat(col){ // ensigns flutter on the shared clock; hoist edge stays pinned
+    if(!flagMatCache[col]){
+      const m=new THREE.MeshLambertMaterial({color:col, side:THREE.DoubleSide, emissive:col, emissiveIntensity:0.22});
+      m.onBeforeCompile = sh=>{
+        sh.uniforms.uTime = WIND_U;
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nuniform float uTime;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed.z += sin(position.x*4.0 - uTime*5.0) * 0.14 * (position.x/1.3 + 0.5);');
+      };
+      m.customProgramCacheKey = ()=>'flagflutter';
+      flagMatCache[col]=m;
+    }
+    return flagMatCache[col];
+  }
+  const DECALMAT = new THREE.MeshBasicMaterial({vertexColors:true, transparent:true, opacity:0.92, depthWrite:false}); // ground decals never z-fight the land
+  const gwReg = new Map();  // region id -> animated great-work bits (turning beam pivots)
+  const bobReg = new Map(); // region id -> small harbour boats riding waveH in the frame loop
+  function mulberry(seed){ let s=seed|0; return ()=>{ s=s+0x6D2B79F5|0; let t=Math.imul(s^s>>>15,1|s); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
   const GS = WS/2.5; // world growth factor vs the 6000×4000 chart (spread pass)
   function TB(mat){ this.pos=[]; this.nor=[]; this.uv=[]; this.col=[]; this.mat=mat||null; }
   TB.prototype.add = function(geo, matrix, tint){
     const g = geo.index? geo.toNonIndexed() : geo.clone();
     g.applyMatrix4(matrix);
     const p=g.attributes.position, n=g.attributes.normal, u=g.attributes.uv, c=new THREE.Color(tint||'#ffffff');
+    const sc=g.attributes.color; // source colour (baked per-part tints — biome roofs/walls) multiplies the call tint
     for(let i=0;i<p.count;i++){ this.pos.push(p.getX(i),p.getY(i),p.getZ(i)); this.nor.push(n.getX(i),n.getY(i),n.getZ(i));
-      this.uv.push(u? u.getX(i):0, u? u.getY(i):0); this.col.push(c.r,c.g,c.b); }
+      this.uv.push(u? u.getX(i):0, u? u.getY(i):0);
+      this.col.push(c.r*(sc? sc.getX(i):1), c.g*(sc? sc.getY(i):1), c.b*(sc? sc.getZ(i):1)); }
     g.dispose();
   };
   TB.prototype.mesh = function(matOverride){
@@ -2605,14 +2701,21 @@ try{
       KIT.geo.stall = piece('town_stall');
       KIT.geo.tower = piece('castle_tower'); KIT.geo.cwall = piece('castle_wall'); if(KIT.geo.cwall) KIT.geo.cwall.translate(0.25,0,0);
       KIT.geo.tree = piece('nat_tree'); KIT.geo.pine = piece('nat_pine'); KIT.geo.rock = piece('nat_rock');
-      // assembled houses: 4 slabs + roof, stone / wood / two-storey-with-door
-      const houseFrom = (wallG, roofG, stories, doorG) => {
+      // assembled houses: 4 slabs + roof, stone / wood / two-storey-with-door.
+      // wall and roof colours are BAKED into the colour attribute (PixPal ramp) so a whole
+      // town still merges into one draw call — TB.add multiplies them back out.
+      const tintPart=(g,hex)=>{ if(!g||!hex) return g; const c=Array.isArray(hex)? new THREE.Color(hex[0],hex[1],hex[2]) : new THREE.Color(hex), n=g.attributes.position.count;
+        const arr=new Float32Array(n*3);
+        for(let i=0;i<n;i++){ arr[i*3]=c.r; arr[i*3+1]=c.g; arr[i*3+2]=c.b; }
+        g.setAttribute('color', new THREE.BufferAttribute(arr,3)); return g; };
+      const houseFrom = (wallG, roofG, stories, doorG, wallCol, roofCol) => {
         const parts=[];
+        const W=(geo,x,y,z,ry)=>tintPart(xg(geo,x,y,z,ry), wallCol);
         for(let s=0;s<stories;s++){
-          parts.push(xg(wallG, 0, s, 0.45, Math.PI/2), xg(wallG, 0, s, -0.45, Math.PI/2), xg(wallG, -0.45, s, 0, 0), xg(wallG, 0.45, s, 0, 0));
-          if(s===0 && doorG) parts[parts.length-4] = xg(doorG, 0, 0, 0.45, Math.PI/2);
+          parts.push(W(wallG, 0, s, 0.45, Math.PI/2), W(wallG, 0, s, -0.45, Math.PI/2), W(wallG, -0.45, s, 0, 0), W(wallG, 0.45, s, 0, 0));
+          if(s===0 && doorG) parts[parts.length-4] = W(doorG, 0, 0, 0.45, Math.PI/2);
         }
-        parts.push(xg(roofG, 0, stories, 0, 0));
+        parts.push(tintPart(xg(roofG, 0, stories, 0, 0), roofCol));
         const mg = window.__mergeGeometries;
         const out = mg(parts, false); parts.forEach(p=>p.dispose());
         out.computeBoundingBox(); return out;
@@ -2620,6 +2723,15 @@ try{
       if(KIT.geo.wall && KIT.geo.roof) KIT.houses.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 1, null));
       if(KIT.geo.wallwood && KIT.geo.roofpoint) KIT.houses.push(houseFrom(KIT.geo.wallwood, KIT.geo.roofpoint, 1, null));
       if(KIT.geo.wall && KIT.geo.roof && KIT.geo.door) KIT.houses.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 2, KIT.geo.door));
+      // one full variant ladder per biome: [stone gable, wood point, two-storey, warehouse shed]
+      KIT.housesByBiome={};
+      Object.keys(ROOF_PAL).forEach(bk=>{ const h=[];
+        if(KIT.geo.wall && KIT.geo.roof) h.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 1, null, WALL_PAL[bk], ROOF_PAL[bk]));
+        if(KIT.geo.wallwood && KIT.geo.roofpoint) h.push(houseFrom(KIT.geo.wallwood, KIT.geo.roofpoint, 1, null, WALL_PAL[bk], ROOF_PAL[bk]));
+        if(KIT.geo.wall && KIT.geo.roof && KIT.geo.door) h.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 2, KIT.geo.door, WALL_PAL[bk], ROOF_PAL[bk]));
+        if(KIT.geo.wallwood && KIT.geo.roof) h.push(houseFrom(KIT.geo.wallwood, KIT.geo.roof, 1, null, WALL_PAL[bk], ROOF_PAL[bk])); // warehouses: broad wood shed under a full roof
+        KIT.housesByBiome[bk]=h; });
+      KIT.sailMat = windify(lambert(famTex.pirate), 0.055, 0.8); // sailcloth breathes on the shared wind clock
       // smoke sprite + terrain detail (optional garnish — failure just skips them)
       try{ const t = await new THREE.TextureLoader().loadAsync((man.textures||{}).smoke_a || 'assets/textures/smoke_puff_a.edbf08c4.png'); KIT.smokeTex=t; }catch(e){}
       try{ const t = await new THREE.TextureLoader().loadAsync((man.textures||{}).detail_grass || 'assets/textures/detail_grass.5a6996c2.jpg'); t.wrapS=t.wrapT=THREE.RepeatWrapping; KIT.detailTex=t; if(window.__landMat){ window.__landMat.userData.uDetail.value=t; window.__landMat.userData.uDetailOn.value=1; } }catch(e){}
@@ -2767,46 +2879,226 @@ try{
 
   const ROOFS3D=['#8a4a34','#9c3d2e','#74572c','#46586e','#6e3b52','#87652c','#5d6e3a'];
 
+  /* ---------- Townscaper-lite town plan ----------
+     A jittered ring of lots seeded by region id: plaza at the heart, tall houses
+     inside, small at the edge, warehouses down by the water. Footprint GROWS with
+     tier, so a great port reads at world zoom by silhouette — wall ring, one tall
+     hero, and a roof-colour mass. Same planner feeds both the kit builder and the
+     procedural fallback, so the town is the same town either way. */
+  function planTown(r){
+    const bx=SX(r.x), bz=SZ(r.y);
+    const cap=!!isCapitalOf(r);
+    const rand=mulberry(r.id*7919 + (r.tier+1)*131 + 17);
+    let dx=0, dz=1; const port=!!r.isPort;
+    if(port){ const z=seaById[r.seaZone]; dx=SX(z.x)-bx; dz=SZ(z.y)-bz; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L; }
+    const shoreAng=Math.atan2(dz,dx);
+    const R=[7.5,11,15,19][r.tier]*(cap?1.12:1);
+    const target=[9,26,44,72][r.tier]+(cap?8:0);
+    const lots=[];
+    const rings=[{f:0.40,k:'tall',frac:0.30},{f:0.68,k:'house',frac:0.45},{f:0.94,k:'small',frac:0.25}];
+    rings.forEach((ring,ri)=>{
+      const n=Math.max(2, Math.round(target*ring.frac));
+      for(let i=0;i<n;i++){
+        const a=(i/n)*Math.PI*2 + rand()*0.55 + ri*0.37;
+        const rr2=R*ring.f*(0.84+rand()*0.32);
+        const lx=Math.cos(a)*rr2, lz=Math.sin(a)*rr2*0.92;
+        const wx=bx+lx, wz=bz+lz;
+        if(!onLand(wx,wz,r)) continue;
+        let kind=ring.k;
+        if(port){ const dd=Math.abs(((Math.atan2(lz,lx)-shoreAng+Math.PI*3)%(Math.PI*2))-Math.PI); if(dd<0.9 && ri===2) kind='warehouse'; }
+        lots.push({x:wx, z:wz, kind, rot:Math.atan2(-lx,-lz)+(rand()-0.5)*0.24,
+          s:(0.9+rand()*0.25)*(kind==='tall'?3.1 : kind==='warehouse'?3.3 : kind==='small'?2.2 : 2.7)});
+      }
+    });
+    const gardens=[]; // enclosed-block hearts: green, still, and human
+    if(r.tier>=1){ const ng=r.tier>=2?2:1;
+      for(let i=0;i<ng;i++){ const a=rand()*Math.PI*2, rr2=R*0.55;
+        const gx=bx+Math.cos(a)*rr2, gz=bz+Math.sin(a)*rr2*0.92;
+        if(onLand(gx,gz,r)) gardens.push({x:gx, z:gz}); } }
+    const gateAng = port? shoreAng+Math.PI : rand()*Math.PI*2; // the main street runs plaza → gate → quay
+    const churchA = gateAng+Math.PI*0.5; // the church takes the high lot, a quarter-turn off the street
+    if(r.greatWork){ // a great work gets a cleared court — no cottages crowd the landmark
+      const anchors={ cathedral:[bx+Math.cos(churchA)*R*0.5, bz+Math.sin(churchA)*R*0.46, 7.6],
+        admiralty:(()=>{ const a2=churchA+2.4; return [bx+Math.cos(a2)*R*0.42, bz+Math.sin(a2)*R*0.39, 6.4]; })(),
+        customs:[bx+Math.cos(gateAng)*R*0.34, bz+Math.sin(gateAng)*R*0.34, 6.8],
+        citadel:[bx, bz, 5.5] }[r.greatWork];
+      if(anchors) for(let i=lots.length-1;i>=0;i--){ const L=lots[i];
+        if(Math.hypot(L.x-anchors[0], L.z-anchors[1]) < anchors[2]) lots.splice(i,1); }
+    }
+    // walk seaward from the anchor until the land actually ends — harbours hug the real coast, not the chart's hope of it
+    let shoreD=R;
+    if(port){ let d=1.0; for(let i=0;i<60;i++){ if(!onLand(bx+dx*d, bz+dz*d, r)) break; d+=0.8; } shoreD=d; }
+    return {bx, bz, R, cap, port, dx, dz, shoreAng, lots, gardens, gateAng, churchA, rand, shoreD};
+  }
+
+  /* ---------- great works: one landmark per crown seat, kit-bashed from the shelf ----------
+     No free CC0 dome, star-fort, palace or lighthouse exists — so each work is
+     assembled from the kit pieces already in the pipeline plus a handful of prims. */
+  function buildGreatWork(r, P, C){
+    const bx=P.bx, bz=P.bz, by=BASE_Y;
+    const housesW=KIT.housesByBiome[biomeKey(r)]||KIT.houses;
+    switch(r.greatWork){
+      case 'light': { // stacked narrowing towers + lantern + a turning beam over home water
+        const lx=bx+P.dx*(P.shoreD+6)+P.dz*16, lz=bz+P.dz*(P.shoreD+6)-P.dx*16; // just past YOUR waterline, across the mouth from the anchorage line — a doorpost, not a mooring (and never on the next island's beach)
+        const tw=new TB(KIT.mats.castle);
+        if(KIT.geo.tower){ // the tower piece is 1.31 tall — stack with overlap, never gaps
+          tw.add(KIT.geo.tower, M4(lx, 0.2, lz, 0, 0, 0, 1.7, 2.4, 1.7));
+          tw.add(KIT.geo.tower, M4(lx, 3.2, lz, 0, 0.5, 0, 1.4, 2.3, 1.4));
+          tw.add(KIT.geo.tower, M4(lx, 6.0, lz, 0, 1.1, 0, 1.12, 2.2, 1.12));
+        }
+        const tm=tw.mesh(); if(tm) C.objs.push(tm);
+        C.b.add(new THREE.CylinderGeometry(0.55,0.7,1.4,6), M4(lx, 9.5, lz), '#3a2c16');
+        const lamp=new THREE.Mesh(new THREE.SphereGeometry(0.62,10,8), new THREE.MeshBasicMaterial({color:0xffe9a8}));
+        lamp.position.set(lx, 10.3, lz); C.objs.push(lamp);
+        const beamG=new THREE.ConeGeometry(2.4, 17, 14, 1, true); beamG.translate(0,-8.5,0); beamG.rotateZ(Math.PI/2); // apex at the lamp, fan opening seaward
+        const beam=new THREE.Mesh(beamG, new THREE.MeshBasicMaterial({color:0xffdf9e, transparent:true, opacity:0.16, blending:THREE.AdditiveBlending, side:THREE.DoubleSide, depthWrite:false}));
+        const pivot=new THREE.Group(); pivot.position.set(lx, 10.2, lz); pivot.add(beam); C.objs.push(pivot);
+        gwReg.set(r.id, {beam:pivot, ph:hash(r.id*3)*6.28});
+        break; }
+      case 'cathedral': { // stretched nave, twin white spires, a rose window that catches the low sun
+        const cx=bx+Math.cos(P.churchA)*P.R*0.5, cz=bz+Math.sin(P.churchA)*P.R*0.46;
+        if(KIT.geo.tower){
+          C.caWhite.add(KIT.geo.tower, M4(cx-2.8, by, cz, 0, 0.3, 0, 2.5, 6.6, 2.5), '#fbf6e6');
+          C.caWhite.add(KIT.geo.tower, M4(cx+2.8, by, cz, 0, -0.3, 0, 2.5, 6.6, 2.5), '#fbf6e6');
+          C.b.add(new THREE.ConeGeometry(1.9,3.4,5), M4(cx-2.8, by+10.3, cz), '#4a3423'); // dark spires — the silhouette that names it from the sea
+          C.b.add(new THREE.ConeGeometry(1.9,3.4,5), M4(cx+2.8, by+10.3, cz), '#4a3423');
+        }
+        C.b.add(new THREE.BoxGeometry(8.6,4.2,4.0), M4(cx, by+2.1, cz, 0, P.churchA, 0), '#f3ead2');
+        C.b.add(new THREE.ConeGeometry(3.6,3.8,4), M4(cx, by+6.1, cz, 0, Math.PI/4, 0), '#5e4718');
+        const fx=-Math.cos(P.churchA), fz=-Math.sin(P.churchA); // the rose faces the plaza heart
+        const rw=new THREE.Mesh(new THREE.CircleGeometry(1.05, 18), new THREE.MeshBasicMaterial({color:0xffc978}));
+        rw.position.set(cx+fx*2.06, by+3.3, cz+fz*2.06); rw.rotation.y=Math.atan2(fx,fz);
+        C.objs.push(rw);
+        break; }
+      case 'arsenal': { // forge sheds, a hull half-born in dry dock, a crane, cannon waiting for keels
+        const qd=Math.max(2.5, P.shoreD*0.92), dx=P.dx, dz=P.dz;
+        [-1,1].forEach(sg=>{ const wx=bx+dx*(qd-3.5)-dz*sg*5.2, wz=bz+dz*(qd-3.5)+dx*sg*5.2;
+          if(housesW[3]||housesW[0]) C.ft.add(housesW[3]||housesW[0], M4(wx, by, wz, 0, P.shoreAng+Math.PI/2, 0, 3.6, 3.2, 3.6)); }); // sheds on the quay apron, not in the roadstead and not among the houses
+        if(KIT.ships[1]){
+          const dock=new THREE.Group(); dock.userData.sharedGeo=true;
+          const hull=new THREE.Mesh(KIT.ships[1].body, KIT.mats.pirate); hull.castShadow=true; dock.add(hull);
+          const hx2=bx+dx*(qd-1.5)-dz*9.5, hz2=bz+dz*(qd-1.5)+dx*9.5;
+          dock.position.set(hx2, by+1.5, hz2); dock.rotation.y=Math.atan2(-dx,-dz)+Math.PI/2; dock.rotation.z=0.13; dock.scale.setScalar(1.05); // beached on the apron, heeled on her blocks — a hull OUT of water reads as work, not traffic
+          C.objs.push(dock);
+          C.b.add(new THREE.BoxGeometry(8.0,1.1,2.6), M4(hx2, by+0.55, hz2, 0, P.shoreAng, 0), '#6d5f49'); // the blocks she rests on
+        }
+        const cxp=bx+dx*(qd-1.0)-dz*3.4, czp=bz+dz*(qd-1.0)+dx*3.4;
+        C.b.add(new THREE.BoxGeometry(0.42,5.2,0.42), M4(cxp, by+2.6, czp), '#5e4718');
+        C.b.add(new THREE.BoxGeometry(4.6,0.34,0.34), M4(cxp+dx*1.6, by+5.0, czp+dz*1.6, 0, -P.shoreAng, 0), '#5e4718');
+        for(let i=0;i<4;i++) C.b.add(new THREE.CylinderGeometry(0.16,0.2,1.5,6), M4(bx+dx*(qd-0.5)-dz*(6.5+i*1.1), by+0.35, bz+dz*(qd-0.5)+dx*(6.5+i*1.1), Math.PI/2, 0, 0), '#2e2620');
+        break; }
+      case 'customs': { // counting-house row, clock tower, and the golden tally board where lanes pay
+        for(let i=-1;i<=1;i++){ const wx=bx+Math.cos(P.gateAng)*P.R*0.34 - Math.sin(P.gateAng)*i*5.4, wz=bz+Math.sin(P.gateAng)*P.R*0.34 + Math.cos(P.gateAng)*i*5.4;
+          if(onLand(wx,wz,r) && (housesW[2]||housesW[0])) C.ft.add(housesW[2]||housesW[0], M4(wx, by, wz, 0, P.gateAng+Math.PI, 0, 3.0, 3.0, 3.0)); }
+        const tx=bx+Math.cos(P.gateAng)*P.R*0.34, tz=bz+Math.sin(P.gateAng)*P.R*0.34;
+        if(KIT.geo.tower) C.caWhite.add(KIT.geo.tower, M4(tx, by, tz, 0, P.gateAng, 0, 1.6, 4.6, 1.6), '#f0e6cc');
+        const fx=-Math.cos(P.gateAng), fz=-Math.sin(P.gateAng);
+        const face=new THREE.Mesh(new THREE.CircleGeometry(0.95, 16), new THREE.MeshBasicMaterial({color:0xf7ead0}));
+        face.position.set(tx+fx*0.85, by+5.2, tz+fz*0.85); face.rotation.y=Math.atan2(fx,fz); // on the tower's face (6.0 tall), not above it
+        C.objs.push(face);
+        C.b.add(new THREE.BoxGeometry(2.6,1.5,0.15), M4(bx+fx*2.0, by+1.4, bz+fz*2.0, 0, Math.atan2(fx,fz), 0), '#c9a24b');
+        break; }
+      case 'admiralty': { // a verdigris dome on its drum — the ONLY dome that wears the crown's colour
+        const a2=P.churchA+2.4;
+        const ax=bx+Math.cos(a2)*P.R*0.42, az=bz+Math.sin(a2)*P.R*0.39;
+        C.b.add(new THREE.BoxGeometry(6.6,3.8,4.8), M4(ax, by+1.9, az, 0, a2, 0), '#e9dfc6');
+        C.b.add(new THREE.CylinderGeometry(2.2,2.35,0.8,10), M4(ax, by+4.15, az), '#d9cba6');
+        const verdigris=new THREE.Color(C.ownerCol).lerp(new THREE.Color('#4d9480'), 0.25); // crown colour kissed by verdigris — the crown shows first
+        C.b.add(new THREE.SphereGeometry(2.3, 12, 8, 0, Math.PI*2, 0, Math.PI/2), M4(ax, by+4.5, az), '#'+verdigris.getHexString());
+        C.b.add(new THREE.ConeGeometry(0.5,1.6,6), M4(ax, by+7.6, az), '#c9a24b');
+        const fdx=-Math.cos(a2), fdz=-Math.sin(a2), px=-Math.sin(a2), pz=Math.cos(a2);
+        for(let i=-1;i<=1;i++) C.b.add(new THREE.CylinderGeometry(0.16,0.18,3.0,6),
+          M4(ax+fdx*2.75+px*i*1.25, by+1.5, az+fdz*2.75+pz*i*1.25), '#e6dbc0'); // portico pillars toward the plaza
+        break; }
+      case 'citadel': { // 5-point bastion ring + keep: the besieger's puzzle, readable from world zoom
+        const rad=P.R*1.02;
+        C.dec.add(new THREE.CircleGeometry(rad*1.16, 26).rotateX(-Math.PI/2), M4(bx, by+0.05, bz), '#97834f'); // the glacis apron
+        const pts=[]; for(let k=0;k<5;k++){ const a=P.gateAng + k/5*Math.PI*2 + Math.PI/5; pts.push([bx+Math.cos(a)*rad, bz+Math.sin(a)*rad]); }
+        for(let k=0;k<5;k++){ const p1=pts[k], p2=pts[(k+1)%5];
+          const mx=(p1[0]+p2[0])/2, mz=(p1[1]+p2[1])/2, len=Math.hypot(p2[0]-p1[0], p2[1]-p1[1]), ang=Math.atan2(p2[1]-p1[1], p2[0]-p1[0]);
+          if(KIT.geo.cwall) C.ca.add(KIT.geo.cwall, M4(mx, by, mz, 0, -ang+Math.PI/2, 0, 1.7, 2.3, len*0.82));
+          if(KIT.geo.tower) C.ca.add(KIT.geo.tower, M4(p1[0], by, p1[1], 0, -ang, 0, 1.9, 3.1, 1.9));
+        }
+        if(KIT.geo.tower) C.ca.add(KIT.geo.tower, M4(bx, by, bz, 0, 0.4, 0, 2.6, 4.8, 2.6)); // the keep at the heart
+        break; }
+    }
+  }
+
   /* ---------- modelled towns: kit houses/walls/ships + district colour code ----------
      market = amber, harbour = slate, walls = owner-tinted stone, cathedral = white.
      Towns keep their size on the bigger chart — only the spaces between them grew. */
   function buildKitSettlement(r){
-    const bx=SX(r.x), bz=SZ(r.y), by=BASE_Y;
+    const P=planTown(r), bx=P.bx, bz=P.bz, by=BASE_Y;
     const e = r.owner? emp(r.owner) : null;
     const ownerCol = e? e.color : '#8a6d3b';
-    const capital = !!isCapitalOf(r);
+    const capital = P.cap;
+    bobReg.delete(r.id); gwReg.delete(r.id); // re-registered below if this town has them
     const ft=new TB(KIT.mats.town);
     const wallMat = KIT.mats.castle.clone(); wallMat.__own=true;
     if(e) wallMat.color.set(new THREE.Color(e.color).lerp(new THREE.Color('#ffffff'), 0.55)); // walls wear the owner's stone
     const ca=new TB(null), caWhite=new TB(KIT.mats.castle);
     const b=new Batch(); // procedural garnish: dome, awnings, quay, standards
+    const dec=new Batch(); // flat ground glyphs — plaza cobbles, worn paths, dock aprons
     const objs=[];
-    const nH = 6 + r.tier*2 + (capital?4:0);
-    for(let i=0;i<nH;i++){
-      const a=i*2.35+r.id*1.7, d=(3.6+(i%4)*2.7)*1.38*0.8;
-      const hx=bx+Math.cos(a)*d, hz=bz+Math.sin(a)*d*0.85;
-      if(!onLand(hx, hz, r)) continue; // no houses in the harbour
-      const sc=(1.42+(i%3)*0.26 + r.tier*0.14 + (capital?0.12:0)) * 2.3;
-      if(i===4 && r.tier>=2 && KIT.geo.windmill){ ft.add(KIT.geo.windmill, M4(hx, by, hz, 0, hash(r.id+i)*6.28, 0, 2.3, 2.3, 2.3)); continue; }
-      ft.add(KIT.houses[i%KIT.houses.length], M4(hx, by, hz, 0, hash(r.id*7+i*13)*6.28, 0, sc, sc, sc),
-        ['#ffffff','#f7ead2','#e9dec6','#e3ecf2'][i%4]);
+    const houses=KIT.housesByBiome[biomeKey(r)]||KIT.houses;
+    const kindIdx={tall:2, house:0, small:1, warehouse:3};
+    P.lots.forEach((lot,i)=>{
+      let hi=kindIdx[lot.kind];
+      if(lot.kind==='house' && i%3===2) hi=1;
+      if(lot.kind==='tall' && i%5===4) hi=0;
+      if(lot.kind==='small' && i%4===3) hi=0;
+      const geo=houses[hi]||houses[0]; if(!geo) return;
+      ft.add(geo, M4(lot.x, by, lot.z, 0, lot.rot, 0, lot.s, lot.s, lot.s), '#ffffff');
+      // trim where two things meet (Townscaper's core rule): a plinth under every house, a seam under every roof
+      const wdt=lot.s*0.98;
+      b.add(new THREE.BoxGeometry(wdt,0.32,wdt*0.92), M4(lot.x, by+0.14, lot.z, 0, lot.rot, 0), '#6d5f49');
+      if(lot.kind!=='warehouse' && geo.boundingBox){
+        const hh=(geo.boundingBox.max.y-geo.boundingBox.min.y)*lot.s;
+        b.add(new THREE.BoxGeometry(lot.s*0.99, 0.2, lot.s*0.93), M4(lot.x, by+hh*0.62, lot.z, 0, lot.rot, 0), '#4a3826');
+      }
+    });
+    P.gardens.forEach(g2=>{
+      dec.add(new THREE.CircleGeometry(2.6,14).rotateX(-Math.PI/2), M4(g2.x, by+0.06, g2.z), '#5f7d35');
+      if(KIT.geo.tree) ft.add(KIT.geo.tree, M4(g2.x+1.1, by, g2.z-0.8, 0, P.rand()*6.28, 0, 2.0, 2.0, 2.0));
+    });
+    // plaza heart: cobble disc just off the hero cluster, and the town's one main street worn into the ground (plaza → gate, plaza → quay)
+    const plazaR=Math.max(3.4, P.R*0.26);
+    const px=bx+Math.cos(P.gateAng)*P.R*0.2, pz=bz+Math.sin(P.gateAng)*P.R*0.2*0.92;
+    dec.add(new THREE.CircleGeometry(plazaR, 22).rotateX(-Math.PI/2), M4(px, by+0.075, pz), '#c9b282');
+    const pathLeg=(ang,len2)=>{
+      dec.add(new THREE.PlaneGeometry(len2, 1.7).rotateX(-Math.PI/2).rotateY(-ang), M4(px+Math.cos(ang)*len2/2, by+0.09, pz+Math.sin(ang)*len2/2), '#a8895a');
+    };
+    pathLeg(P.gateAng, P.R*0.85);
+    if(P.port) pathLeg(P.shoreAng, Math.min(P.shoreD+1, P.R*1.25));
+    if(r.tier>=2 && KIT.geo.windmill){ const wa=P.gateAng+0.7, wx=bx+Math.cos(wa)*P.R*0.92, wz=bz+Math.sin(wa)*P.R*0.85;
+      if(onLand(wx,wz,r)) ft.add(KIT.geo.windmill, M4(wx, by, wz, 0, hash(r.id)*6.28, 0, 2.6, 2.6, 2.6)); }
+    if(r.tier>=1){ // church on its high lot (white) + market stalls under amber awnings around the plaza
+      const chx=bx+Math.cos(P.churchA)*P.R*0.52, chz=bz+Math.sin(P.churchA)*P.R*0.48;
+      if(KIT.geo.tower && onLand(chx,chz,r) && r.greatWork!=='cathedral') caWhite.add(KIT.geo.tower, M4(chx, by, chz, 0, P.churchA, 0, 2.3, 5.2, 2.3), '#f7f2df'); // the great cathedral takes this lot entirely when raised
+      if(KIT.geo.stall){ const nStall=4+r.tier;
+        for(let i=0;i<nStall;i++){ const a2=i/nStall*Math.PI*2 + r.id;
+          const sx2=px+Math.cos(a2)*plazaR*1.05, sz2=pz+Math.sin(a2)*plazaR*1.05*0.92;
+          if(!onLand(sx2,sz2,r)) continue;
+          ft.add(KIT.geo.stall, M4(sx2, by, sz2, 0, a2+Math.PI/2, 0, 2.2, 2.2, 2.2));
+          b.add(new THREE.BoxGeometry(1.9,0.16,1.7), M4(sx2, by+2.8, sz2, 0.35, a2, 0.25), '#d9903f'); } } // amber = market
     }
-    if(r.tier>=1){ // church tower (white) + market stalls under amber awnings, clear of the cathedral plot
-      if(KIT.geo.tower) caWhite.add(KIT.geo.tower, M4(bx-3.4, by, bz-2.2, 0, 0.4, 0, 2.3, 5.0, 2.3), '#f7f2df');
-      b.add(new THREE.CircleGeometry(4.2, 22).rotateX(-Math.PI/2), M4(bx-0.8, by+0.1, bz+4.9), '#cbb98a');
-      if(KIT.geo.stall) for(let i=0;i<4;i++){ const a2=i*1.7+r.id;
-        const sx2=bx-0.8+Math.cos(a2)*2.7, sz2=bz+4.9+Math.sin(a2)*2.2;
-        ft.add(KIT.geo.stall, M4(sx2, by, sz2, 0, a2, 0, 2.2, 2.2, 2.2));
-        b.add(new THREE.BoxGeometry(1.9,0.16,1.7), M4(sx2, by+2.8, sz2, 0.35, a2, 0.25), '#d9903f'); } // amber = market
-    }
-    if((r.tier>=2 || r.hasWall) && KIT.geo.cwall){ // curtain wall ring with corner towers
-      const nB=14, rad=10.6;
+    if((r.tier>=2 || r.hasWall) && KIT.geo.cwall && r.greatWork!=='citadel'){ // curtain wall ring hugging the grown footprint, with a real gate gap on the main street
+      const rad=P.R*1.0, nB=Math.max(12, Math.round(rad*1.5)), chord=2*rad*Math.sin(Math.PI/nB);
       for(let i=0;i<nB;i++){ const a=i/nB*Math.PI*2;
-        ca.add(KIT.geo.cwall, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, -a, 0, 1.7, 1.8, 4.6)); }
-      if(KIT.geo.tower) for(let i=0;i<4;i++){ const a=(i+0.5)/4*Math.PI*2;
-        ca.add(KIT.geo.tower, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, a, 0, 2.0, 2.5, 2.0)); }
+        const dg=Math.abs(((a-P.gateAng+Math.PI*3)%(Math.PI*2))-Math.PI); if(dg<0.24) continue; // the gate gap
+        ca.add(KIT.geo.cwall, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, -a, 0, 1.7, 2.0, chord*0.9)); }
+      if(KIT.geo.tower){ for(let i=0;i<4;i++){ const a=(i+0.5)/4*Math.PI*2;
+          ca.add(KIT.geo.tower, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, a, 0, 2.0, 2.8, 2.0)); }
+        [-1,1].forEach(sg=>{ const a=P.gateAng+sg*0.28; // gate towers flank the gap
+          ca.add(KIT.geo.tower, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, a, 0, 1.9, 3.2, 1.9)); }); }
     }
-    if(r.tier>=3 || capital){ // cathedral skyline — capitals always read as capitals
+    if(r.tier===1 && !r.hasWall && KIT.geo.cwall && r.greatWork!=='citadel'){ // a young town's low stockade ring — silhouette dressing, NOT fortification (the built Walls are the tall ones)
+      const rad=P.R*1.0, nB=Math.max(10, Math.round(rad*1.4)), chord=2*rad*Math.sin(Math.PI/nB);
+      for(let i=0;i<nB;i++){ const a=i/nB*Math.PI*2;
+        const dg=Math.abs(((a-P.gateAng+Math.PI*3)%(Math.PI*2))-Math.PI); if(dg<0.3) continue; // the gate gap
+        ca.add(KIT.geo.cwall, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, -a, 0, 1.6, 1.0, chord*0.9)); }
+    }
+    if((r.tier>=3 || capital) && r.greatWork!=='cathedral'){ // cathedral skyline — capitals always read as capitals
       if(KIT.geo.tower){
         caWhite.add(KIT.geo.tower, M4(bx+4.1, by, bz-3.8, 0, 0.2, 0, 2.4, 4.6, 2.4), '#fbf6e6');
         caWhite.add(KIT.geo.tower, M4(bx-5.6, by, bz+3.1, 0, -0.3, 0, 2.0, 3.8, 2.0), '#fbf6e6');
@@ -2814,35 +3106,52 @@ try{
       b.add(new THREE.BoxGeometry(7.2,3.4,3.4), M4(bx+0.5,by+1.7,bz+0.8), '#e6dbc0');
       b.add(new THREE.ConeGeometry(3.1,3.4,4), M4(bx+0.5,by+5.1,bz+0.8,0,Math.PI/4,0), '#5e4718'); // cathedral roof over the nave
     }
-    if(capital){ // golden dome + soaring spire — the skyline that dwarfs hamlets
+    if(capital && r.greatWork!=='admiralty'){ // golden dome + soaring spire — the skyline that dwarfs hamlets
       b.add(new THREE.SphereGeometry(2.1,10,8), M4(bx+0.5, by+8.6, bz+0.8), '#e9c96e');
       b.add(new THREE.CylinderGeometry(0.4,0.66,4.4,6), M4(bx+0.5, by+10.8, bz+0.8), '#c9a24b');
-      b.add(new THREE.ConeGeometry(1.8,10.2,6), M4(bx+0.5, by+17.6, bz+0.8), '#e9c96e');
+      if(!r.greatWork) b.add(new THREE.ConeGeometry(1.8,10.2,6), M4(bx+0.5, by+17.6, bz+0.8), '#e9c96e'); // once a great work rises, IT owns the sky — the spire steps aside
     }
-    if(r.hasFort && KIT.geo.tower) ca.add(KIT.geo.tower, M4(bx+6.4, by, bz-4.6, 0, 0.9, 0, 2.2, 2.8, 2.2));
+    if(r.hasFort && KIT.geo.tower) ca.add(KIT.geo.tower, M4(bx+P.R*0.45, by, bz-P.R*0.32, 0, 0.9, 0, 2.2, 2.8, 2.2));
+    if(r.greatWork) buildGreatWork(r, P, {ft, ca, caWhite, b, dec, objs, ownerCol});
     let harbor=null;
-    if(r.isPort){
-      const z=seaById[r.seaZone]; let dx=SX(z.x)-bx, dz=SZ(z.y)-bz; const len=Math.hypot(dx,dz)||1; dx/=len; dz/=len;
-      const ang=Math.atan2(dz,dx);
-      b.add(new THREE.BoxGeometry(6.4,0.55,2.6), M4(bx+dx*6.4, by+0.1, bz+dz*6.4, 0, -ang, 0), '#46586e'); // slate quay — harbour code
+    if(P.port){
+      const dx=P.dx, dz=P.dz, ang=P.shoreAng, qd=Math.max(2.5, P.shoreD*0.92); // the quay sits AT the waterline, wherever the coast put it
+      b.add(new THREE.BoxGeometry(6.4,0.55,2.6), M4(bx+dx*qd, by+0.1, bz+dz*qd, 0, -ang, 0), '#46586e'); // slate quay — harbour code
+      dec.add(new THREE.PlaneGeometry(7.2,3.4).rotateX(-Math.PI/2).rotateY(-ang), M4(bx+dx*(qd+0.6), by+0.085, bz+dz*(qd+0.6)), '#8a6f42'); // dock plank apron
+      for(let i=-3;i<=3;i++) b.add(new THREE.CylinderGeometry(0.14,0.14,1.6,5), M4(bx+dx*(qd+1.4)-dz*i*1.9, 0.7, bz+dz*(qd+1.4)+dx*i*1.9), '#4a3826'); // pilings riding the waterline
       if(r.tier>=3){
-        b.add(new THREE.BoxGeometry(0.4,3.6,0.4), M4(bx+dx*5.2-dz*1.8, by+1.8, bz+dz*5.2+dx*1.8), '#5e4718');
-        b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*6.1-dz*1.8, by+3.5, bz+dz*6.1+dx*1.8, 0, -ang, 0), '#5e4718');
+        b.add(new THREE.BoxGeometry(0.4,3.6,0.4), M4(bx+dx*(qd-1.2)-dz*1.8, by+1.8, bz+dz*(qd-1.2)+dx*1.8), '#5e4718');
+        b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*(qd-0.3)-dz*1.8, by+3.5, bz+dz*(qd-0.3)+dx*1.8, 0, -ang, 0), '#5e4718');
       }
       if(r.tier>=2) for(let i=-2;i<=2;i++)
-        b.add(new THREE.BoxGeometry(2.3,0.85,1.15), M4(bx+dx*14.5-dz*i*2.7, 0.5, bz+dz*14.5+dx*i*2.7, 0, -ang, 0), '#7d7466');
+        b.add(new THREE.BoxGeometry(2.3,0.85,1.15), M4(bx+dx*(qd+8)-dz*i*2.7, 0.5, bz+dz*(qd+8)+dx*i*2.7, 0, -ang, 0), '#7d7466');
       if(r.tier>=2 && (r.name==='Gibraltar'||r.name==='London'||r.name==='Havana')){
         b.add(new THREE.CylinderGeometry(0.75,1.0,4.8,7), M4(bx-dx*5.5, by+2.4, bz-dz*5.5), '#efe6cc');
         b.add(new THREE.SphereGeometry(0.62,8,6), M4(bx-dx*5.5, by+5.1, bz-dz*5.5), '#ffd97a');
+      } else if(r.tier>=3 && r.greatWork!=='light' && KIT.geo.tower){ // lesser ports keep a harbour light of their own
+        const lx=bx+dx*(qd+6.5), lz=bz+dz*(qd+6.5);
+        ca.add(KIT.geo.tower, M4(lx, 0.4, lz, 0, 0, 0, 1.3, 2.6, 1.3));
+        b.add(new THREE.SphereGeometry(0.5,8,6), M4(lx, 4.6, lz), '#ffd97a'); // crowning its 3.4 of stone, not floating over it
       }
       const dtier = r.tier>=3?2 : r.tier>=1?1 : 0;
       const nShips = r.tier>=3?4 : r.tier>=2?3 : r.tier>=1?2 : 1;
       harbor = new THREE.Group();
       for(let i=0;i<nShips;i++){
-        const ship = kitShipGroup(dtier, true, null); // furled at anchor — harbour mode
-        ship.position.set(bx+dx*(11+i*5.0)-dz*(3-i*6), 0.55, bz+dz*(11+i*5.0)+dx*(3-i*6));
+        const ship = kitShipGroup(dtier, true, null); // furled at anchor — harbour mode, hulls floating past the waterline
+        ship.position.set(bx+dx*(P.shoreD+4.5+i*5.0)-dz*(3-i*6), 0.55, bz+dz*(P.shoreD+4.5+i*5.0)+dx*(3-i*6));
         ship.rotation.y = Math.atan2(-dx, -dz) + hash(r.id*31+i)*0.3;
         harbor.add(ship);
+      }
+      if(KIT.ships[0]){ // rowboats — small life riding the same wave function the fleets ride
+        const list=[];
+        for(let i=0;i<2;i++){
+          const boat=kitShipGroup(0, true, null); boat.scale.multiplyScalar(0.42);
+          const bxx=bx+dx*(P.shoreD+1.3)-dz*(5-i*9), bzz=bz+dz*(P.shoreD+1.3)+dx*(5-i*9);
+          boat.position.set(bxx, 0.5, bzz); boat.rotation.y=Math.atan2(-dx,-dz)+0.4*i-0.2;
+          harbor.add(boat);
+          list.push({o:boat, x:bxx, z:bzz, ph:hash(r.id*7+i)*6.28});
+        }
+        bobReg.set(r.id, list);
       }
     }
     if(r.troops>=500){ // army standard in owner colours
@@ -2855,17 +3164,26 @@ try{
     for(let i=0;i<sats;i++){
       const a=i*2.7+r.id*1.3, hx=bx+Math.cos(a)*32, hz=bz+Math.sin(a)*24;
       if(!onLand(hx, hz, r)) continue;
-      sb.add(KIT.houses[(i+1)%KIT.houses.length], M4(hx, by, hz, 0, hash(r.id*3+i)*6.28, 0, 2.4, 2.4, 2.4));
-      sb.add(KIT.houses[i%KIT.houses.length], M4(hx+5.2, by, hz+2.2, 0, hash(r.id*5+i)*6.28, 0, 2.0, 2.0, 2.0));
+      sb.add(houses[(i+1)%houses.length], M4(hx, by, hz, 0, hash(r.id*3+i)*6.28, 0, 2.4, 2.4, 2.4));
+      sb.add(houses[i%houses.length], M4(hx+5.2, by, hz+2.2, 0, hash(r.id*5+i)*6.28, 0, 2.0, 2.0, 2.0));
     }
     const satMesh = sb.mesh();
     const ftm=ft.mesh(); if(ftm) objs.push(ftm);
     const cam=ca.mesh(wallMat); if(cam) objs.push(cam);
     const cwm=caWhite.mesh(); if(cwm) objs.push(cwm);
-    objs.push(b.mesh());
+    const bm=b.mesh(); objs.push(bm);
+    const decMesh=dec.mesh();
+    if(decMesh){ decMesh.material=DECALMAT; decMesh.renderOrder=3; objs.push(decMesh); }
     if(harbor) objs.push(harbor);
     if(satMesh) objs.push(satMesh);
-    return {objs, sat: satMesh};
+    // far-band silhouette (world-zoom LOD): roof-mass cone + one hero spire — the political disc names the owner
+    const farB=new Batch();
+    farB.add(new THREE.ConeGeometry(P.R*0.92, P.R*0.5, 10), M4(bx, by+P.R*0.22, bz), ROOF_HEX[biomeKey(r)]);
+    const heroH=Math.max(4.5, P.R*0.55);
+    farB.add(new THREE.BoxGeometry(1.6, heroH, 1.6), M4(bx+P.R*0.2, by+heroH/2, bz-P.R*0.18), '#e8dcc0');
+    if(capital) farB.add(new THREE.SphereGeometry(1.7,8,6), M4(bx, by+heroH+1.1, bz), '#e9c96e');
+    const farMesh=farB.mesh(); farMesh.visible=false; objs.push(farMesh);
+    return {objs, sat: satMesh, dec: decMesh, far: farMesh, near: [ftm, cam, cwm, bm].filter(Boolean)};
   }
 
   function buildSettlement(r){
@@ -2876,17 +3194,11 @@ try{
     const ownerCol = r.owner? emp(r.owner).color : '#8a6d3b';
     const walls=['#cbb27a','#bfa065','#d6c088','#c2a878','#e3d3ac','#b98d5f'];
     const capital = !!isCapitalOf(r);
-    // main cluster — a real little district now: market heart, streets of houses, a landmark
-    const S = 1.38; // cartography-pass scale-up: towns must hold their ground on a vast map
-    const nH = 4 + r.tier*2 + (capital?4:0);
-    for(let i=0;i<nH;i++){
-      const a=i*2.35+r.id*1.7, d=(3.0+(i%4)*2.25)*S*0.8;
-      const hx=bx+Math.cos(a)*d, hz=bz+Math.sin(a)*d*0.85;
-      if(!onLand(hx, hz, r)) continue; // no houses in the harbour
-      const s=(1.42+(i%3)*0.26 + r.tier*0.14 + (capital?0.12:0))*S;
-      house(b, hx, by, hz, s, walls[i%4],
-        ROOFS3D[Math.floor(hash(r.id*7+i*13)*ROOFS3D.length)]);
-    }
+    // main cluster follows the same Townscaper-lite plan the kit towns use — one town, two painters
+    const P=planTown(r);
+    P.lots.forEach((lot,i)=>{
+      house(b, lot.x, by, lot.z, lot.s*0.62, walls[i%4], ROOF_HEX[biomeKey(r)]);
+    });
     // satellite hamlets — at most 2, placed at a REAL distance from town (zoom-gated in the frame loop)
     const sats=Math.min(r.towns,2);
     for(let i=0;i<sats;i++){
@@ -2948,8 +3260,16 @@ try{
     }
     const rig = linesMesh(b);
     const satMesh = sb.pos.length? sb.mesh() : null;
-    const objs=[b.mesh()]; if(rig) objs.push(rig); if(satMesh) objs.push(satMesh);
-    return {objs, sat: satMesh};
+    const mainMesh=b.mesh();
+    const objs=[mainMesh]; if(rig) objs.push(rig); if(satMesh) objs.push(satMesh);
+    // far-band silhouette, same as the kit towns wear
+    const farB=new Batch();
+    farB.add(new THREE.ConeGeometry(P.R*0.92, P.R*0.5, 10), M4(bx, by+P.R*0.22, bz), ROOF_HEX[biomeKey(r)]);
+    const heroH=Math.max(4.5, P.R*0.55);
+    farB.add(new THREE.BoxGeometry(1.6, heroH, 1.6), M4(bx+P.R*0.2, by+heroH/2, bz-P.R*0.18), '#e8dcc0');
+    if(capital) farB.add(new THREE.SphereGeometry(1.7,8,6), M4(bx, by+heroH+1.1, bz), '#e9c96e');
+    const farMesh=farB.mesh(); farMesh.visible=false; objs.push(farMesh);
+    return {objs, sat: satMesh, far: farMesh, near: [mainMesh].filter(Boolean)};
   }
 
   const NAT3 = { tree:null, rock:null, treePos:null, rockPos:null }; // kit nature swaps these instanced meshes once models land
@@ -2981,9 +3301,9 @@ try{
   function waveH(x, z, t){ return Math.sin(x*0.11 + t*1.1)*0.32 + Math.cos(z*0.09 + t*0.8)*0.26 + Math.sin((x+z)*0.045 + t*0.55)*0.18; }
   const waterUniforms = {
     uTime:{value:0}, uShore:{value:shoreTexture()},
-    uDeep:{value:new THREE.Color('#14486b')}, uShallow:{value:new THREE.Color('#2e7fa3')},
-    uSky:{value:new THREE.Color('#cfe8e4')}, uFoam:{value:new THREE.Color('#eaf7f2')},
-    fogColor:{value:new THREE.Color(0x8fb0c2)}, fogDensity:{value:0.00030}
+    uDeep:{value:new THREE.Color('#173f63')}, uShallow:{value:new THREE.Color('#2c7d96')},
+    uSky:{value:new THREE.Color('#f4dcae')}, uFoam:{value:new THREE.Color('#eaf7f2')},
+    fogColor:{value:new THREE.Color(0xe3c298)}, fogDensity:{value:0.00026} // must match scene.fog above
   };
   const waterMat = new THREE.ShaderMaterial({
     uniforms: waterUniforms,
@@ -3230,7 +3550,7 @@ try{
           if(!onLand(x, z, r)) continue;
           fb.add(new THREE.PlaneGeometry(4.6,3.4).rotateX(-Math.PI/2), M4(x, BASE_Y+0.13, z, 0, hash(r.id*7+i)*0.9, 0), FARM_COLS[Math.floor(hash(r.id*11+i)*FARM_COLS.length)]);
         }
-        const srad = 12.5 + r.tier*1.3 + (CAPITALS.includes(r.name)? 3.5 : 0);
+        const srad = [8.5, 12.5, 16.5, 21][r.tier] * (CAPITALS.includes(r.name)? 1.12 : 1); // the ground shadow hugs the grown town footprint
         shB.add(new THREE.CircleGeometry(srad, 26).rotateX(-Math.PI/2), M4(bx, BASE_Y+0.045, bz), '#201606');
       });
       if(fb.pos.length) worldGroup.add(fb.mesh());
@@ -3286,7 +3606,7 @@ try{
     }
     return d;
   }
-  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0, KIT.ready?1:0].join('|'); }
+  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0, KIT.ready?1:0, r.greatWork||''].join('|'); }
   function disposeBuilt(o){ // kit ship hulls share geometry across the world — never dispose those
     o.traverse(n=>{
       let p=n, shared=false;
@@ -3303,7 +3623,7 @@ try{
       if(!cur || cur.sig !== sig){
         if(cur) cur.objs.forEach(o=>{ scene.remove(o); disposeBuilt(o); });
         const built = buildSettlement(r); built.objs.forEach(o=>scene.add(o));
-        settlements.set(r.id, {objs: built.objs, sat: built.sat, sig});
+        settlements.set(r.id, {objs: built.objs, sat: built.sat, dec: built.dec, far: built.far, near: built.near, sig});
       }
     });
   }
@@ -3344,9 +3664,9 @@ try{
     const wrap = new THREE.Group(); wrap.userData.sharedGeo = true;
     const inner = new THREE.Group(); inner.rotation.y = KIT_SHIP_ROT;
     const body = new THREE.Mesh(def.body, KIT.mats.pirate); body.castShadow = true; inner.add(body);
-    if(def.sails){ const sails = new THREE.Mesh(def.sails, KIT.mats.pirate); sails.castShadow = true; sails.visible = !furled; inner.add(sails); }
+    if(def.sails){ const sails = new THREE.Mesh(def.sails, KIT.sailMat||KIT.mats.pirate); sails.castShadow = true; sails.visible = !furled; inner.add(sails); }
     if(ensignCol){
-      const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.3,0.78), new THREE.MeshBasicMaterial({color:ensignCol, side:THREE.DoubleSide}));
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.3,0.78), flagMat(ensignCol));
       flag.position.set(0, 8.7, -0.84); flag.rotation.y = Math.PI/2; inner.add(flag);
     }
     wrap.add(inner);
@@ -3814,8 +4134,13 @@ try{
     } else coachRing.visible=false;
     // satellite hamlets only exist up close — far zoom stays clean
     const showSats = dist < 480; // spreads further on the big chart, so hamlets earn their keep from further out
+    const showDec = dist < 560; // zoom-band LOD: ground glyphs fade out before the world view (towns read by silhouette there)
     discs.forEach(d=>{ if(d.owner) d.fill.material.opacity = dist>330? 0.56 : 0.42; }); // the wash deepens as you pull back
-    settlements.forEach(v=>{ if(v.sat && v.sat.visible !== showSats) v.sat.visible = showSats; });
+    settlements.forEach(v=>{ if(v.sat && v.sat.visible !== showSats) v.sat.visible = showSats;
+      if(v.dec && v.dec.visible !== showDec) v.dec.visible = showDec;
+      if(v.far){ const fb = dist > 650; // far band: silhouette proxies stand in for the full kit
+        if(v.far.visible !== fb) v.far.visible = fb;
+        if(fb !== v._fb){ v._fb = fb; if(v.near) v.near.forEach(m=>{ m.visible = !fb; }); } } });
     // periodic state diffing (ownership, tiers, lanes, fleets)
     diffT+=dt;
     if(diffT>0.35){ diffT=0; refreshSettlements(); refreshLanes(); refreshFleets(); }
@@ -3825,11 +4150,18 @@ try{
     { const st=SEASON_TINTS[G.seasonIdx&3]||SEASON_TINTS[0]; _seasonTint.setRGB(st[0],st[1],st[2]);
       if(window.__landMat) window.__landMat.userData.uSeason.value.lerp(_seasonTint, 0.03); }
     // the single shadow caster rides with the camera target, frustum fitted to the view
-    sun.position.set(target.x+120, 190, target.z+60); sun.target.position.copy(target);
+    sun.position.set(target.x+205, 95, target.z+55); sun.target.position.copy(target); // low amber key rides with the camera
     { const ext=THREE.MathUtils.clamp(dist*0.45, 70, 260), sc=sun.shadow.camera;
       if(Math.abs(sc.right-ext)>4){ sc.left=-ext; sc.right=ext; sc.top=ext; sc.bottom=-ext; sc.updateProjectionMatrix(); } }
     if(sun.castShadow) sun.target.updateMatrixWorld();
     updateSmoke(t);
+    // ---- town life on the shared wind clock: flutter, turning beams, bobbing boats, harbour gulls ----
+    WIND_U.value = t;
+    gwReg.forEach(en=>{ if(en.beam) en.beam.rotation.y = t*0.5 + en.ph; });
+    bobReg.forEach(list=>list.forEach(bb=>{ const vis = dist < 560; // rowboat life is a near-band pleasure
+      if(bb.o.visible !== vis) bb.o.visible = vis;
+      bb.o.position.y = 0.45 + waveH(bb.x, bb.z, t)*0.8; }));
+    updateGulls(t);
     // adaptive quality from the frame-time EMA; readout for QA + the parent report
     // (wall-clock based: the capped sim dt would run the governor in slow-motion on weak GPUs)
     const _nowMs = performance.now(), _rawSec = Math.min((_nowMs-(frame._pw||_nowMs))/1000, 0.25); frame._pw=_nowMs;
@@ -3885,7 +4217,7 @@ try{
     if(smokePts){ scene.remove(smokePts); smokePts.geometry.dispose(); smokePts.material.dispose(); smokePts=null; }
     smokeSrc=[];
     G.regions.forEach(r=>{
-      const n = 1 + r.tier + (isCapitalOf(r)? 2:0);
+      const n = 2 + r.tier + (isCapitalOf(r)? 2:0); // one notch denser — chimneys alive at golden hour
       for(let i=0;i<n;i++) for(let s=0;s<3;s++)
         smokeSrc.push([SX(r.x)+(hash(r.id*13+i*7)-0.5)*7, BASE_Y+6.6+s*1.2+hash(i*3+r.id)*0.8, SZ(r.y)+(hash(r.id*17+i*3)-0.5)*7, hash(r.id*19+i)*6.28]);
     });
@@ -3905,6 +4237,38 @@ try{
     pos.needsUpdate=true;
   }
 
+  /* harbour gulls — ONE instanced mesh, eighteen paper darts circling the harbour mouths */
+  const GULL_N=18;
+  let gullIM=null;
+  const _gM=new THREE.Matrix4(), _gQ=new THREE.Quaternion(), _gE=new THREE.Euler(), _gV=new THREE.Vector3(), _gS=new THREE.Vector3();
+  function initGulls(){
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      -1.0,0,0,  0,0.18,0.35,  0.15,-0.05,-0.3,   1.0,0,0,  0.15,-0.05,-0.3,  0,0.18,0.35 ]),3));
+    g.computeVertexNormals();
+    gullIM=new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({color:0xeef2ee, side:THREE.DoubleSide}), GULL_N);
+    gullIM.frustumCulled=false; gullIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(gullIM);
+  }
+  function updateGulls(t){
+    if(!gullIM) return;
+    const ports=G.regions.filter(r=>r.isPort);
+    if(!ports.length) return;
+    for(let i=0;i<GULL_N;i++){
+      const r=ports[(i*3)%ports.length];
+      const bx=SX(r.x), bz=SZ(r.y), z=seaById[r.seaZone];
+      let dx=SX(z.x)-bx, dz=SZ(z.y)-bz; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
+      const cx=bx+dx*13, cz=bz+dz*13;
+      const ph=hash(i*13.7)*6.28, rad=3.5+(i%4), sp=0.25+(i%3)*0.05, a=t*sp+ph;
+      const fl=0.85+Math.sin(t*9+ph)*0.15;
+      _gE.set(0, -a, Math.sin(t*7+ph)*0.35); _gQ.setFromEuler(_gE);
+      _gV.set(cx+Math.cos(a)*rad, BASE_Y+6.5+Math.sin(t*0.9+ph)*1.1, cz+Math.sin(a)*rad);
+      _gS.set(1.1, fl, 1.1);
+      _gM.compose(_gV, _gQ, _gS); gullIM.setMatrixAt(i, _gM);
+    }
+    gullIM.instanceMatrix.needsUpdate=true;
+  }
+
   R3.rebuild = () => { settlements.forEach(v=>{ v.objs.forEach(o=>{ scene.remove(o); disposeBuilt(o); }); }); settlements.clear();
     laneSig=''; refreshSettlements(); refreshLanes(); refreshFleets();
     const lis = G.regions.find(r=>r.name==='Lisbon');
@@ -3912,6 +4276,7 @@ try{
   container.style.display='block';
   document.getElementById('map').style.display='none';
   refreshSettlements(); refreshLanes(); refreshFleets();
+  initGulls();
   const CAMH = location.hash.match(/cam=(-?[\d.]+),(-?[\d.]+),(\d+(?:\.\d+)?)/); // QA hook: frame world coords directly
   if(CAMH){ target.set(SX(+CAMH[1]), 0, SZ(+CAMH[2])); dist=+CAMH[3]; camAnim=null; }
   updateCamera(); frame();
