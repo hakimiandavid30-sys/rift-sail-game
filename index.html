@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Rift &amp; Sail — Age of Sail Empire</title>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+</script>
 <style>
   :root{
     --parchment:#e8d5a8; --parchment-dark:#c9ae77; --ink:#2b1d0e;
@@ -34,6 +37,15 @@
     border-radius:8px;padding:7px 10px;font-family:inherit;font-size:13px;cursor:pointer;min-height:38px;}
   .bar-btn:active{transform:translateY(1px);}
   #spacer{flex:1;pointer-events:none;}
+
+  /* narrow phones: condense the ledger chips so Crown & Realm never clip */
+  @media (max-width:640px){
+    #topbar #title-cell{display:none;}
+    #topbar{gap:3px;padding:5px 6px;}
+    #topbar .cell{font-size:11px;padding:3px 5px;gap:3px;}
+    #topbar .bar-btn, .bar-btn{padding:6px 8px;font-size:12px;min-height:34px;}
+    #btn-crown{margin-right:4px;}
+  }
 
   /* ---------- aims tracker ---------- */
   #aims{position:absolute;top:56px;left:8px;z-index:15;background:rgba(243,230,195,.92);border:1px solid var(--panel-edge);
@@ -126,11 +138,56 @@
     background:rgba(43,29,14,.9);color:var(--brass-light);border:1px solid var(--brass-light);border-radius:12px;
     padding:9px 16px;font-size:15px;pointer-events:none;transition:all .3s ease;white-space:nowrap;}
   #tally.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* ---------- 3D diorama layer ---------- */
+  #gl{position:absolute;inset:0;display:none;z-index:1;}
+  #gl canvas{display:block;touch-action:none;}
+  #vignette{position:absolute;inset:0;z-index:5;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 42%, transparent 55%, rgba(8,10,14,.38) 88%, rgba(4,6,8,.62) 100%);}
+  #chips{position:absolute;inset:0;z-index:6;pointer-events:none;overflow:hidden;}
+  .chip{position:absolute;transform:translate(-50%,-100%);white-space:nowrap;pointer-events:none;
+    font-family:Georgia,'Times New Roman',serif;line-height:1;}
+  .chip.name{background:rgba(243,230,195,.92);color:#2b1d0e;border:1px solid rgba(122,92,46,.75);
+    border-radius:6px;padding:2px 7px;font-size:12.5px;box-shadow:0 2px 6px rgba(0,0,0,.35);}
+  .chip.name.major{font-weight:bold;font-size:14px;background:rgba(248,239,210,.97);border-color:var(--brass);}
+  .chip.troops{color:#fff6dd;font-weight:bold;font-size:12px;padding:3px 7px;border-radius:7px;
+    border:1px solid rgba(255,246,221,.65);box-shadow:0 2px 7px rgba(0,0,0,.45);text-shadow:0 1px 2px rgba(0,0,0,.5);}
+  .chip.fleet{color:#fff6dd;font-weight:bold;font-size:12px;padding:3px 7px;border-radius:7px;
+    border:1px solid rgba(255,246,221,.65);box-shadow:0 2px 7px rgba(0,0,0,.45);}
+  .chip.block{color:#ffb59d;font-size:15px;text-shadow:0 1px 4px rgba(0,0,0,.8);background:none;}
+
+  /* ---------- coaching hint ---------- */
+  #hint{position:absolute;left:50%;bottom:86px;transform:translateX(-50%);z-index:26;max-width:min(92vw,520px);
+    background:linear-gradient(180deg,rgba(46,30,12,.95),rgba(30,19,7,.95));color:#f7ecd0;
+    border:1.5px solid var(--brass-light);border-radius:14px;padding:11px 16px;font-size:14.5px;text-align:center;
+    box-shadow:0 8px 26px rgba(0,0,0,.55);display:none;cursor:pointer;}
+  #hint.show{display:block;animation:hintin .35s ease-out;}
+  #hint b{color:var(--brass-light);}
+  @keyframes hintin{from{transform:translateX(-50%) translateY(14px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
+
+  /* richer captain's-cabin cards */
+  .card{background:linear-gradient(180deg,#2e1e0c,#241605 60%,#1d1206);color:#f3e6c3;
+    border:2px solid var(--brass);outline:1px solid rgba(217,185,106,.35);outline-offset:-7px;}
+  .card p,.card .rel{color:#e6d3a3;}
+  #gazette-lines p{border-bottom:1px dotted rgba(217,185,106,.35);}
+  .dip-row{border-bottom:1px dotted rgba(217,185,106,.35);}
+  #battle .versus{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0;}
+  #battle .side{flex:1;text-align:center;background:rgba(243,230,195,.08);border:1px solid rgba(217,185,106,.4);
+    border-radius:12px;padding:10px 6px;}
+  #battle .side .big{font-size:22px;font-weight:bold;color:var(--brass-light);}
+  #battle .swords{font-size:30px;}
+  #battle .outcome{text-align:center;font-size:19px;font-variant:small-caps;letter-spacing:1px;margin:8px 0 2px;}
+  #start .tag{color:var(--brass-light);}
+  .card h3{color:var(--brass-light);}
 </style>
 </head>
 <body>
 <div id="game">
   <canvas id="map"></canvas>
+  <div id="gl"></div>
+  <div id="vignette"></div>
+  <div id="chips"></div>
+  <div id="hint"></div>
 
   <div id="topbar">
     <div class="cell" id="title-cell">⚜ Rift &amp; Sail</div>
@@ -211,6 +268,20 @@
     <p><b>Trade:</b> lanes between your ports pay every season, thicker lanes pay more. Conquer a port and its lanes become yours. Allies open their ports to your lanes.</p>
     <p><b>The Crown:</b> momentous matters — war warnings, offers, crises — wait under the 👑 Crown button. Only big decisions reach you.</p>
     <button class="big-btn" id="howto-close">To the Chart</button>
+  </div></div>
+
+  <!-- Battle result -->
+  <div class="veil" id="battle"><div class="card">
+    <h2 id="battle-title">Battle</h2>
+    <div class="rule"></div>
+    <div class="versus">
+      <div class="side"><div id="battle-atk-name">Your army</div><div class="big" id="battle-atk"></div><div id="battle-atk-loss"></div></div>
+      <div class="swords">⚔</div>
+      <div class="side"><div id="battle-def-name">Defenders</div><div class="big" id="battle-def"></div><div id="battle-def-loss"></div></div>
+    </div>
+    <div class="outcome" id="battle-outcome"></div>
+    <p id="battle-note" style="text-align:center"></p>
+    <button class="big-btn" id="battle-ok">Continue</button>
   </div></div>
 
   <!-- Start -->
@@ -399,6 +470,9 @@ function freshState(){
   EMPIRES.forEach(a=>EMPIRES.forEach(b=>{ if(a.id!==b.id) empires[a.id].relations[b.id]={score:a.id==='player'||b.id==='player'?10:0, war:false, ally:false}; }));
   // scattered free-town garrisons
   regions.filter(r=>!r.owner).forEach(r=>{ r.troops=Math.round(rr(1200,3200)); });
+  // a soft first target beside the player's capital — a winnable first conquest in the opening seasons
+  const home=regions.find(r=>r.name===EMPIRES[0].capital);
+  home.neighbors.map(id=>regions[id]).filter(r=>!r.owner).forEach(r=>{ r.troops=Math.min(r.troops,1600); });
   const fleets=[];
   EMPIRES.forEach(e=>{
     const cap=regions.find(r=>r.name===e.capital);
@@ -457,6 +531,7 @@ const cv=$('#map'), ctx=cv.getContext('2d');
 let view={x:0,y:0,scale:1}, DPR=1;
 let selected=null; // {type:'region'|'fleet'|'sea', id}
 let anims=[]; // {type:'wash'|'count', ...}
+window.R3=window.R3||{active:false}; // 3D diorama renderer (module sets .active when live)
 
 function fitCanvas(){
   DPR=Math.min(window.devicePixelRatio||1,2);
@@ -477,6 +552,7 @@ const LAND_PATHS=[ // rough continent silhouettes (world coords) for inked coast
 const WAVES=[]; for(let i=0;i<260;i++) WAVES.push([Math.random()*WORLD_W, Math.random()*WORLD_H, 8+Math.random()*22]);
 
 function draw(){
+  if(window.R3&&window.R3.active){ requestAnimationFrame(draw); return; } // 3D diorama owns the screen
   ctx.setTransform(DPR,0,0,DPR,0,0);
   // sea
   const g=ctx.createLinearGradient(0,0,0,innerHeight);
@@ -636,12 +712,22 @@ function zoomAt(cx,cy,ns){
   ns=clamp(ns, fit*0.9, fit*6);
   const [wx,wy]=s2w(cx,cy); view.scale=ns; view.x=cx-wx*ns; view.y=cy-wy*ns;
 }
-$('#zoom-in').onclick=()=>zoomAt(innerWidth/2,innerHeight/2,view.scale*1.3);
-$('#zoom-out').onclick=()=>zoomAt(innerWidth/2,innerHeight/2,view.scale/1.3);
-$('#zoom-home').onclick=()=>fitWorld();
+$('#zoom-in').onclick=()=>{ if(window.R3&&window.R3.active) R3.zoomBy(1.3); else zoomAt(innerWidth/2,innerHeight/2,view.scale*1.3); };
+$('#zoom-out').onclick=()=>{ if(window.R3&&window.R3.active) R3.zoomBy(1/1.3); else zoomAt(innerWidth/2,innerHeight/2,view.scale/1.3); };
+$('#zoom-home').onclick=()=>{ if(window.R3&&window.R3.active) R3.home(); else fitWorld(); };
 
 function handleTap(cx,cy){
-  const now=Date.now(); const [wx,wy]=s2w(cx,cy);
+  const now=Date.now();
+  if(window.R3&&window.R3.active){ // 3D picking: projected centres, clarity-first
+    if(now-lastTap<320){ R3.zoomBy(1.5); lastTap=0; return; } lastTap=now;
+    const hit=R3.pick(cx,cy);
+    if(!hit){ closeSheet(); return; }
+    if(hit.type==='fleet') selectFleet(G.fleets.find(f=>f.id===hit.id));
+    else if(hit.type==='region') selectRegion(rById[hit.id]);
+    else if(hit.type==='sea') selectSea(seaById[hit.id]);
+    return;
+  }
+  const [wx,wy]=s2w(cx,cy);
   if(now-lastTap<320){ zoomAt(cx,cy,view.scale*1.5); lastTap=0; return; } lastTap=now;
   // fleet?
   for(const f of G.fleets){ const z=seaById[f.zone]; if(Math.hypot(f.x||z.x-wx, z.y-wy)<70){ selectFleet(f); return; } }
@@ -656,8 +742,8 @@ function handleTap(cx,cy){
 
 /* ================= ACTION SHEETS ================= */
 const sheet=$('#sheet');
-function openSheet(){ sheet.classList.add('open'); }
-function closeSheet(){ sheet.classList.remove('open'); selected=null; }
+function openSheet(){ sheet.classList.add('open'); const h=$('#hint'); if(h) h.classList.remove('show'); }
+function closeSheet(){ sheet.classList.remove('open'); selected=null; setTimeout(()=>{ if(window.updateHint) updateHint(); },60); }
 $('#sheet-close').onclick=closeSheet;
 function statRow(items){ return items.map(([k,v])=>'<span class="stat">'+k+' <b>'+v+'</b></span>').join(''); }
 function actBtn(t,d,fn,cls,dis){
@@ -755,6 +841,7 @@ function doMuster(r){
   const me=emp('player'); if(me.gold<MUSTER_COST||r.pop<MUSTER_MEN) return;
   pay(MUSTER_COST); r.pop-=MUSTER_MEN; r.troops+=MUSTER_MEN;
   toast('Regiment mustered at '+r.name+' — '+fmt(r.troops)+' under arms');
+  coachAdvance(0);
   selectRegion(r); refreshHUD();
 }
 function doBuildShips(r){
@@ -789,6 +876,7 @@ function doMoveArmy(from,to){
   if(to.owner && !atWar('player',to.owner)){
     toast('You are at peace with '+emp(to.owner).name+' — declare war in Realm.'); return;
   }
+  const defBefore=to.troops, atkName=from.name+' host';
   const res=battle('player', atk, to);
   from.troops=0; to.troops-=res.dLoss;
   const survivors=atk-res.aLoss;
@@ -799,12 +887,15 @@ function doMoveArmy(from,to){
       ' — '+fmt(res.aLoss)+' of yours and '+fmt(res.dLoss)+' defenders fell.'+(prev?' Spoils and harbour dues pour into your treasury.':''));
     if(prev) emp('player').gold+=120+to.tier*60;
     toast('🏴 '+to.name+' is yours!');
+    coachAdvance(1);
     checkCapitalLoss(prev);
+    showBattle(atkName,atk,to.name,defBefore,res,true,'Spoils: +'+(prev?120+to.tier*60:40)+'g · the banner of Your Crown rises over '+to.name+'.');
   } else {
     to.troops=Math.max(200,to.troops);
     if(survivors>300){ /* remnants retreat home */ from.troops=survivors; }
     gazette('⚔ <b>Repulsed at '+to.name+'.</b> Your army broke against the defences — '+fmt(res.aLoss)+' men lost.');
     toast('Repulsed at '+to.name+' — '+fmt(res.aLoss)+' lost');
+    showBattle(atkName,atk,to.name,defBefore,res,false,survivors>300?'The remnants fall back to '+from.name+'. Reinforce and try again.':'Your host is scattered. Muster anew.');
   }
   closeSheet(); refreshHUD(); save();
 }
@@ -956,15 +1047,20 @@ function endSeason(){
   if(emp('player').tradeStreak>0) head.push('⛵ Your lanes lead the world in trade ('+emp('player').tradeStreak+'/5 seasons toward a merchant victory).');
   G.gazette=head.concat(G.gazette);
   detectWarnings();
+  if(coachStep===1) coachStep=2;
   refreshHUD(); save();
   if(!checkEnd()) showGazette();
 }
 function showGazette(){
+  const h=$('#hint'); if(h) h.classList.remove('show');
   $('#gazette-title').textContent='The Gazette — '+seasonName();
   $('#gazette-lines').innerHTML=G.gazette.length? G.gazette.map(l=>'<p>'+l+'</p>').join('') : '<p>A quiet season on the Rift.</p>';
   $('#gazette').classList.add('open');
 }
-$('#gazette-ok').onclick=()=>$('#gazette').classList.remove('open');
+$('#gazette-ok').onclick=()=>{ $('#gazette').classList.remove('open');
+  if(coachStep===2){ coachStep=99; try{localStorage.setItem('riftsail-coached','1');}catch(e){} updateHint(); }
+  else updateHint();
+};
 
 /* ================= HUD / REALM / CROWN ================= */
 function refreshHUD(){
@@ -981,12 +1077,26 @@ function refreshHUD(){
   const cb=$('#crown-badge'); const n=G.crownQueue.length;
   cb.style.display=n?'flex':'none'; cb.textContent=n;
   // aims
+  if(!Array.isArray(G.aimsRewarded)) G.aimsRewarded=[];
   const aims=[
-    {t:'Hold '+WIN_REGIONS+' regions ('+myRegions().length+'/'+WIN_REGIONS+')', done:myRegions().length>=WIN_REGIONS, prog:myRegions().length/WIN_REGIONS},
-    {t:'Lead trade 5 seasons ('+me.tradeStreak+'/5)', done:me.tradeStreak>=5, prog:me.tradeStreak/5},
-    {t:'Field 25,000 men ('+kfmt(totalMen('player'))+')', done:totalMen('player')>=25000, prog:totalMen('player')/25000},
+    {id:'regions',name:'an empire of '+WIN_REGIONS+' regions',t:'Hold '+WIN_REGIONS+' regions ('+myRegions().length+'/'+WIN_REGIONS+')', done:myRegions().length>=WIN_REGIONS, prog:myRegions().length/WIN_REGIONS},
+    {id:'trade',name:'trade supremacy',t:'Lead trade 5 seasons ('+me.tradeStreak+'/5)', done:me.tradeStreak>=5, prog:me.tradeStreak/5},
+    {id:'men',name:'a host of 25,000',t:'Field 25,000 men ('+kfmt(totalMen('player'))+')', done:totalMen('player')>=25000, prog:totalMen('player')/25000},
   ];
+  aims.forEach(a=>{ if(a.done&&!G.aimsRewarded.includes(a.id)){ G.aimsRewarded.push(a.id); me.gold+=150;
+    toast('🏆 Aim achieved: '+a.name+' — the court grants +150g'); } });
   $('#aims-list').innerHTML=aims.map(a=>'<div class="aim"><span class="tick">'+(a.done?'✓':'▸')+'</span><span>'+a.t+'</span></div>').join('');
+  // no dead seasons: when nothing demands attention, point at the single most useful act
+  if(coachStep===99 && !G.over){
+    const weak=myRegions().filter(r=>r.troops<1500).length;
+    const h=$('#hint');
+    if(G.crownQueue.length) { /* crown badge speaks for itself */ }
+    else if(me.gold>=MUSTER_COST && weak>0 && G.turn>1 && h.dataset.turn!=String(G.turn)){
+      h.dataset.turn=String(G.turn);
+      h.innerHTML='💡 <b>Your Move:</b> '+weak+' of your regions stand thinly garrisoned. Muster regiments before a rival notices.';
+      h.classList.add('show'); clearTimeout(h._hh); h._hh=setTimeout(()=>h.classList.remove('show'),6000);
+    }
+  }
 }
 $('#btn-crown').onclick=()=>{
   const b=$('#crown-body');
@@ -1053,18 +1163,58 @@ $('#howto-close').onclick=()=>$('#howto').classList.remove('open');
 $('#menu-new').onclick=()=>{ if(confirm('Abandon this campaign and start anew?')) startNew(); };
 $('#end-new').onclick=()=>startNew();
 
+/* ================= COACHING (first-minute guide) ================= */
+let coachStep=99; // 0 tap capital · 1 act/end season · 2 read gazette · 99 done
+window.__coachRegion=null;
+function updateHint(){
+  const h=$('#hint'); if(!h||!G){ return; }
+  if(coachStep===0){
+    const cap=G.regions.find(r=>r.name==='Lisbon');
+    window.__coachRegion=cap?cap.id:null;
+    h.innerHTML='👑 Tap your crimson capital — <b>Lisbon</b> — to muster your first regiments.';
+    h.classList.add('show');
+  } else if(coachStep===1){
+    window.__coachRegion=null;
+    h.innerHTML='⚔ Regiments ready. March them into a <b>neighbouring free town</b> to conquer it — or press <b>End Season</b> ⚓';
+    h.classList.add('show');
+  } else if(coachStep===2){
+    window.__coachRegion=null;
+    h.innerHTML='📰 The Gazette tells the realm\'s story each season. Your next move is always the glowing choice.';
+    h.classList.add('show');
+  } else { window.__coachRegion=null; h.classList.remove('show'); }
+}
+$('#hint').onclick=()=>{ coachStep=99; try{localStorage.setItem('riftsail-coached','1');}catch(e){} updateHint(); };
+function coachAdvance(step){ if(coachStep===step){ coachStep=step+1; updateHint(); } }
+
+/* ================= BATTLE MODAL ================= */
+function showBattle(atkName,atkMen,defName,defMen,res,won,note){
+  $('#battle-title').textContent='Battle for '+defName;
+  $('#battle-atk-name').textContent=atkName; $('#battle-atk').textContent=fmt(atkMen)+' men';
+  $('#battle-atk-loss').textContent='−'+fmt(res.aLoss)+' fallen';
+  $('#battle-def-name').textContent=defName+' garrison'; $('#battle-def').textContent=fmt(defMen)+' men';
+  $('#battle-def-loss').textContent='−'+fmt(res.dLoss)+' fallen';
+  $('#battle-outcome').innerHTML= won? '🏴 <span style="color:#8fd18b">Victory — the town is yours</span>' : '🛡 <span style="color:#e08a7d">Repulsed — the defence holds</span>';
+  $('#battle-note').textContent=note||'';
+  const h=$('#hint'); if(h) h.classList.remove('show');
+  $('#battle').classList.add('open');
+}
+$('#battle-ok').onclick=()=>{ $('#battle').classList.remove('open'); updateHint(); };
+
 /* ================= SAVE / LOAD / BOOT ================= */
 function save(){ try{ localStorage.setItem('riftsail-save', JSON.stringify(G)); }catch(e){} }
 function load(){ try{ const s=localStorage.getItem('riftsail-save'); return s? JSON.parse(s):null; }catch(e){ return null; } }
 function startNew(){
   G=freshState(); rebuildIndex(); selected=null; closeSheet();
+  coachStep = (localStorage.getItem('riftsail-coached')==='1')? 99 : 0;
   ['#endscreen','#menu','#gazette'].forEach(s=>$(s).classList.remove('open'));
   fitWorld(); refreshHUD(); save();
+  if(window.R3&&window.R3.rebuild) R3.rebuild();
   toast('A new reign begins — Lisbon flies your colours');
+  setTimeout(updateHint,700);
 }
 $('#btn-new').onclick=()=>{ $('#start').classList.remove('open'); startNew(); };
 $('#btn-continue').onclick=()=>{ $('#start').classList.remove('open'); };
-window.addEventListener('resize',()=>{ fitCanvas(); });
+window.addEventListener('resize',()=>{ fitCanvas(); if(window.R3&&window.R3.resize) R3.resize(); });
 
 fitCanvas();
 (function boot(){
@@ -1073,9 +1223,543 @@ fitCanvas();
   else { G=freshState(); rebuildIndex(); }
   fitWorld(); refreshHUD();
   requestAnimationFrame(draw);
+  if(location.hash.includes('shot')){ // dev/QA: jump straight into a campaign for screenshots
+    $('#start').classList.remove('open'); startNew();
+  }
   // gentle first-season guidance
   setTimeout(()=>{ if(G.turn===1) toast('Tap Lisbon ⚓ — muster regiments, then End Season'); },600);
 })();
+</script>
+<script type="module">
+/* ============================================================
+   RIFT & SAIL — 3D DIORAMA RENDERER (progressive enhancement)
+   If three.js or WebGL is unavailable, this module simply never
+   activates and the classic 2D canvas chart remains the game.
+   ============================================================ */
+try{
+  const THREE = await import('three');
+  const R3 = window.R3;
+  const container = document.getElementById('gl');
+  const chipsEl = document.getElementById('chips');
+  const SX = x => (x - WORLD_W/2)/10, SZ = y => (y - WORLD_H/2)/10;
+  const BASE_Y = 3.1;
+
+  const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  container.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0d4258);
+  scene.fog = new THREE.Fog(0x0d4258, 620, 1250);
+  const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.5, 3000);
+
+  scene.add(new THREE.HemisphereLight(0xfff1cf, 0x1d4a5c, 1.05));
+  const sun = new THREE.DirectionalLight(0xffe3ae, 1.5);
+  sun.position.set(120, 190, 60); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xbfd9e8, 0.35);
+  fill.position.set(-90, 80, -120); scene.add(fill);
+
+  /* ---------- tiny geometry batcher (vertex-coloured, merged) ---------- */
+  const MAT = new THREE.MeshLambertMaterial({vertexColors:true});
+  function M4(x,y,z,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1){
+    return new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz)),
+      new THREE.Vector3(sx,sy,sz));
+  }
+  function Batch(){ this.pos=[]; this.nor=[]; this.col=[]; }
+  Batch.prototype.add = function(geo, matrix, hex){
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    g.applyMatrix4(matrix);
+    const p=g.attributes.position, n=g.attributes.normal, c=new THREE.Color(hex);
+    for(let i=0;i<p.count;i++){ this.pos.push(p.getX(i),p.getY(i),p.getZ(i)); this.nor.push(n.getX(i),n.getY(i),n.getZ(i)); this.col.push(c.r,c.g,c.b); }
+    g.dispose();
+  };
+  Batch.prototype.mesh = function(){
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos,3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor,3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col,3));
+    const m=new THREE.Mesh(g, MAT); m.matrixAutoUpdate=false; return m;
+  };
+  const hash=n=>{ const x=Math.sin(n*127.1)*43758.5453; return x-Math.floor(x); };
+
+  function shipBatch(b, x, y, z, s, ang, hull, sail){
+    const cs=Math.cos(ang), sn=Math.sin(ang);
+    const L=(lx,lz)=>[x+(lx*cs-lz*sn)*s, z+(lx*sn+lz*cs)*s];
+    let [hx,hz]=L(0,0);
+    b.add(new THREE.BoxGeometry(4.5,1.0,1.7), M4(hx,y+0.5*s,hz,0,-ang,0,s,s,s), hull);
+    let [bx,bz]=L(2.3,0);
+    b.add(new THREE.ConeGeometry(0.85,1.9,4), M4(bx,y+0.5*s,bz,0,-ang,-Math.PI/2,s,s,s), hull);
+    let [mx,mz]=L(0.1,0);
+    b.add(new THREE.CylinderGeometry(0.11,0.14,4.6,5), M4(mx,y+(0.95+2.3)*s,mz,0,0,0,s,s,s), '#4a3319');
+    b.add(new THREE.ConeGeometry(1.38,3.4,3), M4(mx,y+(0.95+2.85)*s,mz,0,-ang,0,s,s,0.3*s), sail);
+    let [m2x,m2z]=L(-1.3,0);
+    b.add(new THREE.CylinderGeometry(0.09,0.11,3.3,5), M4(m2x,y+(0.95+1.65)*s,m2z,0,0,0,s,s,s), '#4a3319');
+    b.add(new THREE.ConeGeometry(1.08,2.6,3), M4(m2x,y+(0.95+2.05)*s,m2z,0,-ang,0,s,s,0.3*s), sail);
+  }
+
+  function house(b, x, y, z, s, wall, roof){
+    b.add(new THREE.BoxGeometry(1.9,1.5,1.7), M4(x,y+0.75*s,z,0,hash(x*3+z)*0.6,s,s,s), wall);
+    b.add(new THREE.ConeGeometry(1.75,1.15,4), M4(x,y+(1.5+0.57)*s,z,0,Math.PI/4,s,s,s), roof);
+  }
+  function tower(b, x, y, z, s, wall, roof, h=3.6){
+    b.add(new THREE.BoxGeometry(1.6, h, 1.6), M4(x,y+(h/2)*s,z,0,0,0,s,s,s), wall);
+    b.add(new THREE.ConeGeometry(1.55,1.7,4), M4(x,y+(h+0.85)*s,z,0,Math.PI/4,s,s,s), roof);
+  }
+
+  const CAPITALS = EMPIRES.map(e=>e.capital);
+  function isCapitalOf(r){ return CAPITALS.includes(r.name) && r.owner && EMPIRES.find(e=>e.capital===r.name && e.id===r.owner); }
+
+  const ROOFS3D=['#8a4a34','#9c3d2e','#74572c','#46586e','#6e3b52','#87652c','#5d6e3a'];
+  function buildSettlement(r){
+    const b=new Batch();        // main settlement — always visible
+    const sb=new Batch();       // satellite hamlets — hidden at far zoom
+    const bx=SX(r.x), bz=SZ(r.y), by=BASE_Y;
+    const ownerCol = r.owner? emp(r.owner).color : '#8a6d3b';
+    const walls=['#cbb27a','#bfa065','#d6c088','#c2a878'];
+    const capital = !!isCapitalOf(r);
+    // main cluster — FEWER, BIGGER, distinct buildings with varied roofs
+    const nH = 2 + r.tier + (capital?1:0);
+    for(let i=0;i<nH;i++){
+      const a=i*2.35+r.id*1.7, d=2.7+ (i%3)*2.1;
+      const s=1.55+(i%3)*0.28 + r.tier*0.16 + (capital?0.15:0);
+      house(b, bx+Math.cos(a)*d, by, bz+Math.sin(a)*d*0.85, s, walls[i%4],
+        ROOFS3D[Math.floor(hash(r.id*7+i*13)*ROOFS3D.length)]);
+    }
+    // satellite hamlets — at most 2 modest clusters (zoom-gated in the frame loop)
+    const sats=Math.min(r.towns,2);
+    for(let i=0;i<sats;i++){
+      const a=i*2.7+r.id*1.3, hx=bx+Math.cos(a)*10.5, hz=bz+Math.sin(a)*8.0;
+      house(sb, hx, by, hz, 0.95, walls[(i+1)%4], ROOFS3D[Math.floor(hash(r.id*3+i*11)*ROOFS3D.length)]);
+      house(sb, hx+2.3, by, hz+1.1, 0.8, walls[i%4], ROOFS3D[Math.floor(hash(r.id*5+i*7)*ROOFS3D.length)]);
+    }
+    if(r.tier>=1) tower(b, bx-2.6, by, bz-1.7, 1.3, '#e8dcc0', '#8e2f32', 4.4); // church tower
+    if(r.tier>=2 || r.hasWall){ // curtain wall ring — chunkier blocks
+      const nB=10, rad=6.6;
+      for(let i=0;i<nB;i++){ const a=i/nB*Math.PI*2;
+        b.add(new THREE.BoxGeometry(4.1,2.1,1.0), M4(bx+Math.cos(a)*rad, by+1.05, bz+Math.sin(a)*rad, 0, -a+Math.PI/2, 0), '#9a8a70'); }
+    }
+    if(r.tier>=3 || capital){ // cathedral skyline — capitals always read as capitals
+      tower(b, bx+3.2, by, bz-3.0, 1.3, '#e8dcc0', '#5e4718', 5.2);
+      tower(b, bx-4.4, by, bz+2.4, 1.05, '#e8dcc0', '#5e4718', 4.4);
+      b.add(new THREE.BoxGeometry(5.6,2.8,2.8), M4(bx+0.5,by+1.4,bz+0.8), '#d9c8a4');
+      b.add(new THREE.ConeGeometry(2.1,2.9,4), M4(bx+0.5,by+4.25,bz+0.8,0,Math.PI/4,0), '#5e4718');
+    }
+    if(capital){ // golden dome + tall spire — unmistakable at world zoom
+      b.add(new THREE.SphereGeometry(1.6,10,8), M4(bx+0.5, by+6.3, bz+0.8), '#e9c96e');
+      b.add(new THREE.CylinderGeometry(0.32,0.52,3.0,6), M4(bx+0.5, by+7.9, bz+0.8), '#c9a24b');
+      b.add(new THREE.ConeGeometry(2.0,6.6,6), M4(bx+0.5, by+12.6, bz+0.8), '#e9c96e');
+    }
+    if(r.hasFort) tower(b, bx+6.4, by, bz-4.6, 1.25, '#8d8272', '#4c4438', 4.8);
+    if(r.isPort){
+      const z=seaById[r.seaZone]; const zx=SX(z.x), zz=SZ(z.y);
+      let dx=zx-bx, dz=zz-bz; const len=Math.hypot(dx,dz)||1; dx/=len; dz/=len;
+      const ang=Math.atan2(dz,dx);
+      b.add(new THREE.BoxGeometry(6.4,0.55,2.6), M4(bx+dx*6.4, by+0.1, bz+dz*6.4, 0, -ang, 0), '#6d5326'); // quay
+      if(r.tier>=3){ // crane
+        b.add(new THREE.BoxGeometry(0.4,3.6,0.4), M4(bx+dx*5.2-dz*1.8, by+1.8, bz+dz*5.2+dx*1.8), '#5e4718');
+        b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*6.1-dz*1.8, by+3.5, bz+dz*6.1+dx*1.8, 0, -ang, 0), '#5e4718');
+      }
+      const ships = r.tier>=3?2 : 1; // every harbour keeps a tall ship — sails read at distance
+      for(let i=0;i<ships;i++) shipBatch(b, bx+dx*(11+i*4.2)-dz*(2.6-i*5.2), 0.55, bz+dz*(11+i*4.2)+dx*(2.6-i*5.2), 1.5, ang+Math.PI/2, '#5a3a1e', '#ffffff');
+      if(r.tier>=2 && (r.name==='Gibraltar'||r.name==='London'||r.name==='Havana')){ // lighthouse
+        b.add(new THREE.CylinderGeometry(0.75,1.0,4.8,7), M4(bx-dx*5.5, by+2.4, bz-dz*5.5), '#efe6cc');
+        b.add(new THREE.SphereGeometry(0.62,8,6), M4(bx-dx*5.5, by+5.1, bz-dz*5.5), '#ffd97a');
+      }
+    }
+    // army standard — flag in owner colours when a real garrison stands here
+    if(r.troops>=500){
+      b.add(new THREE.CylinderGeometry(0.11,0.13,6.4,5), M4(bx+2.2, by+3.2, bz-5.6), '#3a2812');
+      b.add(new THREE.BoxGeometry(3.1,1.85,0.16), M4(bx+3.75, by+5.35, bz-5.6), ownerCol);
+    }
+    return {main:b.mesh(), sat: sb.pos.length? sb.mesh() : null};
+  }
+
+  /* ---------- world statics: table, water, land ---------- */
+  const worldGroup = new THREE.Group(); scene.add(worldGroup);
+  { // captain's table — a walnut frame far below the sea, glimpsed only at the horizon
+    const table = new THREE.Mesh(new THREE.BoxGeometry(1500, 6, 1150), new THREE.MeshLambertMaterial({color:0x2f1f10}));
+    table.position.y=-4.6; worldGroup.add(table);
+    const rim = new THREE.Mesh(new THREE.BoxGeometry(1240, 3.2, 940), new THREE.MeshLambertMaterial({color:0x54391c}));
+    rim.position.y=-2.7; worldGroup.add(rim);
+  }
+  const waterGeo = new THREE.PlaneGeometry(1120, 820, 64, 46);
+  waterGeo.rotateX(-Math.PI/2);
+  const waterBase = waterGeo.attributes.position.array.slice();
+  const water = new THREE.Mesh(waterGeo, new THREE.MeshPhongMaterial({color:0x14607a, specular:0x8fc3dd, shininess:110, transparent:true, opacity:0.97}));
+  water.position.y = 0; worldGroup.add(water);
+
+  function smoothShape(pts, close=true){
+    const v = pts.map(p=>new THREE.Vector3(p[0], p[1], 0));
+    const curve = new THREE.CatmullRomCurve3(v, close, 'catmullrom', 0.6);
+    return curve.getPoints(pts.length*14);
+  }
+  function extrudeLand(shapePts, depth){
+    const shape = new THREE.Shape(shapePts.map(p=>new THREE.Vector2(SX(p.x), -SZ(p.y))));
+    const geo = new THREE.ExtrudeGeometry(shape, {depth, bevelEnabled:true, bevelThickness:0.55, bevelSize:0.7, bevelSegments:1, steps:1});
+    geo.rotateX(-Math.PI/2);
+    return geo;
+  }
+  { // landmasses + inked coastlines
+    const landMat = new THREE.MeshStandardMaterial({color:0xd9c28c, roughness:1, metalness:0});
+    LAND_PATHS.forEach(path=>{
+      const smooth = smoothShape(path);
+      const m = new THREE.Mesh(extrudeLand(smooth, 2.6), landMat); worldGroup.add(m);
+      const linePts = smooth.map(p=>new THREE.Vector3(SX(p.x), BASE_Y+0.12, SZ(p.y)));
+      const lg = new THREE.BufferGeometry().setFromPoints(linePts);
+      worldGroup.add(new THREE.LineLoop(lg, new THREE.LineBasicMaterial({color:0x6b4c22, transparent:true, opacity:0.85})));
+    });
+    G.regions.filter(r=>r.group==='I').forEach(r=>{
+      const pts=[]; for(let i=0;i<20;i++){ const a=i/20*Math.PI*2; pts.push([r.x+Math.cos(a)*95, r.y+Math.sin(a)*70]); }
+      const smooth = smoothShape(pts);
+      const m = new THREE.Mesh(extrudeLand(smooth, 2.2), landMat); worldGroup.add(m);
+      const linePts = smooth.map(p=>new THREE.Vector3(SX(p.x), BASE_Y-0.35, SZ(p.y)));
+      worldGroup.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(linePts), new THREE.LineBasicMaterial({color:0x6b4c22, transparent:true, opacity:0.7})));
+    });
+    // scattered trees, rolling hills & a mountain range (instanced, static)
+    const treePos=[], rockPos=[], hillPos=[], mtnPos=[];
+    const MTN_RANGES=['Caucasus','Anatolia','Muscovy','Dalmatia','Rome States','Greece','Hungary','Catalonia','Navarre'];
+    G.regions.forEach(r=>{
+      const n = r.terrain==='forest'? 11 : r.terrain==='plains'? 2 : 0;
+      for(let i=0;i<n;i++){ const a=hash(r.id*31+i*7)*Math.PI*2, d=5+hash(r.id*17+i*3)*8;
+        treePos.push([SX(r.x)+Math.cos(a)*d, SZ(r.y)+Math.sin(a)*d*0.8]); }
+      if(r.terrain==='hills') for(let i=0;i<3;i++){ const a=hash(r.id*13+i*5)*Math.PI*2;
+        rockPos.push([SX(r.x)+Math.cos(a)*6.5, SZ(r.y)+Math.sin(a)*5, 0.8+hash(r.id+i)*0.9]); }
+      if(r.terrain==='marsh') for(let i=0;i<4;i++){ const a=hash(r.id*7+i)*Math.PI*2;
+        treePos.push([SX(r.x)+Math.cos(a)*7, SZ(r.y)+Math.sin(a)*5.5]); }
+      // rolling hill country on plains/forest/hills — breaks up the empty-parchment slab
+      const nHill = r.terrain==='hills'? 3 : (r.terrain==='plains'||r.terrain==='forest')? 2 : 0;
+      for(let i=0;i<nHill;i++){ const a=hash(r.id*41+i*11)*Math.PI*2, d=8+hash(r.id*23+i*5)*7;
+        hillPos.push([SX(r.x)+Math.cos(a)*d, SZ(r.y)+Math.sin(a)*d*0.8, 0.9+hash(r.id*3+i)*1.1]); }
+      // mountain range: big grey cones clustered off-centre
+      if(MTN_RANGES.includes(r.name)) for(let i=0;i<4;i++){ const a=hash(r.id*53+i*7)*Math.PI*2, d=3+hash(r.id*29+i*3)*5;
+        mtnPos.push([SX(r.x)+Math.cos(a)*d, SZ(r.y)+Math.sin(a)*d*0.8, 0.85+hash(r.id*7+i)*0.55]); }
+    });
+    const treeIM = new THREE.InstancedMesh(new THREE.ConeGeometry(0.95, 2.8, 6), new THREE.MeshLambertMaterial({color:0x3f612e}), Math.max(treePos.length,1));
+    treePos.forEach((p,i)=> treeIM.setMatrixAt(i, M4(p[0], BASE_Y+1.55, p[1], 0, hash(i)*3, 0, 1.5, 1.35+hash(i*3)*0.75, 1.5)));
+    treeIM.instanceMatrix.needsUpdate=true; worldGroup.add(treeIM);
+    const rockIM = new THREE.InstancedMesh(new THREE.ConeGeometry(1.6, 2.2, 5), new THREE.MeshLambertMaterial({color:0x8d8272}), Math.max(rockPos.length,1));
+    rockPos.forEach((p,i)=> rockIM.setMatrixAt(i, M4(p[0], BASE_Y+0.8, p[1], 0, hash(i*7)*3, 0, p[2], p[2], p[2])));
+    rockIM.instanceMatrix.needsUpdate=true; worldGroup.add(rockIM);
+    const hillIM = new THREE.InstancedMesh(new THREE.ConeGeometry(3.1, 1.8, 7), new THREE.MeshLambertMaterial({color:0xb3a068}), Math.max(hillPos.length,1));
+    hillPos.forEach((p,i)=> hillIM.setMatrixAt(i, M4(p[0], BASE_Y+0.85*p[2], p[1], 0, hash(i*11)*3, 0, p[2], p[2], p[2])));
+    hillIM.instanceMatrix.needsUpdate=true; worldGroup.add(hillIM);
+    const mtnIM = new THREE.InstancedMesh(new THREE.ConeGeometry(2.5, 4.4, 6), new THREE.MeshLambertMaterial({color:0x7e7263}), Math.max(mtnPos.length,1));
+    mtnPos.forEach((p,i)=> mtnIM.setMatrixAt(i, M4(p[0], BASE_Y+2.1*p[2], p[1], 0, hash(i*13)*3, 0, p[2], p[2], p[2])));
+    mtnIM.instanceMatrix.needsUpdate=true; worldGroup.add(mtnIM);
+  }
+
+  /* ---------- dynamic layers ---------- */
+  const discs = new Map(), settlements = new Map(), fleetVis = new Map();
+  let laneGroup = null, laneCurves = [], laneSig = '';
+  const dots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.78, 8, 6), new THREE.MeshBasicMaterial({color:0xffe9a8}), 400);
+  dots.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(dots);
+  const ringGeo = new THREE.RingGeometry(9.8, 10.9, 44); ringGeo.rotateX(-Math.PI/2);
+  const selRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({color:0xfff3d0, transparent:true, opacity:0.95, depthWrite:false}));
+  selRing.visible=false; scene.add(selRing);
+  const coachRing = new THREE.Mesh(new THREE.RingGeometry(11.4, 13.1, 44).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color:0xd9b96a, transparent:true, opacity:0.9, depthWrite:false}));
+  coachRing.visible=false; scene.add(coachRing);
+
+  function discFor(r){
+    let d = discs.get(r.id);
+    if(!d){
+      const rad = (r.group==='I'? 6.8 : 8.3);
+      const fill = new THREE.Mesh(new THREE.CircleGeometry(rad, 40).rotateX(-Math.PI/2),
+        new THREE.MeshBasicMaterial({transparent:true, opacity:0.44, depthWrite:false}));
+      const ring = new THREE.Mesh(new THREE.RingGeometry(rad, rad+1.15, 40).rotateX(-Math.PI/2),
+        new THREE.MeshBasicMaterial({transparent:true, opacity:0.9, depthWrite:false}));
+      fill.position.set(SX(r.x), BASE_Y+0.06, SZ(r.y)); ring.position.set(SX(r.x), BASE_Y+0.1, SZ(r.y));
+      scene.add(fill); scene.add(ring);
+      d = {fill, ring, owner: undefined}; discs.set(r.id, d);
+    }
+    if(d.owner !== r.owner){
+      d.owner = r.owner;
+      const e = r.owner? emp(r.owner) : null;
+      d.fill.material.color.set(e? e.color : '#786034'); d.fill.material.opacity = e? 0.5 : 0.15;
+      d.ring.material.color.set(e? e.dark : '#7a5c2e'); d.ring.material.opacity = e? 0.95 : 0.4;
+    }
+    return d;
+  }
+  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0].join('|'); }
+  function refreshSettlements(){
+    G.regions.forEach(r=>{
+      discFor(r);
+      const sig = settleSig(r), cur = settlements.get(r.id);
+      if(!cur || cur.sig !== sig){
+        if(cur){ scene.remove(cur.mesh); cur.mesh.geometry.dispose(); if(cur.sat){ scene.remove(cur.sat); cur.sat.geometry.dispose(); } }
+        const built = buildSettlement(r); scene.add(built.main); if(built.sat) scene.add(built.sat);
+        settlements.set(r.id, {mesh: built.main, sat: built.sat, sig});
+      }
+    });
+  }
+  function laneSignature(){
+    return G.regions.filter(r=>r.isPort).map(p=>p.id+(p.owner||'-')+(isBlockaded(p)?'B':'')).join(',') +
+      '|' + G.fleets.map(f=>f.id+f.zone+f.stance+(f.owner||'')).join(',');
+  }
+  function refreshLanes(){
+    const sig = laneSignature(); if(sig===laneSig && laneGroup) return; laneSig = sig;
+    if(laneGroup){ scene.remove(laneGroup); laneGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
+    laneGroup = new THREE.Group(); laneCurves = [];
+    const ports = G.regions.filter(r=>r.isPort);
+    ports.forEach(a=>ports.forEach(b=>{
+      if(a.id>=b.id) return;
+      const own = a.owner && a.owner===b.owner? a.owner : (a.owner && allied(a.owner,b.owner)? a.owner : null);
+      if(a.seaZone!==b.seaZone && !seaById[a.seaZone].neighbors.includes(b.seaZone)) return;
+      const pays = own && lanePays(a,b,own);
+      if(!own && !pays) return;
+      const za=seaById[a.seaZone], zb=seaById[b.seaZone];
+      const p0=new THREE.Vector3(SX(a.x), BASE_Y+0.7, SZ(a.y));
+      const p2=new THREE.Vector3(SX(b.x), BASE_Y+0.7, SZ(b.y));
+      const p1=new THREE.Vector3((SX(za.x)+SX(zb.x))/2, 13.5, (SZ(za.y)+SZ(zb.y))/2);
+      const curve = new THREE.QuadraticBezierCurve3(p0,p1,p2);
+      const geo = new THREE.TubeGeometry(curve, 22, pays?0.55:0.3, 6, false);
+      const blocked = isBlockaded(a)||isBlockaded(b);
+      const mat = new THREE.MeshBasicMaterial({ color: blocked? 0x8a3a28 : (pays? new THREE.Color(emp(own).color) : 0xe6dcbe),
+        transparent:true, opacity: pays? 1.0 : 0.5 });
+      laneGroup.add(new THREE.Mesh(geo, mat));
+      if(pays && !blocked) laneCurves.push(curve);
+    }));
+    scene.add(laneGroup);
+  }
+  function refreshFleets(){
+    const seen = new Set();
+    G.fleets.forEach((f, idx)=>{
+      seen.add(f.id);
+      let v = fleetVis.get(f.id);
+      const sig = f.ships + '|' + f.owner;
+      if(!v || v.sig !== sig){
+        if(v) scene.remove(v.group);
+        const group = new THREE.Group();
+        const n = Math.min(3, Math.max(1, Math.ceil(f.ships/3)));
+        for(let i=0;i<n;i++){
+          const b=new Batch(); shipBatch(b, (i-(n-1)/2)*6.2, 0, (i%2)*3.6, 1.75, 0.5, f.owner==='player'?'#6a4020':'#54401f', '#ffffff');
+          group.add(b.mesh());
+        }
+        const z = seaById[f.zone];
+        if(!v) group.position.set(SX(z.x), 0.4, SZ(z.y));
+        else group.position.copy(v.group.position);
+        scene.add(group);
+        v = {group, sig, zone: f.zone}; fleetVis.set(f.id, v);
+      }
+      v.zone = f.zone;
+    });
+    [...fleetVis.keys()].forEach(id=>{ if(!seen.has(id)){ scene.remove(fleetVis.get(id).group); fleetVis.delete(id); } });
+  }
+
+  /* ---------- camera (constrained pan/zoom, map-tilt) ---------- */
+  const TILT = 0.92; // ~53° elevation — always reads as a chart
+  let target = new THREE.Vector3(SX(300), 0, SZ(980)); // open on the player's Lisbon
+  let dist = 150;
+  function fitDist(){
+    const t = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+    const dv = (175/2)/t, dh = (255/2)/(t*camera.aspect);
+    return THREE.MathUtils.clamp(Math.max(dv, dh)*1.08, 90, 560);
+  }
+  function clampTarget(){ target.x = THREE.MathUtils.clamp(target.x, -165, 165); target.z = THREE.MathUtils.clamp(target.z, -120, 120); }
+  function updateCamera(){
+    clampTarget();
+    camera.position.set(target.x, Math.sin(TILT)*dist, target.z + Math.cos(TILT)*dist);
+    camera.lookAt(target.x, 2, target.z);
+  }
+  const ray = new THREE.Raycaster(), groundPlane = new THREE.Plane(new THREE.Vector3(0,1,0), -BASE_Y);
+  function groundPoint(cx, cy){
+    const ndc = new THREE.Vector2((cx/innerWidth)*2-1, -(cy/innerHeight)*2+1);
+    ray.setFromCamera(ndc, camera);
+    const out = new THREE.Vector3();
+    return ray.ray.intersectPlane(groundPlane, out) ? out : null;
+  }
+  function zoomAnchored(f, cx, cy){
+    const before = (cx!==undefined)? groundPoint(cx, cy) : null;
+    dist = THREE.MathUtils.clamp(dist/f, 42, 560);
+    updateCamera();
+    if(before){ const after = groundPoint(cx, cy);
+      if(after){ target.x += before.x-after.x; target.z += before.z-after.z; updateCamera(); } }
+  }
+
+  /* ---------- HTML chips (labels / counts) ---------- */
+  const chipPool = new Map();
+  function chip(key, cls){
+    let el = chipPool.get(key);
+    if(!el){ el=document.createElement('div'); el.className='chip '+cls; chipsEl.appendChild(el); chipPool.set(key, el); }
+    return el;
+  }
+  const projV = new THREE.Vector3();
+  function project(x, y, z){
+    projV.set(x,y,z).project(camera);
+    if(projV.z>1) return null;
+    return [(projV.x*0.5+0.5)*innerWidth, (-projV.y*0.5+0.5)*innerHeight];
+  }
+  function updateChips(){
+    const used = new Set();
+    const major = r => r.tier>=2 || CAPITALS.includes(r.name);
+    G.regions.forEach(r=>{
+      const p = project(SX(r.x), BASE_Y+7.5, SZ(r.y));
+      const showName = p && (dist<120 || (dist<265 && major(r)) || CAPITALS.includes(r.name) || (selected&&selected.type==='region'&&selected.id===r.id));
+      const nk = 'n'+r.id;
+      if(showName){
+        used.add(nk); const el = chip(nk, 'chip name'+(major(r)?' major':''));
+        el.textContent = r.name;
+        el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
+      }
+      if(r.troops>=500 && (dist<140 || (r.owner && dist<320)) && p){
+        const p2 = project(SX(r.x)+1.7, BASE_Y+10.5, SZ(r.y)-4.8);
+        if(p2){ const tk='t'+r.id; used.add(tk); const el=chip(tk,'chip troops');
+          el.style.background = r.owner? emp(r.owner).color : '#6b5a34';
+          el.textContent = '⚔ '+kfmt(r.troops);
+          el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p2[0].toFixed(1)+'px,'+p2[1].toFixed(1)+'px)'; }
+      }
+      if(r.isPort && isBlockaded(r) && p){
+        const bk='b'+r.id; used.add(bk); const el=chip(bk,'chip block');
+        el.textContent='⛓✕'; el.style.display='block';
+        el.style.transform='translate(-50%,-100%) translate('+(p[0]-30).toFixed(1)+'px,'+(p[1]-14).toFixed(1)+'px)';
+      }
+    });
+    G.fleets.forEach(f=>{
+      const v = fleetVis.get(f.id); if(!v) return;
+      const p = project(v.group.position.x, 6.5, v.group.position.z);
+      if(!p) return;
+      const fk='f'+f.id; used.add(fk); const el=chip(fk,'chip fleet');
+      el.style.background = emp(f.owner).color;
+      el.textContent = '⛵ '+f.ships + (f.stance==='blockade'?' ⛓':'');
+      el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
+    });
+    ['Gibraltar Strait','The Channel'].forEach(nm=>{
+      const z = G.seas.find(s=>s.name===nm); if(!z || dist>215) return;
+      const p = project(SX(z.x), 4, SZ(z.y)); if(!p) return;
+      const sk='s'+nm; used.add(sk); const el=chip(sk,'chip name');
+      el.textContent='⚓ '+nm; el.style.display='block';
+      el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
+    });
+    chipPool.forEach((el,k)=>{ if(!used.has(k)) el.style.display='none'; });
+  }
+
+  /* ---------- picking (screen-space, clarity-first) ---------- */
+  function pick(cx, cy){
+    let best=null, bd=1e9;
+    G.fleets.forEach(f=>{ const v=fleetVis.get(f.id); if(!v) return;
+      const p=project(v.group.position.x, 4, v.group.position.z); if(!p) return;
+      const d=Math.hypot(p[0]-cx, p[1]-cy); if(d<64 && d<bd){ bd=d; best={type:'fleet', id:f.id}; } });
+    G.regions.forEach(r=>{ const p=project(SX(r.x), BASE_Y+3, SZ(r.y)); if(!p) return;
+      const d=Math.hypot(p[0]-cx, p[1]-cy); if(d<118 && d<bd){ bd=d; best={type:'region', id:r.id}; } });
+    if(best) return best;
+    G.seas.forEach(z=>{ const p=project(SX(z.x), 2, SZ(z.y)); if(!p) return;
+      const d=Math.hypot(p[0]-cx, p[1]-cy); if(d<105 && d<bd){ bd=d; best={type:'sea', id:z.id}; } });
+    return best;
+  }
+
+  /* ---------- pointer controls on the 3D canvas ---------- */
+  const el = renderer.domElement;
+  const pointers = new Map(); let dragInfo=null, pinchD=0;
+  el.style.touchAction='none';
+  el.addEventListener('pointerdown', e=>{ el.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pointers.size===1) dragInfo={x:e.clientX, y:e.clientY, moved:0, t:Date.now()};
+    if(pointers.size===2){ const [a,b]=[...pointers.values()]; pinchD=Math.hypot(a.x-b.x, a.y-b.y); dragInfo=null; }
+  });
+  el.addEventListener('pointermove', e=>{
+    if(!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pointers.size===2){ const [a,b]=[...pointers.values()];
+      const d=Math.hypot(a.x-b.x, a.y-b.y);
+      if(pinchD>0) zoomAnchored(d/pinchD, (a.x+b.x)/2, (a.y+b.y)/2);
+      pinchD=d; return; }
+    if(dragInfo){
+      const dx=e.clientX-dragInfo.x, dy=e.clientY-dragInfo.y;
+      dragInfo.moved=Math.max(dragInfo.moved, Math.abs(e.clientX-dragInfo.x)+Math.abs(e.clientY-dragInfo.y));
+      const s=dist*0.0016;
+      target.x -= dx*s; target.z -= dy*s*Math.cos(TILT)*1.35;
+      dragInfo.x=e.clientX; dragInfo.y=e.clientY; updateCamera();
+    }
+  });
+  function endPointer(e){
+    pointers.delete(e.pointerId);
+    if(dragInfo && dragInfo.moved<8 && Date.now()-dragInfo.t<400 && pointers.size===0){
+      window.handleTap(e.clientX, e.clientY);
+    }
+    if(pointers.size<2) pinchD=0;
+    if(pointers.size===0) dragInfo=null;
+    else if(pointers.size===1){ const [p]=[...pointers.values()]; dragInfo={x:p.x, y:p.y, moved:99, t:Date.now()}; }
+  }
+  el.addEventListener('pointerup', endPointer);
+  el.addEventListener('pointercancel', endPointer);
+  el.addEventListener('wheel', e=>{ e.preventDefault(); zoomAnchored(e.deltaY<0?1.13:0.89, e.clientX, e.clientY); }, {passive:false});
+
+  /* ---------- frame loop ---------- */
+  const clock = new THREE.Clock();
+  let diffT = 0;
+  function frame(){
+    requestAnimationFrame(frame);
+    const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+    // water swell
+    const pos = waterGeo.attributes.position;
+    for(let i=0;i<pos.count;i++){
+      const x=waterBase[i*3], z=waterBase[i*3+2];
+      pos.setY(i, Math.sin(x*0.11 + t*1.1)*0.32 + Math.cos(z*0.09 + t*0.8)*0.26);
+    }
+    pos.needsUpdate=true; waterGeo.computeVertexNormals();
+    // fleets glide to their zones & bob
+    G.fleets.forEach((f,i)=>{
+      const v=fleetVis.get(f.id); if(!v) return;
+      const z=seaById[f.zone];
+      const peers=G.fleets.filter(o=>o.zone===f.zone); const slot=peers.indexOf(f)-(peers.length-1)/2;
+      const tx=SX(z.x)+slot*9, tz=SZ(z.y)+ (i%2)*3;
+      const k=1-Math.exp(-dt*2.4);
+      v.group.position.x += (tx-v.group.position.x)*k;
+      v.group.position.z += (tz-v.group.position.z)*k;
+      v.group.position.y = 0.35 + Math.sin(t*1.4 + f.id*1.7)*0.16;
+      v.group.rotation.z = Math.sin(t*1.1 + f.id)*0.03;
+      v.group.rotation.y = Math.sin(t*0.4 + f.id*2.1)*0.25;
+    });
+    // cargo dots stream along paying lanes
+    if(laneCurves.length){
+      const n=Math.min(380, laneCurves.length*4);
+      const m4=new THREE.Matrix4();
+      for(let i=0;i<n;i++){
+        const c=laneCurves[i%laneCurves.length];
+        const u=(t*0.07 + (i*0.37)%1 + (i%laneCurves.length)*0.13)%1;
+        const p=c.getPoint(u);
+        m4.makeTranslation(p.x, p.y+0.5, p.z); dots.setMatrixAt(i, m4);
+      }
+      dots.count=n; dots.instanceMatrix.needsUpdate=true;
+    } else dots.count=0;
+    // selection + coach rings
+    if(selected && selected.type==='region'){ const r=rById[selected.id];
+      selRing.visible=true; selRing.position.set(SX(r.x), BASE_Y+0.22, SZ(r.y));
+      const s=1+Math.sin(t*3.2)*0.03; selRing.scale.set(s,1,s);
+    } else selRing.visible=false;
+    if(window.__coachRegion!=null && rById[window.__coachRegion]){ const r=rById[window.__coachRegion];
+      coachRing.visible=true; coachRing.position.set(SX(r.x), BASE_Y+0.22, SZ(r.y));
+      const s=1+Math.sin(t*2.6)*0.09; coachRing.scale.set(s,1,s);
+      coachRing.material.opacity=0.65+Math.sin(t*2.6)*0.3;
+    } else coachRing.visible=false;
+    // satellite hamlets only exist up close — far zoom stays clean
+    const showSats = dist < 330;
+    settlements.forEach(v=>{ if(v.sat && v.sat.visible !== showSats) v.sat.visible = showSats; });
+    // periodic state diffing (ownership, tiers, lanes, fleets)
+    diffT+=dt;
+    if(diffT>0.35){ diffT=0; refreshSettlements(); refreshLanes(); refreshFleets(); }
+    updateCamera(); updateChips();
+    renderer.render(scene, camera);
+  }
+
+  /* ---------- public API + activation ---------- */
+  R3.active = true;
+  R3.zoomBy = f => zoomAnchored(f, innerWidth/2, innerHeight/2);
+  R3.home = () => { target.set(0,0,0); dist = fitDist(); updateCamera(); };
+  R3.pick = pick;
+  R3.resize = () => { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); };
+  R3.rebuild = () => { settlements.forEach(v=>{ scene.remove(v.mesh); v.mesh.geometry.dispose(); if(v.sat){ scene.remove(v.sat); v.sat.geometry.dispose(); } }); settlements.clear();
+    laneSig=''; refreshSettlements(); refreshLanes(); refreshFleets(); R3.home();
+    target.set(SX(300),0,SZ(980)); dist=150; updateCamera(); };
+  container.style.display='block';
+  document.getElementById('map').style.display='none';
+  refreshSettlements(); refreshLanes(); refreshFleets();
+  updateCamera(); frame();
+}catch(err){
+  // 3D unavailable (offline CDN / no WebGL): the 2D chart stays in charge.
+  if(window.console) console.warn('Rift & Sail 3D unavailable, using 2D chart:', err);
+}
 </script>
 </body>
 </html>
