@@ -570,7 +570,7 @@ function rebuildIndex(){ rById={}; G.regions.forEach(r=>rById[r.id]=r); seaById=
    units with a current node (fleet.node === 's<zoneId>') and a live
    position (fleet.pos, world coords) — see syncUnits().
    ============================================================ */
-const WORLD_VER=4; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine)
+const WORLD_VER=5; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle)
 let WORLD_GRAPH=null;
 // the world's two narrow seas — Western↔Eastern Med (Sicily) and North Sea↔Baltic (the Danish straits)
 function weldSeaNeighbors(seas){
@@ -666,6 +666,17 @@ function migrateSave(s){
     s.clockSpeed=0; s.clockDaysPerSec=2; s.pauseOnEvent=true;
     if(s.seas) weldSeaNeighbors(s.seas); // the straits weld applies to old charts too
     s.wv=4;
+  }
+  if(s.wv===4){ // army pass: named hosts, join orders, battle spectacle (the spectacle itself is transient — only identity persists)
+    (s.armies||[]).forEach(a=>{
+      if(a.joinTarget===undefined) a.joinTarget=null;
+      if(!a.name || /^.* Host \d+$/.test(a.name) || /^Royal Army \d+$/.test(a.name)){
+        const home=(s.regions||[]).find(r=>r.id===a.atRegion);
+        a.name=armyNameFor(a.owner, home? home.name : 'the Marches', home? home.terrain : '',
+          (s.armies||[]).filter(x=>x.owner===a.owner && x.id!==a.id).map(x=>x.name));
+      }
+    });
+    s.wv=5;
   }
   return s;
 }
@@ -777,6 +788,19 @@ function draw(){
   // fleets
   G.fleets.forEach(f=>drawFleet(f));
   (G.armies||[]).forEach(drawArmy2D);
+  // clash spectacle (2D): an expanding shock-ring, crossed swords, and both sides bleeding down live
+  const cfx2=window.__clashFx;
+  if(cfx2){
+    const ph=(performance.now()/450)%1;
+    ctx.strokeStyle='rgba(255,150,90,'+(0.85*(1-ph)).toFixed(2)+')'; ctx.lineWidth=3*WS;
+    ctx.beginPath(); ctx.arc(cfx2.x, cfx2.y, (16+ph*30)*WS, 0, Math.PI*2); ctx.stroke();
+    ctx.font=(30*WS)+'px serif'; ctx.textAlign='center';
+    ctx.fillText('⚔️', cfx2.x, cfx2.y-26*WS);
+    ctx.fillStyle='#fff6dd'; ctx.font='bold '+(13*WS)+'px Georgia'; ctx.strokeStyle='rgba(30,20,5,.8)'; ctx.lineWidth=3*WS;
+    const lbl=(cfx2.unit==='ships'? '⛵ ' : '⚔ ')+(cfx2.atkCur!=null? cfx2.atkCur : cfx2.a0)+'  vs  '+(cfx2.defCur!=null? cfx2.defCur : cfx2.d0);
+    ctx.strokeText(lbl, cfx2.x, cfx2.y-46*WS); ctx.fillText(lbl, cfx2.x, cfx2.y-46*WS);
+    ctx.textAlign='left';
+  }
   drawOrderHighlights();
   // animations overlay
   const now=performance.now();
@@ -871,9 +895,20 @@ function drawArmy2D(a){
   const p=a.at? a.at.pos : (rById[a.atRegion]? {x:rById[a.atRegion].x, y:rById[a.atRegion].y} : null);
   if(!p) return;
   const e=emp(a.owner);
-  if(a.at && a.owner==='player'){ // the road it walks, drawn in gold
+  if(a.at && a.owner==='player'){ // the road walked fades behind the banner; the road ahead stays dashed gold
+    ctx.strokeStyle='rgba(255,215,106,.45)'; ctx.lineWidth=3*WS;
+    ctx.beginPath(); ctx.moveTo(rById[a.fromRegion].x, rById[a.fromRegion].y); ctx.lineTo(p.x,p.y); ctx.stroke();
     ctx.strokeStyle='rgba(255,215,106,.85)'; ctx.lineWidth=2.4*WS; ctx.setLineDash([7*WS,5*WS]);
+    ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(rById[a.destRegion].x, rById[a.destRegion].y); ctx.stroke(); ctx.setLineDash([]);
+    const rp=1+0.18*Math.sin(performance.now()/280); // pulsing target ring from the moment the order lands
+    ctx.strokeStyle='rgba(255,215,106,.95)'; ctx.lineWidth=2.5*WS;
+    ctx.beginPath(); ctx.arc(rById[a.destRegion].x, rById[a.destRegion].y, 13*WS*rp, 0, Math.PI*2); ctx.stroke();
+  } else if(a.at && rById[a.destRegion] && rById[a.destRegion].owner==='player'){ // an enemy host marching on YOUR ground — war-red, never hidden
+    ctx.strokeStyle='rgba(224,86,60,.85)'; ctx.lineWidth=2.2*WS; ctx.setLineDash([5*WS,4*WS]);
     ctx.beginPath(); ctx.moveTo(rById[a.fromRegion].x, rById[a.fromRegion].y); ctx.lineTo(p.x,p.y); ctx.lineTo(rById[a.destRegion].x, rById[a.destRegion].y); ctx.stroke(); ctx.setLineDash([]);
+    const rp=1+0.18*Math.sin(performance.now()/280);
+    ctx.strokeStyle='rgba(224,86,60,.95)'; ctx.lineWidth=2.5*WS;
+    ctx.beginPath(); ctx.arc(rById[a.destRegion].x, rById[a.destRegion].y, 13*WS*rp, 0, Math.PI*2); ctx.stroke();
   }
   ctx.fillStyle='#3a2c16'; ctx.fillRect(p.x-8*WS, p.y+2*WS, 16*WS, 5*WS);            // standard base
   ctx.strokeStyle='#3a2812'; ctx.lineWidth=2*WS; ctx.beginPath(); ctx.moveTo(p.x, p.y+4*WS); ctx.lineTo(p.x, p.y-16*WS); ctx.stroke(); // pole
@@ -950,7 +985,7 @@ function handleTap(cx,cy){
     const hit=R3.pick(cx,cy);
     if(!hit){ closeSheet(); return; }
     if(hit.type==='fleet') selectFleet(G.fleets.find(f=>f.id===hit.id));
-    else if(hit.type==='army'){ const a=G.armies.find(x=>x.id===hit.id); if(a){ if(a.at){ toast('🪖 '+a.name+' is marching on '+rById[a.destRegion].name+' — ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days out'); } else selectRegion(rById[a.atRegion]); } }
+    else if(hit.type==='army'){ const a=G.armies.find(x=>x.id===hit.id); if(a){ if(a.owner==='player') selectArmy(a); else if(a.at){ toast('🪖 '+a.name+' ('+emp(a.owner).name+') is marching on '+rById[a.destRegion].name+' — ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days out'); } else selectRegion(rById[a.atRegion]); } }
     else if(hit.type==='region') selectRegion(rById[hit.id]);
     else if(hit.type==='sea') selectSea(seaById[hit.id]);
     return;
@@ -1018,6 +1053,7 @@ function actBtn(t,d,fn,cls,dis){
 function regionCost(r){ return ''; }
 
 function orderMarch(a, dest){
+  if(a.clashLocked){ if(a.owner==='player') toast('⚔ '+a.name+' is in the thick of battle — no new orders until it is decided.'); return false; }
   const from=rById[a.atRegion];
   if(!from || from.owner!==a.owner){ toast('That army\'s ground is lost — order rescinded.'); return false; }
   const path=findLandPath(a.atRegion, dest.id);
@@ -1048,6 +1084,88 @@ function computeLeg(a){
   a.at.fromPos={x:fromN.x, y:fromN.y}; a.at.toPos={x:toN.x, y:toN.y};
   a.at.pos={x:fromN.x, y:fromN.y};
 }
+/* ================= COMBINE / SPLIT — hosts are real entities ================= */
+function targetRegionOf(b){ return b.at? b.destRegion : b.atRegion; }
+function mergeArmies(senior, junior){
+  if(!senior || !junior || senior===junior) return;
+  senior.men+=junior.men;
+  G.armies=G.armies.filter(x=>x.id!==junior.id);
+  if(senior.owner==='player'){
+    toast('🤝 '+junior.name+' folds into '+senior.name+' — one host of '+fmt(senior.men)+' men');
+    pushEvent('🤝 <b>'+senior.name+'</b> now fields '+fmt(senior.men)+' men — two hosts march as one.');
+  }
+  save();
+}
+function tryJoinMerge(a){
+  // a has just arrived somewhere: if its join target stands here (or waits here for it), fold the hosts together
+  const b=(G.armies||[]).find(x=>x.id===a.joinTarget);
+  if(b && b.owner===a.owner && !b.at && b.atRegion===a.atRegion){
+    const senior=a.men>=b.men? a : b, junior=senior===a? b : a;
+    mergeArmies(senior, junior);
+    return senior!==a; // true only when a itself was folded away — arrival fully handled
+  }
+  const waiters=(G.armies||[]).filter(x=>x.joinTarget===a.id && x.owner===a.owner && !x.at && x.atRegion===a.atRegion);
+  let folded=false;
+  waiters.forEach(w=>{
+    if(!G.armies.includes(a)) { folded=true; return; }
+    const senior=a.men>=w.men? a : w, junior=senior===a? w : a;
+    mergeArmies(senior, junior);
+    if(junior===a) folded=true;
+  });
+  return folded;
+}
+function orderJoin(a, b){
+  if(!b || b.id===a.id || a.at){ return false; }
+  const tgt=targetRegionOf(b);
+  if(tgt==null || !rById[tgt]){ if(a.owner==='player') toast(b.name+' has no ground to join at.'); return false; }
+  if(!findLandPath(a.atRegion, tgt)){ if(a.owner==='player') toast('No land road joins '+a.name+' to '+b.name+' — armies cannot march across water.'); return false; }
+  a.joinTarget=b.id;
+  if(!orderMarch(a, rById[tgt])){ a.joinTarget=null; return false; }
+  if(a.owner==='player'){ toast('🤝 '+a.name+' marches to join '+b.name+' — the hosts merge on arrival'); pushEvent('🤝 <b>'+a.name+'</b> is on the road to join <b>'+b.name+'</b>.'); }
+  return true;
+}
+function applyRedirect(a){
+  // mid-leg replanning: from the node we are walking to, re-road toward the new destination
+  const fromNode=a.path[a.legIndex-1];
+  const p=graphPath(fromNode, 'r'+a.redirectTo, k=>k==='land');
+  if(!p){ a.redirectTo=null; computeLeg(a); return; }
+  const restDays=Math.max(0, a.at.legArrive-G.day);
+  a.path=p.nodes; a.destRegion=a.redirectTo; a.redirectTo=null; a.legIndex=1;
+  a.arriveDay=G.day+Math.max(1, Math.round(restDays + p.days));
+  computeLeg(a);
+}
+function joinMaintenance(){
+  // join orders track their target daily: if the host you are joining moves, so does your road
+  (G.armies||[]).slice().forEach(a=>{
+    if(a.joinTarget==null) return;
+    const b=(G.armies||[]).find(x=>x.id===a.joinTarget && x.owner===a.owner);
+    if(!b){ a.joinTarget=null; return; }
+    const want=targetRegionOf(b);
+    if(a.at){ if(want!=null && want!==a.destRegion) a.redirectTo=want; }
+    else if(!b.at){
+      if(b.atRegion===a.atRegion){ if(tryJoinMerge(a)) return; a.joinTarget=null; }
+      else orderJoin(a, b);
+    }
+  });
+}
+function splitArmy(a){
+  if(a.clashLocked){ toast('⚔ '+a.name+' is engaged — it cannot divide mid-battle.'); return; }
+  if(a.at){ toast(a.name+' cannot divide on the march — halt it first, then split.'); return; }
+  if(a.men<1000){ toast(a.name+' is too small to split — under 1,000 men it is one banner or none.'); return; }
+  const home=rById[a.atRegion];
+  const half=Math.floor(a.men/2); a.men-=half;
+  const b={ id:newUnitId(), owner:a.owner, men:half, atRegion:a.atRegion, at:null, path:null, destRegion:null, fromRegion:a.atRegion,
+    stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0, joinTarget:null,
+    name:armyNameFor(a.owner, home? home.name : 'the field', home? home.terrain : '', (G.armies||[]).filter(x=>x.owner===a.owner).map(x=>x.name)) };
+  G.armies.push(b);
+  if(a.owner==='player'){
+    toast('✂ '+a.name+' divides — '+b.name+' takes '+fmt(half)+' men under its own banner');
+    pushEvent('✂ <b>'+a.name+'</b> splits — <b>'+b.name+'</b> stands up with '+fmt(half)+' men.');
+    selectArmy(a);
+  }
+  save();
+}
+
 function orderSailZone(f, destZone){
   if(f.zone===destZone.id && !f.at){ toast(f.name+' is already on the '+destZone.name+'.'); return false; }
   const path=findSeaZonePath(f.zone, destZone.id);
@@ -1106,6 +1224,7 @@ function seaCtrl(A, B){
   return best;
 }
 function startFleetSail(f, path, destPortId){
+  if(f.clashLocked){ if(f.owner==='player') toast('⚔ '+f.name+' is engaged — she cannot answer new orders until the action is decided.'); return false; }
   const legs=[];
   for(let i=1;i<path.nodes.length;i++){
     const A=WORLD_GRAPH.nodes[path.nodes[i-1]], B=WORLD_GRAPH.nodes[path.nodes[i]];
@@ -1135,13 +1254,27 @@ function ensureIds(){
   uidSeq=m+1;
   (G.armies||[]).forEach(a=>{ if(!a.id) a.id=newUnitId(); });
 }
+/* field armies carry proper names — "Army of the Tagus", never "Royal Army 1" */
+const ARMY_GEO={hills:'the High Hills', forest:'the Greenwoods', plains:'the Open Plains', marsh:'the Mire Lands'};
+function armyNameFor(owner, homeName, terrain, taken){
+  taken=taken||[];
+  const geo=ARMY_GEO[terrain]||null;
+  let base;
+  if(owner==='player') base= geo? 'Army of '+geo : 'Army of '+homeName;
+  else if(owner==='aurelia') base='Venetian '+(geo? 'Host of '+geo : 'Host of '+homeName);
+  else if(owner==='meridian') base='League '+(geo? 'Host of '+geo : 'Host of '+homeName);
+  else base='Corsair '+(geo? 'Host of '+geo : 'Host of '+homeName);
+  if(!taken.includes(base)) return base;
+  const ROMAN=['II','III','IV','V','VI','VII','VIII','IX','X'];
+  for(const suf of ROMAN){ const nm=base+' '+suf; if(!taken.includes(nm)) return nm; }
+  return base+' '+(taken.length+1);
+}
 function formArmy(r, men){
   if(!r || r.troops<men+500){ if(r && r.owner==='player') toast(r.name+' must keep 500 men as garrison — muster more first.'); return null; }
   r.troops-=men;
-  const n=(G.armies||[]).filter(a=>a.owner===r.owner).length;
-  const a={ id:newUnitId(), owner:r.owner, men, atRegion:r.id, at:null, path:null, destRegion:null,
-    stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0,
-    name:(r.owner==='player'? 'Royal Army ' : emp(r.owner).name.split(' ')[0]+' Host ')+(n+1) };
+  const a={ id:newUnitId(), owner:r.owner, men, atRegion:r.id, at:null, path:null, destRegion:null, fromRegion:r.id,
+    stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0, joinTarget:null,
+    name:armyNameFor(r.owner, r.name, r.terrain, (G.armies||[]).filter(x=>x.owner===r.owner).map(x=>x.name)) };
   G.armies.push(a);
   if(r.owner==='player'){ toast('🪖 '+a.name+' forms at '+r.name+' — '+fmt(men)+' men under one banner'); pushEvent('🪖 <b>'+a.name+'</b> mustered at '+r.name+'.'); selectRegion(r); }
   save(); return a;
@@ -1170,10 +1303,12 @@ function simResumeFromEvent(){ eventPaused=false; refreshClockUI(); }
 
 /* ---- arrival resolution: armies ---- */
 function armyArrive(a){
+  if(a.clashLocked){ a.arriveDay=G.day+0.5; return; } // locked in a clash spectacle — the host stands fast a while longer
   const dest=rById[a.destRegion]; a.at=null; a.path=null;
   if(!dest){ G.armies=G.armies.filter(x=>x.id!==a.id); return; }
   const wasOwn = dest.owner===a.owner;
   a.atRegion=dest.id;
+  if(a.joinTarget!=null){ const folded=tryJoinMerge(a); a.joinTarget=null; if(folded) return; }
   if(wasOwn || allied(dest.owner, a.owner)){
     if(a.owner==='player'){ toast('🪖 '+a.name+' has reached '+dest.name+' — '+fmt(a.men)+' men stand ready'); pushEvent('🪖 <b>'+a.name+'</b> reached '+dest.name+'.'); coachAdvance(1); }
     else if(aiSeesPlayer(a)) pushEvent('⚠ '+emp(a.owner).name+' army ('+fmt(a.men)+') is on your border at '+dest.name+'.');
@@ -1187,13 +1322,26 @@ function armyArrive(a){
     if(a.owner==='player'){ toast('🕊 Peace now — '+a.name+' camps short of '+dest.name+'.'); pushEvent('🕊 <b>'+a.name+'</b> halted at the '+dest.name+' border — peace prevails.'); }
     finishArrival(a); return;
   }
-  resolveArmyBattle(a, dest);
+  a.joinTarget=null;
+  resolveArmyBattleFX(a, dest);
 }
 function finishArrival(a){ /* stance persists ('hold' honours a pre-set dig-in order) */ }
-function resolveArmyBattle(a, dest){
+function resolveArmyBattleFX(a, dest){
   const atkBefore=a.men, defBefore=dest.troops, prevOwner=dest.owner;
   const res=battle(a.owner, a.men, dest);
+  if(a.owner==='player' || prevOwner==='player'){
+    a.clashLocked=true;
+    startClash({type:'land', x:dest.x, y:dest.y, a0:atkBefore, aLoss:res.aLoss, d0:defBefore, dLoss:res.dLoss, unit:'men',
+      atkArmyId:a.id, defRegionId:dest.id, frameCam:true, dist:150, dur:2700,
+      onDone:()=>{ a.clashLocked=false; resolveArmyBattleApply(a, dest, res, atkBefore, defBefore, prevOwner); }});
+    return;
+  }
+  resolveArmyBattleApply(a, dest, res, atkBefore, defBefore, prevOwner);
+}
+function resolveArmyBattleApply(a, dest, res, atkBefore, defBefore, prevOwner){
   const survivors=a.men-res.aLoss;
+  const story=' '+afterAction('land', {win:res.win, fort:dest.hasFort, wall:dest.hasWall, terrain:dest.terrain, a0:atkBefore, d0:defBefore,
+    close:Math.abs(atkBefore-defBefore)<(atkBefore+defBefore)*0.2});
   dest.troops=Math.max(0, dest.troops-res.dLoss);
   const involvedPlayer = a.owner==='player' || prevOwner==='player';
   if(res.win){
@@ -1210,7 +1358,7 @@ function resolveArmyBattle(a, dest){
       gazette('⚔ <b>'+dest.name+' has fallen!</b> '+a.name+' takes the '+['hamlet','town','city','great port'][dest.tier]+' — '+fmt(res.aLoss)+' of yours and '+fmt(res.dLoss)+' defenders fell. Spoils of '+fmt(spoils)+'g pour into your treasury.');
       toast('🏴 '+dest.name+' is yours! +'+fmt(spoils)+'g spoils');
       pushEvent('🏴 <b>'+dest.name+' taken!</b> '+a.name+' prevails — spoils +'+fmt(spoils)+'g.');
-      showBattle(a.name, atkBefore, dest.name, defBefore, res, true, 'Spoils: +'+fmt(spoils)+'g · '+dest.name+' flies your colours. '+(G.armies.some(x=>x.id===a.id)? a.name+' marches on with '+fmt(a.men)+' men.' : 'The host settles in as its garrison.'));
+      showBattle(a.name, atkBefore, dest.name, defBefore, res, true, 'Spoils: +'+fmt(spoils)+'g · '+dest.name+' flies your colours. '+(G.armies.some(x=>x.id===a.id)? a.name+' marches on with '+fmt(a.men)+' men.' : 'The host settles in as its garrison.')+story);
       coachAdvance(1); simPauseEvent();
     } else {
       if(prevOwner==='player'){ gazette('⚔ <b>'+emp(a.owner).name+' has taken '+dest.name+'!</b> '+fmt(res.dLoss)+' of your garrison fell holding it.'); pushEvent('⚔ <b>'+dest.name+' lost!</b> '+emp(a.owner).name+' storms the town.'); simPauseEvent(); }
@@ -1230,12 +1378,12 @@ function resolveArmyBattle(a, dest){
       gazette('⚔ <b>Repulsed at '+dest.name+'.</b> '+a.name+' broke against the defences — '+fmt(res.aLoss)+' men lost.');
       toast('Repulsed at '+dest.name+' — '+fmt(res.aLoss)+' lost');
       pushEvent('⚔ <b>Repulsed at '+dest.name+'</b> — the host falls back.');
-      showBattle(a.name, atkBefore, dest.name, defBefore, res, false, survivors>300?'The remnants fall back to '+rById[a.fromRegion].name+'. Reinforce and try again.':'The host is scattered. Muster anew.');
+      showBattle(a.name, atkBefore, dest.name, defBefore, res, false, survivors>300?'The remnants fall back to '+rById[a.fromRegion].name+'. Reinforce and try again.':'The host is scattered. Muster anew.'+story);
       simPauseEvent();
     } else if(prevOwner==='player'){
       gazette('⚔ Your garrison at <b>'+dest.name+'</b> bloodied a '+emp(a.owner).name+' assault — '+fmt(res.dLoss)+' attackers fell.');
       pushEvent('🛡 <b>'+dest.name+' holds!</b> The assault breaks on your walls.');
-      showBattle(emp(a.owner).name+' host', atkBefore, dest.name, defBefore, res, false, 'Your garrison holds '+dest.name+'.');
+      showBattle(emp(a.owner).name+' host', atkBefore, dest.name, defBefore, res, false, 'Your garrison holds '+dest.name+'.'+story);
       simPauseEvent();
     }
   }
@@ -1254,32 +1402,45 @@ function navalBattle(a, d, port){
   const total=aP+dP||1;
   const aLoss=Math.min(a.ships, Math.round(a.ships*(dP/total)*rr(0.5,0.95)));
   const dLoss=Math.min(d.ships, Math.round(d.ships*(aP/total)*rr(0.5,0.95)));
-  a.ships-=aLoss; d.ships-=dLoss;
   const aWon=aP>dP;
   const involvedPlayer = a.owner==='player' || d.owner==='player';
-  if(involvedPlayer){
-    const mine = a.owner==='player'? a : d;
-    const won = a.owner==='player'? aWon : !aWon;
-    showBattle((a.owner==='player'? a.name : emp(a.owner).name+' squadron'), a.ships+aLoss, port.name, d.ships+dLoss,
-      {aLoss:aLoss*100, dLoss:dLoss*100}, won,
-      won? 'The water off '+port.name+' is yours — '+(aWon? 'the blockade squadron is scattered.' : 'the blockade is broken!')
-         : 'Your squadron breaks off, mauled. '+(mine.ships>0? mine.ships+' ships limp away.' : 'No sail returns.'));
-    simPauseEvent();
-  }
-  // wrecks yield nothing but clear water: dead squadrons leave the board
-  [a,d].forEach(f=>{ if(f.ships<=0){ G.fleets=G.fleets.filter(x=>x.id!==f.id); if(f.owner==='player') gazette('⚓ <b>Your '+f.name+' is lost</b> off '+port.name+'.'); } });
-  // a beaten squadron that still floats does not keep its station — it runs for home water
-  const loser = aWon? d : a;
-  if(loser.ships>0 && G.fleets.includes(loser)){
-    const ownPorts=G.regions.filter(r=>r.isPort && r.owner===loser.owner);
-    const homeZone=ownPorts.length? ownPorts[0].seaZone : null;
-    if(homeZone!=null && homeZone!==loser.zone){
-      const p=findSeaZonePath(loser.zone, homeZone);
-      if(p){ startFleetSail(loser, p); loser.stance='patrol'; }
+  const applyNaval=()=>{
+    a.ships-=aLoss; d.ships-=dLoss;
+    if(involvedPlayer){
+      const mine = a.owner==='player'? a : d;
+      const foe = mine===a? d : a;
+      const won = a.owner==='player'? aWon : !aWon;
+      const story=' '+afterAction('sea', {win:won, close:Math.abs(aP-dP)<(aP+dP)*0.2, techGap:(emp(mine.owner).shipTech-emp(foe.owner).shipTech)>=1});
+      showBattle((a.owner==='player'? a.name : emp(a.owner).name+' squadron'), a.ships+aLoss, port.name, d.ships+dLoss,
+        {aLoss:aLoss*100, dLoss:dLoss*100}, won,
+        (won? 'The water off '+port.name+' is yours — '+(aWon? 'the blockade squadron is scattered.' : 'the blockade is broken!')
+           : 'Your squadron breaks off, mauled. '+(mine.ships>0? mine.ships+' ships limp away.' : 'No sail returns.'))+story);
+      simPauseEvent();
     }
+    // wrecks yield nothing but clear water: dead squadrons leave the board
+    [a,d].forEach(f=>{ if(f.ships<=0){ G.fleets=G.fleets.filter(x=>x.id!==f.id); if(f.owner==='player') gazette('⚓ <b>Your '+f.name+' is lost</b> off '+port.name+'.'); } });
+    // a beaten squadron that still floats does not keep its station — it runs for home water (unless re-ordered during the action)
+    const loser = aWon? d : a;
+    if(loser.ships>0 && G.fleets.includes(loser) && !loser.at){
+      const ownPorts=G.regions.filter(r=>r.isPort && r.owner===loser.owner);
+      const homeZone=ownPorts.length? ownPorts[0].seaZone : null;
+      if(homeZone!=null && homeZone!==loser.zone){
+        const p=findSeaZonePath(loser.zone, homeZone);
+        if(p){ startFleetSail(loser, p); loser.stance='patrol'; }
+      }
+    }
+    if(a.owner==='player' || d.owner==='player' || port.owner==='player')
+      pushEvent('⚓ <b>Sea battle off '+port.name+'!</b> '+(aWon? emp(a.owner).name+' holds the water.' : emp(d.owner).name+' holds the water.'));
+  };
+  if(involvedPlayer){
+    a.clashLocked=true; d.clashLocked=true;
+    const pa=fPos(a), pd=fPos(d);
+    startClash({type:'sea', x:(pa.x+pd.x)/2, y:(pa.y+pd.y)/2, a0:a.ships, aLoss, d0:d.ships, dLoss, unit:'ships',
+      atkFleetId:a.id, defFleetId:d.id, frameCam:true, dist:150, dur:3000,
+      onDone:()=>{ a.clashLocked=false; d.clashLocked=false; applyNaval(); }});
+    return aWon;
   }
-  if(a.owner==='player' || d.owner==='player' || port.owner==='player')
-    pushEvent('⚓ <b>Sea battle off '+port.name+'!</b> '+(aWon? emp(a.owner).name+' holds the water.' : emp(d.owner).name+' holds the water.'));
+  applyNaval();
   return aWon;
 }
 /* ---- arrival resolution: fleets ---- */
@@ -1321,7 +1482,7 @@ function fleetArrive(f){
 /* ---- positions from timestamps (cheap, exact) ---- */
 function syncPositions(){
   (G.armies||[]).forEach(a=>{
-    if(!a.at) return;
+    if(!a.at || a.clashLocked) return;
     const p=a.at.legDays>0? clamp((G.day-a.at.legDepart)/a.at.legDays, 0, 1) : 1;
     a.at.pos={ x:a.at.fromPos.x+(a.at.toPos.x-a.at.fromPos.x)*p, y:a.at.fromPos.y+(a.at.toPos.y-a.at.fromPos.y)*p };
   });
@@ -1350,17 +1511,28 @@ function interceptCheck(){
       if(e.foughtDay===Math.floor(G.day) || h.foughtDay===Math.floor(G.day)) return;
       e.foughtDay=h.foughtDay=Math.floor(G.day);
       // the marcher is CAUGHT — battle on open ground (no fort/wall aid for either)
-      resolveIntercept(h, e, hr);
+      resolveInterceptFX(h, e, hr);
     });
   });
 }
-function resolveIntercept(h, e, hr){
+function resolveInterceptFX(h, e, hr){
   const aP=h.men*(1+(h.owner?emp(h.owner).armyTech*0.35:0))*rr(0.85,1.2);
   const dP=e.men*(1+(e.owner?emp(e.owner).armyTech*0.3:0))*rr(0.85,1.2);
   const total=aP+dP||1;
   const hLoss=Math.round(h.men*(dP/total)*rr(0.5,0.9)), eLoss=Math.round(e.men*(aP/total)*rr(0.5,0.9));
   const holderWins=aP>dP;
+  if(h.owner==='player' || e.owner==='player'){
+    h.clashLocked=true; e.clashLocked=true;
+    startClash({type:'land', x:hr.x, y:hr.y, a0:h.men, aLoss:hLoss, d0:e.men, dLoss:eLoss, unit:'men',
+      atkArmyId:h.id, defArmyId:e.id, frameCam:true, dist:150, dur:2600,
+      onDone:()=>{ h.clashLocked=false; e.clashLocked=false; resolveInterceptApply(h, e, hr, hLoss, eLoss, holderWins); }});
+    return;
+  }
+  resolveInterceptApply(h, e, hr, hLoss, eLoss, holderWins);
+}
+function resolveInterceptApply(h, e, hr, hLoss, eLoss, holderWins){
   const involvedPlayer = h.owner==='player' || e.owner==='player';
+  const story=' '+afterAction('road', {win:holderWins, close:Math.abs(hLoss-eLoss)<(h.men+e.men)*0.1});
   if(holderWins){
     h.men=Math.max(0, h.men-hLoss); e.men=Math.max(0, e.men-eLoss);
     // marcher stopped dead — survivors retreat to origin
@@ -1378,7 +1550,7 @@ function resolveIntercept(h, e, hr){
   if(involvedPlayer){
     pushEvent('🛡 <b>Road battle at '+hr.name+'!</b> '+(holderWins? 'The blocking army stops the march.' : 'The marcher fights through the block.'));
     if(e.owner==='player' || h.owner==='player') simPauseEvent();
-    gazette('🛡 <b>Armies clash on the '+hr.name+' road.</b> '+(holderWins? emp(h.owner).name+' holds the pass; the invading column falls back.' : emp(e.owner).name+' smashes through the blocking line.'));
+    gazette('🛡 <b>Armies clash on the '+hr.name+' road.</b> '+(holderWins? emp(h.owner).name+' holds the pass; the invading column falls back.' : emp(e.owner).name+' smashes through the blocking line.')+story);
   }
   refreshHUD();
 }
@@ -1399,10 +1571,10 @@ function rtAdvanceDays(days){
     (G.fleets||[]).slice().forEach(f=>{ if(f.at && G.day>=f.at.arriveDay-1e-9) fleetArrive(f); });
     // marching legs roll forward
     (G.armies||[]).forEach(a=>{
-      if(!a.at) return;
+      if(!a.at || a.clashLocked) return;
       while(a.at && G.day>=a.at.legArrive && a.legIndex<a.path.length){
         a.legIndex++; if(a.legIndex>=a.path.length){ break; }
-        computeLeg(a);
+        if(a.redirectTo!=null) applyRedirect(a); else computeLeg(a);
       }
     });
     (G.fleets||[]).forEach(f=>{
@@ -1412,6 +1584,7 @@ function rtAdvanceDays(days){
       }
     });
     interceptCheck();
+    joinMaintenance();
     if(Math.floor(G.day)%15===0) save();
   }
   syncPositions();
@@ -1425,6 +1598,7 @@ function startClockLoop(){
   if(simRunning) return; simRunning=true;
   const pump=(now)=>{
     requestAnimationFrame(pump);
+    tickClashFx();
     if(!lastFrameMs) lastFrameMs=now;
     const dtReal=Math.min(1000, now-lastFrameMs); lastFrameMs=now;
     if(!G || G.over || eventPaused) return;
@@ -1514,15 +1688,71 @@ function aiMonthlyOps(){
 function formArmySilent(r, men){
   if(r.troops<men+500) return null;
   r.troops-=men;
-  const a={ id:newUnitId(), owner:r.owner, men, atRegion:r.id, at:null, path:null, destRegion:null,
-    stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0,
-    name:emp(r.owner).name.split(' ')[0]+' Host '+((G.armies||[]).filter(x=>x.owner===r.owner).length+1) };
+  const a={ id:newUnitId(), owner:r.owner, men, atRegion:r.id, at:null, path:null, destRegion:null, fromRegion:r.id,
+    stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0, joinTarget:null,
+    name:armyNameFor(r.owner, r.name, r.terrain, (G.armies||[]).filter(x=>x.owner===r.owner).map(x=>x.name)) };
   G.armies.push(a); return a;
 }
 function orderMarchSilent(a, dest){ orderMarch(a, dest); }
 
 function showOrderHint(html){ const h=$('#hint'); if(!h) return; h.dataset.order='1'; h.innerHTML=html; h.classList.add('show'); }
 function clearOrderHint(){ const h=$('#hint'); if(!h) return; if(h.dataset.order){ delete h.dataset.order; h.classList.remove('show'); if(window.updateHint) updateHint(); } }
+
+/* ================= CLASH SPECTACLE — battles are SEEN before they are read =================
+   When a fight involves the player it plays out on the map for ~3 seconds (banners planted,
+   smoke, bleeding chips) and only THEN is the result applied and the modal opened. Everything
+   numeric is pre-computed honestly; the spectacle never invents an outcome. */
+let clashFx=null; const clashQueue=[];
+function startClash(fx){
+  if(clashFx){ clashQueue.push(fx); return; }
+  clashFx=fx; fx.t0=performance.now(); fx.prog=0; fx.atkCur=fx.a0; fx.defCur=fx.d0;
+  window.__clashFx=fx;
+  if(fx.frameCam){ if(typeof closeSheet==='function') closeSheet(); flyCameraToWorld(fx.x, fx.y, fx.dist||160); }
+}
+function tickClashFx(){
+  const fx=clashFx; if(!fx) return;
+  fx.prog=Math.min(1, (performance.now()-fx.t0)/(fx.dur||2600));
+  fx.atkCur=Math.max(0, Math.round(fx.a0-(fx.aLoss||0)*fx.prog));
+  fx.defCur=Math.max(0, Math.round(fx.d0-(fx.dLoss||0)*fx.prog));
+  if(fx.prog>=1){
+    clashFx=null; window.__clashFx=null;
+    const cb=fx.onDone; fx.onDone=null;
+    if(cb) cb();
+    if(clashQueue.length) startClash(clashQueue.shift());
+  }
+}
+window.__clashResolveNow=()=>{ // a save mid-spectacle lands the result first — never a lost battle
+  if(!clashFx) return;
+  const fx=clashFx; clashFx=null; window.__clashFx=null;
+  const cb=fx.onDone; fx.onDone=null; if(cb) cb();
+};
+/* after-action narrative — woven strictly from the battle's real inputs */
+function afterAction(kind, o){
+  const bits=[];
+  if(kind==='sea'){
+    bits.push(o.win? 'The broadsides thundered in line astern until the enemy struck her colours.' : 'Under a storm of round shot your squadron broke off the action, sails in ribbons.');
+    if(o.techGap) bits.push('Your heavier guns told in every exchange.');
+    if(o.close) bits.push('For a long hour neither side would give an inch of water.');
+    return bits.join(' ');
+  }
+  if(kind==='road'){
+    bits.push(o.win? 'The blocking line stood shoulder to shoulder and hurled the column back down the road.' : 'The leading files smashed a gap in the blocking line and the host poured through it.');
+    if(o.close) bits.push('It hung in the balance until the last companies were thrown in.');
+    return bits.join(' ');
+  }
+  if(o.fort) bits.push(o.win? 'Storm parties carried the fort after brutal fighting at the ditch and the breach.' : 'The fort’s guns and grim walls broke the assault before it ever reached the parapet.');
+  else if(o.wall) bits.push(o.win? 'Ladders rose along the walls at dawn and your banner was planted on the ramparts.' : 'The walls held — the attackers fell back from the glacis in disorder.');
+  else if(o.terrain==='hills') bits.push(o.win? 'The columns fought their way up the high ground yard by yard.' : 'Holding the high ground, the defenders shot the climb to pieces.');
+  else if(o.terrain==='marsh') bits.push('In the marsh the charge sank to a slogging match of pike and shot among the reeds.');
+  else bits.push(o.win? 'The line advanced in good order and the day was won in the open field.' : 'In the open field the defence stood like a wall and the attack withered against it.');
+  if(o.close) bits.push('It hung on a knife-edge until the final reserves were thrown in.');
+  else if(o.a0>o.d0*1.8) bits.push('In the end, sheer weight of numbers told.');
+  return bits.join(' ');
+}
+function flyCameraToWorld(x, y, dd){
+  if(window.R3 && window.R3.active && window.R3.flyWorld){ window.R3.flyWorld(x, y, dd); }
+  else { view.x=innerWidth/2 - x*view.scale; view.y=innerHeight/2 - y*view.scale; }
+}
 
 function selectRegion(r){
   selected={type:'region',id:r.id};
@@ -1564,6 +1794,9 @@ function selectRegion(r){
       if(a.stance!=='hold') acts.appendChild(actBtn('🛡 Hold this Ground',
         'Stay and block the road — enemy armies marching through must fight you',
         ()=>{ a.stance='hold'; a.holdUntil=1e9; toast('🛡 '+a.name+' digs in at '+r.name+' — the road is blocked.'); pushEvent('🛡 <b>'+a.name+'</b> holds the road at '+r.name+'.'); selectRegion(r); save(); }));
+      if((G.armies||[]).some(x=>x.owner==='player' && x.id!==a.id)) acts.appendChild(actBtn('🤝 March to join…',
+        'March this host to another of your armies and merge into one banner — men and arms unite',
+        ()=>{ selectJoinPicker(a); }));
       if(mine.length>1){
         const big=mine.slice().sort((x,y)=>y.men-x.men)[0];
         if(big.id!==a.id) acts.appendChild(actBtn('➕ Join '+big.name,'Fold these '+fmt(a.men)+' men into the larger host',()=>{
@@ -1611,6 +1844,87 @@ function selectRegion(r){
         fmt(a.men)+' men in the field here'+(a.stance==='hold'?' · 🛡 holding the road':'')+', apart from the garrison.', ()=>{},'war',true));
     });
   }
+  openSheet();
+}
+
+/* ================= ARMY SHEET — the host itself, tapped on the map ================= */
+function selectArmy(a){
+  if(!a) return;
+  selected={type:'army',id:a.id};
+  const e=emp(a.owner), home=rById[a.atRegion];
+  $('#sheet-title').textContent='🪖 '+a.name;
+  $('#sheet-sub').textContent=e.name+(a.at? ' · on the march to '+(rById[a.destRegion]? rById[a.destRegion].name : '…')+' · ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days out'
+    : ' · at '+(home? home.name : '—')+(a.stance==='hold'? ' · 🛡 holding the road':' · awaiting orders'));
+  $('#sheet-stats').innerHTML=statRow([
+    ['⚔ Men under the banner', fmt(a.men)],
+    ['🎖 Arms', ARMY_TECH[e.armyTech]],
+    ...(a.at? [['🎯 Bound for', rById[a.destRegion]? rById[a.destRegion].name : '—'], ['⏳ Days out', '~'+Math.max(1,Math.ceil(a.arriveDay-G.day))]]
+            : [['📍 Standing at', home? home.name : '—'], ['🏠 Garrison apart', home? fmt(home.troops)+' men' : '—']]),
+  ]);
+  const acts=$('#sheet-acts'); acts.innerHTML='';
+  if(a.owner!=='player'){
+    acts.appendChild(actBtn('👁 Scout Report', emp(a.owner).name+' host · '+fmt(a.men)+' men'+(a.at? ' marching on '+rById[a.destRegion].name+'.' : ' in the field at '+(home? home.name:'')+'.'), ()=>{},'war',true));
+    openSheet(); return;
+  }
+  if(a.at){
+    const legNode=a.at.toNode||''; const legRegion=(typeof legNode==='string' && legNode[0]==='r')? rById[+legNode.slice(1)] : null;
+    if(legRegion) acts.appendChild(actBtn('⏹ Halt at '+legRegion.name, 'End the march on the next town and stand ready there',
+      ()=>{ a.joinTarget=null; a.redirectTo=null; a.destRegion=legRegion.id; a.arriveDay=a.at.legArrive;
+        toast('⏹ '+a.name+' will halt at '+legRegion.name); pushEvent('⏹ <b>'+a.name+'</b> halts at '+legRegion.name+'.'); selectArmy(a); save(); },''));
+    if(a.fromRegion!=null && rById[a.fromRegion]) acts.appendChild(actBtn('↩ Turn back', 'About-face for '+rById[a.fromRegion].name+' at the next waypoint',
+      ()=>{ a.joinTarget=null; a.redirectTo=a.fromRegion; a.destRegion=a.fromRegion;
+        toast('↩ '+a.name+' turns for home ground'); selectArmy(a); save(); },''));
+  } else {
+    acts.appendChild(actBtn('🚶 March / Conquer…', 'Then tap any lit region — roads carry the army there, day by day',
+      ()=>{ selected=null; sheet.classList.remove('open');
+        marchTarget={armyId:a.id}; window.__marchArmyId=a.id; window.__marchFleetId=null;
+        showOrderHint('🚶 <b>'+a.name+'</b> awaits orders — tap a <b>lit region</b> to march there. Roads quote their days as you choose.');
+      },'war'));
+    if((G.armies||[]).some(x=>x.owner==='player' && x.id!==a.id))
+      acts.appendChild(actBtn('🤝 March to join…', 'March this host to another of your armies — on arrival the two become one banner',
+        ()=>{ selectJoinPicker(a); }));
+    if(a.stance!=='hold') acts.appendChild(actBtn('🛡 Hold this Ground', 'Stay and block the road — enemy armies marching through must fight you',
+      ()=>{ a.stance='hold'; a.holdUntil=1e9; toast('🛡 '+a.name+' digs in — the road is blocked.'); pushEvent('🛡 <b>'+a.name+'</b> holds the road.'); selectArmy(a); save(); }));
+    else acts.appendChild(actBtn('🎖 Stand Down', 'Give up the blocking position and stand ready for march orders',
+      ()=>{ a.stance='field'; a.holdUntil=null; toast(a.name+' stands ready'); selectArmy(a); save(); }));
+    if(home) acts.appendChild(actBtn('🏰 Fold into the '+home.name+' garrison', 'The banner comes down; its '+fmt(a.men)+' men join the town watch',
+      ()=>{ home.troops+=a.men; G.armies=G.armies.filter(x=>x.id!==a.id); toast(a.name+' folds into the garrison ('+fmt(home.troops)+' men)'); selectRegion(home); save(); }));
+  }
+  acts.appendChild(actBtn('✂ Split army', 'Halve the host into two named armies where it stands',
+    ()=>{ splitArmy(a); },'', a.at? 'an army on the march cannot divide — halt it first' : (a.men<1000? 'under 1,000 men it is one banner or none' : '')));
+  acts.appendChild(actBtn('✏ Rename this army', 'It answers to “'+a.name+'” — tap to give it a name of your choosing',
+    ()=>{ acts.appendChild(armyRenameRow(a)); }));
+  openSheet();
+}
+function armyRenameRow(a){
+  const wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;gap:6px;align-items:stretch;margin-top:2px;';
+  const inp=document.createElement('input'); inp.type='text'; inp.value=a.name; inp.maxLength=30;
+  inp.style.cssText='flex:1;min-height:44px;font-family:inherit;font-size:15px;padding:8px 10px;border-radius:9px;border:1px solid #7a5c2e;background:#f6ead0;color:#2a1e0d;';
+  const sv=document.createElement('button'); sv.className='mini-btn'; sv.textContent='Save name';
+  sv.onclick=()=>{ const v=inp.value.trim(); if(v){ a.name=v; toast('🪖 Henceforth: '+v); pushEvent('✏ The host is renamed <b>'+v+'</b>.'); } selectArmy(a); save(); };
+  wrap.appendChild(inp); wrap.appendChild(sv);
+  setTimeout(()=>{ try{ inp.focus(); inp.select(); }catch(e){} },80);
+  return wrap;
+}
+function selectJoinPicker(a){
+  selected={type:'army',id:a.id};
+  $('#sheet-title').textContent='🤝 March to join…';
+  $('#sheet-sub').textContent=a.name+' · '+fmt(a.men)+' men — march as one with…';
+  $('#sheet-stats').innerHTML='';
+  const acts=$('#sheet-acts'); acts.innerHTML='';
+  const others=(G.armies||[]).filter(x=>x.owner==='player' && x.id!==a.id);
+  if(!others.length) acts.appendChild(actBtn('No other host in the field', 'Form a second field army from another garrison first — then march them together', ()=>{},'',true));
+  others.forEach(b=>{
+    const tgt=targetRegionOf(b);
+    const p=(tgt!=null && !a.at)? findLandPath(a.atRegion, tgt) : null;
+    const where=b.at? 'marching on '+(rById[b.destRegion]? rById[b.destRegion].name:'…')+' (~'+Math.max(1,Math.ceil(b.arriveDay-G.day))+'d out — your road aims at its destination)'
+                     : 'standing at '+(rById[b.atRegion]? rById[b.atRegion].name:'—');
+    acts.appendChild(actBtn('🪖 '+b.name,
+      fmt(b.men)+' men · '+where+(p? ' · your road there ~'+Math.max(1,Math.round(p.days))+' days' : ''),
+      ()=>{ if(orderJoin(a,b)) closeSheet(); },'war', a.at? 'this host is already on the march' : (p? '' : 'no land road joins you — the sea is in the way')));
+  });
+  acts.appendChild(actBtn('↩ Back to '+a.name, 'Other orders instead', ()=>{ selectArmy(a); }));
   openSheet();
 }
 
@@ -1934,6 +2248,24 @@ $('#btn-realm').onclick=()=>{
   h+='<p>Advance your arms. Each tier multiplies battlefield strength.</p>';
   const ab=document.createElement('div');
   b.innerHTML=h;
+  // ⚔ FIELD ARMIES — every host on the map, tap to fly to it
+  const ah=document.createElement('h3'); ah.textContent='⚔ Your Field Armies'; b.appendChild(ah);
+  const mineA=(G.armies||[]).filter(a=>a.owner==='player');
+  if(!mineA.length){
+    const np=document.createElement('p'); np.style.fontSize='12px';
+    np.textContent='No host in the field. Form one from any garrison of 1,500+ men — armies march and conquer; garrisons hold.';
+    b.appendChild(np);
+  }
+  mineA.forEach(a=>{
+    const row=document.createElement('div'); row.className='dip-row';
+    const where=a.at? 'marching on '+(rById[a.destRegion]? rById[a.destRegion].name:'…')+' · ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days out'
+                     : 'at '+(rById[a.atRegion]? rById[a.atRegion].name:'—')+(a.stance==='hold'? ' · 🛡 holding the road':'');
+    row.innerHTML='<span class="who">🪖 '+a.name+'</span><span class="rel">'+fmt(a.men)+' men · '+where+'</span>';
+    const fb=document.createElement('button'); fb.className='mini-btn'; fb.textContent='Fly to';
+    fb.onclick=()=>{ $('#realm').classList.remove('open'); closeSheet();
+      const home=rById[a.atRegion]; const p=a.at? a.at.pos : home; if(p) flyCameraToWorld(p.x, p.y, 150); };
+    row.appendChild(fb); b.appendChild(row);
+  });
   const row1=document.createElement('div'); row1.className='dip-row';
   row1.innerHTML='<span class="who">⚔ Army tech</span><span class="rel">'+(me.armyTech<3? 'Next: '+ARMY_TECH[me.armyTech+1]+' · 300g':'Élite — the finest in the world')+'</span>';
   const abtn=document.createElement('button'); abtn.className='mini-btn'; abtn.textContent='Research'; abtn.disabled=me.armyTech>=3||me.gold<300;
@@ -2018,7 +2350,7 @@ function showBattle(atkName,atkMen,defName,defMen,res,won,note){
 $('#battle-ok').onclick=()=>{ $('#battle').classList.remove('open'); simResumeFromEvent(); updateHint(); };
 
 /* ================= SAVE / LOAD / BOOT ================= */
-function save(){ syncUnits(); try{ localStorage.setItem('riftsail-save', JSON.stringify(G)); }catch(e){} }
+function save(){ if(window.__clashResolveNow) window.__clashResolveNow(); syncUnits(); try{ localStorage.setItem('riftsail-save', JSON.stringify(G)); }catch(e){} }
 function load(){ try{ const s=localStorage.getItem('riftsail-save'); return s? JSON.parse(s):null; }catch(e){ return null; } }
 function startNew(){
   G=freshState(); rebuildIndex(); ensureIds(); selected=null; closeSheet();
@@ -2646,7 +2978,7 @@ try{
 
   /* ---------- armies on the march: banners, standards, road ribbons ---------- */
   const armyVis = new Map(); // armyId -> {group, sig}
-  let routeGroup = null, routeTick = 0, marchRingGroup = null, lastMarchId = null, lastFleetOrderId = null;
+  let routeGroup = null, routeTick = 0, marchRingGroup = null, lastMarchId = null, lastFleetOrderId = null, destRingGroup = null;
   const marchRingGeo = new THREE.RingGeometry(7.2, 8.6, 40);
   function buildArmyGroup(a){
     const b=new Batch();
@@ -2680,29 +3012,46 @@ try{
     });
     [...armyVis.keys()].forEach(id=>{ if(!seen.has(id)){ scene.remove(armyVis.get(id).group); armyVis.delete(id); } });
     // marching route ribbon — origin → now → destination (throttled: markers move daily, not per frame)
-    const wantRibbon=(G.armies||[]).some(a=>a.at && a.owner==='player');
+    // march TRAILS: your hosts leave a fading gold ribbon on the road walked; a thin line runs ahead to the
+    // destination, which wears a pulsing target ring from the moment the order lands. Enemy hosts marching
+    // on YOUR ground draw the same picture in war-red — no hidden teleport-attacks, ever.
+    const trailArmies=(G.armies||[]).filter(a=>a.at && (a.owner==='player' || (rById[a.destRegion] && rById[a.destRegion].owner==='player')));
+    const wantRibbon=trailArmies.length>0;
     if(routeGroup && !wantRibbon){ scene.remove(routeGroup); routeGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); routeGroup=null; routeTick=0; }
+    if(destRingGroup && !wantRibbon){ scene.remove(destRingGroup); destRingGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); destRingGroup=null; }
     if(wantRibbon && (routeTick++%8===0)){
       if(routeGroup){ scene.remove(routeGroup); routeGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); routeGroup=null; }
-      routeGroup=new THREE.Group();
-      (G.armies||[]).filter(a=>a.at && a.owner==='player').forEach(a=>{
-        const pts=[
-          new THREE.Vector3(SX(rById[a.fromRegion].x), BASE_Y+0.35, SZ(rById[a.fromRegion].y)),
-          new THREE.Vector3(SX(a.at.pos.x), BASE_Y+0.35, SZ(a.at.pos.y)),
-          new THREE.Vector3(SX(rById[a.destRegion].x), BASE_Y+0.35, SZ(rById[a.destRegion].y))];
-        // quads, not lines — a 1px line is invisible against the road web on a phone
-        for(let i=0;i<pts.length-1;i++){
-          const p=pts[i], q=pts[i+1];
-          const len=Math.hypot(q.x-p.x, q.z-p.z); if(len<0.5) continue;
-          const geo=new THREE.PlaneGeometry(len, 1.35);
-          const seg=new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:0xffd76a, transparent:true, opacity:0.78, depthWrite:false}));
-          seg.rotation.x=-Math.PI/2; seg.rotation.z=-Math.atan2(q.z-p.z, q.x-p.x);
-          seg.position.set((p.x+q.x)/2, BASE_Y+0.32, (p.z+q.z)/2);
+      if(destRingGroup){ scene.remove(destRingGroup); destRingGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); destRingGroup=null; }
+      routeGroup=new THREE.Group(); destRingGroup=new THREE.Group();
+      trailArmies.forEach(a=>{
+        const col= a.owner==='player'? 0xffd76a : 0xe0563c;
+        const pts=[];
+        (a.path||[]).forEach(nid=>{ const n=WORLD_GRAPH.nodes[nid]; if(n) pts.push({x:n.x, y:n.y}); });
+        if(pts.length<2 && rById[a.fromRegion]) pts.unshift({x:rById[a.fromRegion].x, y:rById[a.fromRegion].y});
+        pts.push({x:a.at.pos.x, y:a.at.pos.y});
+        const segs=[];
+        const nWalk=Math.max(1, pts.length-1);
+        for(let i=0;i<pts.length-1;i++) segs.push([pts[i], pts[i+1], 0.14+0.55*((i+1)/nWalk)]); // oldest road fades first
+        const dn=rById[a.destRegion];
+        if(dn) segs.push([{x:a.at.pos.x, y:a.at.pos.y}, {x:dn.x, y:dn.y}, 0.3]); // the road ahead
+        segs.forEach(([p,q,op])=>{
+          // quads, not lines — a 1px line is invisible against the road web on a phone
+          const P=new THREE.Vector3(SX(p.x), BASE_Y+0.35, SZ(p.y)), Q=new THREE.Vector3(SX(q.x), BASE_Y+0.35, SZ(q.y));
+          const len=Math.hypot(Q.x-P.x, Q.z-P.z); if(len<0.5) return;
+          const seg=new THREE.Mesh(new THREE.PlaneGeometry(len, 1.35), new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:op, depthWrite:false}));
+          seg.rotation.x=-Math.PI/2; seg.rotation.z=-Math.atan2(Q.z-P.z, Q.x-P.x);
+          seg.position.set((P.x+Q.x)/2, BASE_Y+0.32, (P.z+Q.z)/2);
           routeGroup.add(seg);
+        });
+        if(dn){ // pulsing target ring at the destination from the moment the order is given
+          const ring=new THREE.Mesh(marchRingGeo, new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:0.85, side:THREE.DoubleSide, depthWrite:false}));
+          ring.rotation.x=-Math.PI/2; ring.position.set(SX(dn.x), BASE_Y+0.34, SZ(dn.y));
+          destRingGroup.add(ring);
         }
       });
-      scene.add(routeGroup);
+      scene.add(routeGroup); scene.add(destRingGroup);
     }
+    if(destRingGroup){ const ph=0.82+Math.sin(t*3.6)*0.22; destRingGroup.children.forEach(m=>{ m.material.opacity=0.55+0.35*Math.sin(t*3.6); m.scale.set(ph, ph, 1); }); }
     // order-mode highlights: lit regions when an army awaits a tap, lit ports for a fleet
     const wantArmy = window.__marchArmyId!=null? G.armies.find(a=>a.id===window.__marchArmyId) : null;
     const wantFleet = window.__marchFleetId!=null? G.fleets.find(f=>f.id===window.__marchFleetId) : null;
@@ -2756,6 +3105,7 @@ try{
     camAnim = {t0: performance.now(), dur: ms||600, fromT: target.clone(), fromD: dist,
       toT: t.clone(), toD: THREE.MathUtils.clamp(d, 40, 880)};
   }
+  R3.flyWorld = (x, y, dd)=>{ flyTo(new THREE.Vector3(SX(x), 0, SZ(y)), dd||170, 800); }; // world coords → framed flight (army list, clash framing)
   function stepCam(now){
     if(!camAnim) return;
     const p = Math.min(1, (now-camAnim.t0)/camAnim.dur), e = 1-Math.pow(1-p, 3);
@@ -2777,6 +3127,54 @@ try{
     updateCamera();
     if(before){ const after = groundPoint(cx, cy);
       if(after){ target.x += before.x-after.x; target.z += before.z-after.z; updateCamera(); } }
+  }
+
+  /* ---------- clash spectacle: crossed swords, drifting smoke, broadsides, shaking banners ---------- */
+  let clashGroup=null, smokeTex=null; const clashParts=[];
+  function makeSmokeTex(){
+    const c=document.createElement('canvas'); c.width=c.height=64;
+    const x=c.getContext('2d');
+    const g=x.createRadialGradient(32,32,2,32,32,30);
+    g.addColorStop(0,'rgba(255,255,255,0.9)'); g.addColorStop(0.6,'rgba(255,255,255,0.35)'); g.addColorStop(1,'rgba(255,255,255,0)');
+    x.fillStyle=g; x.fillRect(0,0,64,64);
+    return new THREE.CanvasTexture(c);
+  }
+  function clearClashVis(){
+    if(clashGroup){ scene.remove(clashGroup); clashGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); clashGroup=null; }
+    clashParts.length=0;
+    armyVis.forEach(v=>{ v.group.rotation.z=0; });
+  }
+  function updateClashVis(t){
+    const fx=window.__clashFx;
+    if(!fx){ clearClashVis(); return; }
+    if(!clashGroup){
+      clashGroup=new THREE.Group();
+      const gold=new THREE.MeshBasicMaterial({color:0xffd76a});
+      [-0.6, 0.6].forEach(rz=>{ const sw=new THREE.Mesh(new THREE.BoxGeometry(0.5, 7.5, 0.5), gold); sw.rotation.z=rz; sw.position.y=11; clashGroup.add(sw); });
+      if(!smokeTex) smokeTex=makeSmokeTex();
+      for(let i=0;i<12;i++){
+        const m=new THREE.SpriteMaterial({map:smokeTex, color: fx.type==='sea'? 0xf2f5f5 : 0xcfc4ae, transparent:true, opacity:0, depthWrite:false});
+        const s=new THREE.Sprite(m);
+        s.userData.ph=i/12; s.userData.ox=(Math.random()-0.5)*8; s.userData.oz=(Math.random()-0.5)*8;
+        clashGroup.add(s); clashParts.push(s);
+      }
+      const fm=new THREE.SpriteMaterial({map:smokeTex, color:0xffa63d, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending});
+      const fl=new THREE.Sprite(fm); fl.userData.flash=true; fl.scale.setScalar(9); fl.position.y=6;
+      clashGroup.add(fl); clashParts.push(fl);
+      clashGroup.position.set(SX(fx.x), BASE_Y, SZ(fx.y));
+      scene.add(clashGroup);
+    }
+    const p=fx.prog||0;
+    clashGroup.children.forEach(c=>{ if(c.geometry && c.geometry.type==='BoxGeometry') c.rotation.y=t*1.6; });
+    clashParts.forEach(s=>{
+      if(s.userData.flash){ const burst=(p%0.22)<0.05; s.material.opacity=burst? 0.85 : 0; if(burst) s.scale.setScalar(10+Math.random()*4); return; }
+      const ph=((t*0.4)+s.userData.ph)%1;
+      s.position.set(s.userData.ox*(0.5+ph), 3+ph*7, s.userData.oz*(0.5+ph));
+      const sc=4+ph*9; s.scale.set(sc, sc, 1);
+      s.material.opacity=0.62*(1-ph)*Math.min(1, p*4+0.25);
+    });
+    [fx.atkArmyId, fx.defArmyId].forEach(id=>{ if(id==null) return; const v=armyVis.get(id); if(v) v.group.rotation.z=Math.sin(t*34+id)*0.045; });
+    if(fx.type==='sea') [fx.atkFleetId, fx.defFleetId].forEach(id=>{ if(id==null) return; const v=fleetVis.get(id); if(v) v.group.rotation.z=Math.sin(t*8+id)*0.07; });
   }
 
   /* ---------- HTML chips (labels / counts) ---------- */
@@ -2804,7 +3202,7 @@ try{
         el.textContent = r.name;
         el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
       }
-      if(r.troops>=500 && (dist<170 || (r.owner && dist<400)) && p){
+      if(r.troops>=500 && !(window.__clashFx && window.__clashFx.defRegionId===r.id) && (dist<170 || (r.owner && dist<400)) && p){
         const p2 = project(SX(r.x)+1.7, BASE_Y+10.5, SZ(r.y)-4.8);
         if(p2){ const tk='t'+r.id; used.add(tk); const el=chip(tk,'chip troops');
           el.style.background = r.owner? emp(r.owner).color : '#6b5a34';
@@ -2819,6 +3217,7 @@ try{
     });
     G.fleets.forEach(f=>{
       const v = fleetVis.get(f.id); if(!v) return;
+      if(window.__clashFx && window.__clashFx.type==='sea' && (window.__clashFx.atkFleetId===f.id || window.__clashFx.defFleetId===f.id)) return;
       const p = project(v.group.position.x, 6.5, v.group.position.z);
       if(!p) return;
       const fk='f'+f.id; used.add(fk); const el=chip(fk,'chip fleet');
@@ -2843,6 +3242,7 @@ try{
     // armies carry their own chips — a marching host announces itself
     (G.armies||[]).forEach(a=>{
       const v=armyVis.get(a.id); if(!v) return;
+      if(window.__clashFx && (window.__clashFx.atkArmyId===a.id || window.__clashFx.defArmyId===a.id)) return; // the clash chips speak for it now
       const p=project(v.group.position.x, BASE_Y+9.5, v.group.position.z);
       if(!p) return;
       const ak='a'+a.id; used.add(ak); const el=chip(ak,'chip troops');
@@ -2853,6 +3253,20 @@ try{
       } else el.textContent='🪖 '+kfmt(a.men)+(a.stance==='hold'?' 🛡':'');
       el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
     });
+    // clash chips: the two sides bleeding down in step with the spectacle below
+    const cfx=window.__clashFx;
+    if(cfx){
+      const p=project(SX(cfx.x), BASE_Y+19, SZ(cfx.y));
+      if(p){
+        [['clashA', cfx.atkCur, '#7a3b2e', -56], ['clashD', cfx.defCur, '#3c5a7a', 56]].forEach(([k, val, bg, off])=>{
+          used.add(k);
+          const el=chip(k, 'chip troops'); el.style.background=bg;
+          el.textContent=(cfx.unit==='ships'? '⛵ ' : '⚔ ')+kfmt(val==null? 0 : val);
+          el.style.display='block';
+          el.style.transform='translate(-50%,-100%) translate('+(p[0]+off).toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
+        });
+      }
+    }
     chipPool.forEach((el,k)=>{ if(!used.has(k)) el.style.display='none'; });
   }
 
@@ -2952,6 +3366,7 @@ try{
     });
     // armies march — banners on the roads, standards at rest
     updateArmyVis(t);
+    updateClashVis(t);
     // cargo dots stream along paying lanes
     if(laneCurves.length){
       const n=Math.min(380, laneCurves.length*4);
