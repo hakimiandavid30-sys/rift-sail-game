@@ -94,12 +94,28 @@
   #sheet .close-x{position:absolute;top:10px;right:12px;width:36px;height:36px;border-radius:50%;border:1px solid var(--panel-edge);
     background:#fff6dd;font-size:18px;cursor:pointer;font-family:inherit;}
 
-  /* ---------- end season ---------- */
-  #btn-end{position:absolute;right:10px;bottom:14px;z-index:24;min-height:56px;padding:12px 20px;border-radius:14px;
-    border:2px solid var(--brass-light);background:linear-gradient(180deg,#8a6a2e,#5e4718);color:#fff3d0;
-    font-family:inherit;font-size:17px;font-variant:small-caps;letter-spacing:1px;cursor:pointer;
-    box-shadow:0 6px 20px rgba(0,0,0,.55);}
-  #btn-end:active{transform:translateY(1px);}
+  /* ---------- end season (retired — the clock flows now) ---------- */
+  /* ---------- clock ---------- */
+  #clockbar{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:24;display:flex;align-items:center;gap:6px;
+    background:linear-gradient(180deg,rgba(30,20,8,.96),rgba(18,11,4,.96));border:2px solid var(--brass-light);border-radius:16px;
+    padding:7px 10px;box-shadow:0 8px 24px rgba(0,0,0,.55);color:#f3e6c3;}
+  #clockbar .cdate{font-variant:small-caps;letter-spacing:.5px;font-size:14px;color:var(--brass-light);min-width:118px;text-align:center;}
+  #clockbar .cstate{font-size:11.5px;color:#d8c491;min-width:86px;text-align:center;}
+  .clock-btn{min-width:46px;min-height:46px;border-radius:12px;border:1px solid rgba(217,185,106,.6);cursor:pointer;
+    background:linear-gradient(180deg,#6d5326,#4c3a1a);color:#f7ecd0;font-family:inherit;font-size:17px;padding:4px 8px;
+    transition:transform .12s ease, filter .15s ease, box-shadow .15s ease;}
+  .clock-btn:active{transform:translateY(1px) scale(.97);}
+  .clock-btn.active{background:linear-gradient(180deg,#a67c2e,#6d5326);box-shadow:0 0 0 2px rgba(217,185,106,.8), 0 4px 14px rgba(0,0,0,.45);color:#fff3d0;}
+  #clockbar .cauto{display:flex;align-items:center;gap:4px;font-size:11px;color:#d8c491;margin-left:2px;}
+  #clockbar input{width:18px;height:18px;accent-color:#b08a3e;}
+  @media (max-width:640px){ .clock-btn{min-width:44px;min-height:44px;font-size:15px;} #clockbar .cdate{min-width:92px;font-size:12.5px;} #clockbar .cstate{display:none;} #clockbar{gap:4px;padding:6px 8px;} }
+
+  /* ---------- what's happening ticker ---------- */
+  #ticker{position:absolute;left:8px;bottom:76px;z-index:15;display:flex;flex-direction:column;gap:4px;max-width:min(46vw,320px);pointer-events:none;}
+  .tick-line{background:rgba(20,13,5,.82);color:#f3e6c3;border:1px solid rgba(217,185,106,.45);border-left:3px solid var(--brass-light);
+    border-radius:8px;padding:5px 8px;font-size:11.5px;line-height:1.35;box-shadow:0 3px 10px rgba(0,0,0,.4);animation:warnin .3s ease-out;}
+  .tick-line b{color:var(--brass-light);}
+  @media (max-width:640px){ #ticker{bottom:70px;max-width:52vw;} .tick-line{font-size:11px;padding:4px 7px;} }
   #btn-menu{position:absolute;left:10px;bottom:14px;z-index:24;}
 
   /* ---------- overlays (gazette / sheets / start / end) ---------- */
@@ -230,6 +246,7 @@
   <div id="aims"><h4>Sovereign's Aims</h4><div id="aims-list"></div></div>
   <div id="warnings"></div>
   <div id="tally"></div>
+  <div id="ticker"></div>
 
   <div id="zoomctl">
     <button id="zoom-in" aria-label="Zoom in">+</button>
@@ -238,7 +255,15 @@
   </div>
 
   <button class="bar-btn" id="btn-menu">☰</button>
-  <button id="btn-end">End Season ⚓</button>
+  <div id="clockbar">
+    <button class="clock-btn active" id="clock-pause" aria-label="Pause">⏸</button>
+    <button class="clock-btn" id="clock-1" aria-label="Play">▶</button>
+    <button class="clock-btn" id="clock-2" aria-label="Fast">▶▶</button>
+    <button class="clock-btn" id="clock-4" aria-label="Fastest">▶▶▶</button>
+    <span class="cdate" id="clock-date">📅 Spring, Year 1 · Day 1</span>
+    <span class="cstate" id="clock-state">⏸ Paused</span>
+    <label class="cauto"><input type="checkbox" id="clock-autopause" checked> Auto-pause on big news</label>
+  </div>
 
   <div id="sheet">
     <div class="grab"></div>
@@ -288,9 +313,9 @@
     <h2>How to Play</h2>
     <div class="rule"></div>
     <p><b>The goal:</b> hold 60% of the world's regions, <i>or</i> lead all empires in trade income for 5 straight seasons. Lose your capital and every port, and your line ends.</p>
-    <p><b>Each season:</b> your income arrives automatically. Then act freely — tap any region or fleet to command it. End the season when you're done; rivals move, and the Gazette reports what happened.</p>
-    <p><b>Armies:</b> muster regiments in your regions (men come from your population), then march them into neighbouring regions to conquer. Forts, walls and terrain matter. Your army's tech tier multiplies its strength.</p>
-    <p><b>Fleets:</b> build warships in ports with shipyards. Fleets sail between sea zones; park one off an enemy port to <b>blockade</b> it — a blockaded port earns no trade and slowly bleeds men.</p>
+    <p><b>Time flows:</b> the ⏸ ▶ ▶▶ ▶▶▶ bar sets the world moving. Days pass; seasons (90 days) still bring income and the Gazette. Armies and fleets travel in real time — pause whenever you want to think. Big moments pause the world for you (toggle: Auto-pause).</p>
+    <p><b>Armies:</b> muster regiments into a region's garrison, then <b>Form a Field Army</b> and <b>March</b> it — tap any lit region and the army walks the roads there, day by day. Garrisons always stay behind. Park an army with <b>Hold this Ground</b> to block a road. Forts, walls and terrain matter in battle.</p>
+    <p><b>Fleets:</b> build warships in ports with shipyards. Sail a squadron to a port or open sea; a blockade only counts when your ships actually sit off the enemy harbour — then its trade dies and the town bleeds.</p>
     <p><b>Trade:</b> lanes between your ports pay every season, thicker lanes pay more. Conquer a port and its lanes become yours. Allies open their ports to your lanes.</p>
     <p><b>The Crown:</b> momentous matters — war warnings, offers, crises — wait under the 👑 Crown button. Only big decisions reach you.</p>
     <button class="big-btn" id="howto-close">To the Chart</button>
@@ -463,6 +488,9 @@ const WIN_REGIONS=Math.ceil(REGION_COUNT*0.6);
 // ---------- mutable game state ----------
 let G=null; // whole game state (serialised to localStorage)
 let rById={}, seaById={};
+// transient real-time runtime (never serialised — rebuilt each boot)
+let lastFrameMs=0, clockBucket=0, simRunning=false, uidSeq=1;
+const tickerLines=[]; // "what's happening" — latest first, stamped with the day clock
 
 function freshState(){
   _seed=1234567;
@@ -497,6 +525,7 @@ function freshState(){
     p.seaZone=best; seas[best].ports.push(p.id);
   });
   seas.forEach(a=>{ seas.forEach(b=>{ if(a!==b && Math.hypot(a.x-b.x,a.y-b.y)<560*WS) a.neighbors.push(b.id); }); });
+  weldSeaNeighbors(seas); // two straits sit just beyond the distance rule — no crown's fleet may be landlocked by arithmetic
   // empires
   const empires={};
   EMPIRES.forEach(e=>{
@@ -518,11 +547,12 @@ function freshState(){
   EMPIRES.forEach(e=>{
     const cap=regions.find(r=>r.name===e.capital);
     fleets.push({id:fleets.length, owner:e.id, zone:cap.seaZone, node:'s'+cap.seaZone,
-      pos:{x:seas[cap.seaZone].x, y:seas[cap.seaZone].y},
+      pos:{x:seas[cap.seaZone].x, y:seas[cap.seaZone].y}, at:null,
       ships:e.id==='player'?4:5, stance:'patrol', name:e.name.split(' ')[0]+' Squadron'});
   });
   return {
-    wv:WORLD_VER, turn:1, seasonIdx:0, regions, seas, empires, fleets,
+    wv:WORLD_VER, turn:1, seasonIdx:0, regions, seas, empires, fleets, armies:[],
+    day:0, clockSpeed:0, clockDaysPerSec:2, pauseOnEvent:true,
     gazette:[], crownQueue:[], warnings:[], lastIncome:{gold:0,trade:0,upkeep:0,interest:0},
     tradeLeaderSeasons:0, over:false, startedAt:Date.now()
   };
@@ -540,8 +570,16 @@ function rebuildIndex(){ rById={}; G.regions.forEach(r=>rById[r.id]=r); seaById=
    units with a current node (fleet.node === 's<zoneId>') and a live
    position (fleet.pos, world coords) — see syncUnits().
    ============================================================ */
-const WORLD_VER=3; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography)
+const WORLD_VER=4; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine)
 let WORLD_GRAPH=null;
+// the world's two narrow seas — Western↔Eastern Med (Sicily) and North Sea↔Baltic (the Danish straits)
+function weldSeaNeighbors(seas){
+  [[7,8],[3,10]].forEach(([a,b])=>{
+    const A=seas[a], B=seas[b]; if(!A||!B) return;
+    if(!A.neighbors.includes(b)) A.neighbors.push(b);
+    if(!B.neighbors.includes(a)) B.neighbors.push(a);
+  });
+}
 function buildGraph(){
   if(!G||!G.regions||!G.seas){ WORLD_GRAPH=null; return; }
   const nodes={}, edges=[], adj={};
@@ -561,7 +599,52 @@ function buildGraph(){
 // fleets always know their current node + position (single source: their zone)
 function syncUnits(){
   if(!G||!G.fleets) return;
-  G.fleets.forEach(f=>{ const z=seaById[f.zone]; if(z){ f.node='s'+f.zone; f.pos={x:z.x, y:z.y}; } });
+  G.fleets.forEach(f=>{ const z=seaById[f.zone]; if(!z || f.at) return;
+    f.node='s'+f.zone;
+    // only fleets with no real berth snap to the zone's heart — a squadron anchored off a port KEEPS its water
+    if(f.stance!=='blockade' && !(f.pos && typeof f.pos.x==='number')) f.pos={x:z.x, y:z.y}; });
+}
+// where a fleet physically IS right now (sailing position wins over home zone)
+function fPos(f){ return (f.at && f.at.pos)? f.at.pos : f.pos; }
+
+/* ---------- pathfinding over the movement graph ----------
+   Armies walk 'land' edges only. Fleets sail 'sea' edges between zones
+   and 'sea'+'harbour' edges when making for a port. All Dijkstra over
+   per-edge day costs. (Islands stay island kingdoms: armies cannot
+   cross water; fleets blockade their harbours instead.) */
+function graphPath(start, target, ok){
+  const dist={}, prev={}, seen=new Set();
+  dist[start]=0;
+  while(true){
+    let cur=null, cd=Infinity;
+    for(const k in dist){ if(!seen.has(k)&&dist[k]<cd){ cd=dist[k]; cur=k; } }
+    if(cur===null) break;
+    if(cur===target) break;
+    seen.add(cur);
+    (WORLD_GRAPH.adj[cur]||[]).forEach(e=>{
+      if(!ok(e.kind)) return;
+      const nxt=e.a===cur? e.b : e.a;
+      const nd=cd+e.days;
+      if(dist[nxt]===undefined||nd<dist[nxt]){ dist[nxt]=nd; prev[nxt]=cur; }
+    });
+  }
+  if(dist[target]===undefined) return null;
+  const nodes=[]; let c=target;
+  while(c){ nodes.unshift(c); c=prev[c]; }
+  if(nodes[0]!==start) return null;
+  return {nodes, days:dist[target]};
+}
+function findLandPath(fromId, toId){
+  if(fromId===toId) return {nodes:['r'+fromId], days:0};
+  return graphPath('r'+fromId, 'r'+toId, k=>k==='land');
+}
+function findSeaPath(fromZone, toPortRegion){
+  // route from a fleet's sea zone ('s<zone>') to a port region ('r<id>') over sea+harbour edges
+  return graphPath('s'+fromZone, 'r'+toPortRegion, k=>k!=='land');
+}
+function findSeaZonePath(fromZone, toZone){
+  if(fromZone===toZone) return {nodes:['s'+fromZone], days:0};
+  return graphPath('s'+fromZone, 's'+toZone, k=>k==='sea');
 }
 // pre-grandeur saves were laid out on the old 2400×1600 chart — stretch them onto the new world
 function migrateSave(s){
@@ -575,6 +658,14 @@ function migrateSave(s){
     const byName={}; REGION_DEFS.forEach(d=>{ byName[d[0]]=d; });
     s.regions.forEach(r=>{ const d=byName[r.name]; if(d){ r.x=d[1]; r.y=d[2]; } });
     s.wv=3;
+  }
+  if(s.wv===3){ // real-time pass: field armies + live clock arrive; old in-flight state is just positions
+    if(!Array.isArray(s.armies)) s.armies=[];
+    (s.fleets||[]).forEach(f=>{ f.at=null; });
+    if(typeof s.day!=='number') s.day=0;
+    s.clockSpeed=0; s.clockDaysPerSec=2; s.pauseOnEvent=true;
+    if(s.seas) weldSeaNeighbors(s.seas); // the straits weld applies to old charts too
+    s.wv=4;
   }
   return s;
 }
@@ -600,7 +691,13 @@ function lanePays(a,b,ownerId){
 }
 function isBlockaded(port){
   if(!port.isPort) return false;
-  return G.fleets.some(f=>f.zone===port.seaZone && f.stance==='blockade' && f.owner!==port.owner && !allied(f.owner,port.owner));
+  // Derived from REAL harbour geometry: a hostile blockade fleet must
+  // actually be sitting at (or sailing into) this port. The blockade
+  // point is two-thirds of the way from the zone centre to the quay.
+  const z=seaById[port.seaZone]; if(!z) return false;
+  const bx=z.x+(port.x-z.x)*0.66, by=z.y+(port.y-z.y)*0.66;
+  return G.fleets.some(f=>f.stance==='blockade' && f.owner!==port.owner && atWar(f.owner,port.owner) && !allied(f.owner,port.owner) &&
+    Math.hypot(f.pos.x-bx, f.pos.y-by) < 150);
 }
 function tradeIncome(id){
   const ports=G.regions.filter(r=>r.isPort && (r.owner===id||allied(r.owner,id)));
@@ -622,6 +719,7 @@ function regionIncome(r){
 const cv=$('#map'), ctx=cv.getContext('2d');
 let view={x:0,y:0,scale:1}, DPR=1;
 let selected=null; // {type:'region'|'fleet'|'sea', id}
+let marchTarget=null; // {armyId} or {fleetId, port} — the next region/port tap is an ORDER, not a look
 let anims=[]; // {type:'wash'|'count', ...}
 window.R3=window.R3||{active:false}; // 3D diorama renderer (module sets .active when live)
 
@@ -678,6 +776,8 @@ function draw(){
   drawLanes();
   // fleets
   G.fleets.forEach(f=>drawFleet(f));
+  (G.armies||[]).forEach(drawArmy2D);
+  drawOrderHighlights();
   // animations overlay
   const now=performance.now();
   anims=anims.filter(a=>now-a.t0<a.dur);
@@ -756,15 +856,42 @@ function drawShip(x,y,s,sail){
   ctx.restore();
 }
 function drawFleet(f){
-  const z=seaById[f.zone]; const e=emp(f.owner);
+  const p=fPos(f); const e=emp(f.owner);
   const bob=Math.sin(performance.now()/900+f.id)*2*WS;
-  for(let i=0;i<Math.min(3,Math.ceil(f.ships/3));i++) drawShip(z.x+(i-1)*30*WS, z.y+bob+i*7*WS, 1.05*WS, f.owner==='player'?'#fff6dd':'#e8d5a8');
-  ctx.fillStyle=e.color; ctx.fillRect(z.x+12*WS,z.y-34*WS,40*WS,18*WS);
+  const n=Math.min(3,Math.ceil(f.ships/3));
+  for(let i=0;i<n;i++) drawShip(p.x+(i-1)*26*WS - (f.at? i*14*WS:0), p.y+bob+i*9*WS, 1.05*WS, f.owner==='player'?'#fff6dd': (f.at? '#ffffff':'#d9cba6'));
+  ctx.fillStyle=e.color; ctx.fillRect(p.x+12*WS,p.y-38*WS,44*WS,18*WS);
   ctx.fillStyle='#fff6dd'; ctx.font='bold '+(11*WS)+'px Georgia'; ctx.textAlign='center';
-  ctx.fillText('⛵'+f.ships, z.x+32*WS, z.y-21*WS); ctx.textAlign='left';
-  if(f.stance==='blockade'){ ctx.font=(14*WS)+'px serif'; ctx.fillText('⛓', z.x-30*WS, z.y-18*WS); }
+  ctx.fillText('⛵'+f.ships, p.x+34*WS, p.y-25*WS); ctx.textAlign='left';
+  if(f.stance==='blockade'){ ctx.font=(14*WS)+'px serif'; ctx.fillText('⛓', p.x-30*WS, p.y-18*WS); }
   if(selected&&selected.type==='fleet'&&selected.id===f.id){ ctx.strokeStyle='#fff3d0'; ctx.lineWidth=3*WS;
-    ctx.beginPath(); ctx.ellipse(z.x,z.y,58*WS,34*WS,0,0,Math.PI*2); ctx.stroke(); }
+    ctx.beginPath(); ctx.ellipse(p.x,p.y,58*WS,34*WS,0,0,Math.PI*2); ctx.stroke(); }
+}
+function drawArmy2D(a){
+  const p=a.at? a.at.pos : (rById[a.atRegion]? {x:rById[a.atRegion].x, y:rById[a.atRegion].y} : null);
+  if(!p) return;
+  const e=emp(a.owner);
+  if(a.at && a.owner==='player'){ // the road it walks, drawn in gold
+    ctx.strokeStyle='rgba(255,215,106,.85)'; ctx.lineWidth=2.4*WS; ctx.setLineDash([7*WS,5*WS]);
+    ctx.beginPath(); ctx.moveTo(rById[a.fromRegion].x, rById[a.fromRegion].y); ctx.lineTo(p.x,p.y); ctx.lineTo(rById[a.destRegion].x, rById[a.destRegion].y); ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.fillStyle='#3a2c16'; ctx.fillRect(p.x-8*WS, p.y+2*WS, 16*WS, 5*WS);            // standard base
+  ctx.strokeStyle='#3a2812'; ctx.lineWidth=2*WS; ctx.beginPath(); ctx.moveTo(p.x, p.y+4*WS); ctx.lineTo(p.x, p.y-16*WS); ctx.stroke(); // pole
+  ctx.fillStyle=e.color; ctx.fillRect(p.x, p.y-16*WS, 14*WS, 9*WS);                    // banner
+  ctx.fillStyle=e.color; ctx.fillRect(p.x-20*WS, p.y-34*WS, 46*WS, 16*WS);           // chip
+  ctx.fillStyle='#fff6dd'; ctx.font='bold '+(10.5*WS)+'px Georgia'; ctx.textAlign='center';
+  ctx.fillText('🪖'+(a.men>=1000? Math.round(a.men/100)/10+'k' : a.men), p.x+3*WS, p.y-22*WS); ctx.textAlign='left';
+}
+function drawOrderHighlights(){
+  const t=performance.now()/500;
+  if(window.__marchArmyId!=null){ const a=G.armies.find(x=>x.id===window.__marchArmyId); if(a&&!a.at){
+    if(!window.__hlCache || window.__hlCache.key!==a.id+'@'+a.atRegion){ const set=new Set(); G.regions.forEach(r=>{ if(r.id!==a.atRegion && findLandPath(a.atRegion,r.id)) set.add(r.id); }); window.__hlCache={key:a.id+'@'+a.atRegion, set}; }
+    window.__hlCache.set.forEach(id=>{ const r=rById[id]; const hostile=r.owner&&r.owner!=='player'&&!allied('player',r.owner);
+      ctx.strokeStyle=hostile?'rgba(224,86,60,.9)':'rgba(255,215,106,.9)'; ctx.lineWidth=2.5*WS;
+      ctx.beginPath(); ctx.arc(r.x,r.y,(26+Math.sin(t*3+id)*3)*WS,0,Math.PI*2); ctx.stroke(); });
+  }}
+  if(window.__marchFleetId!=null){ ctx.strokeStyle='rgba(159,216,255,.9)'; ctx.lineWidth=2.5*WS;
+    G.regions.filter(r=>r.isPort).forEach(r=>{ ctx.beginPath(); ctx.arc(r.x,r.y,(26+Math.sin(t*3+r.id)*3)*WS,0,Math.PI*2); ctx.stroke(); }); }
 }
 function drawLanes(){
   const drawn=new Set();
@@ -815,12 +942,15 @@ $('#zoom-out').onclick=()=>{ if(window.R3&&window.R3.active) R3.zoomBy(1/1.3); e
 $('#zoom-home').onclick=()=>{ if(window.R3&&window.R3.active) R3.home(); else fitWorld(); };
 
 function handleTap(cx,cy){
+  // an outstanding order outranks sightseeing: the next tap is a COMMAND
+  if(marchTarget){ resolveOrderTap(cx,cy); return; }
   const now=Date.now();
   if(window.R3&&window.R3.active){ // 3D picking: projected centres, clarity-first
     if(now-lastTap<320){ R3.zoomBy(1.5); lastTap=0; return; } lastTap=now;
     const hit=R3.pick(cx,cy);
     if(!hit){ closeSheet(); return; }
     if(hit.type==='fleet') selectFleet(G.fleets.find(f=>f.id===hit.id));
+    else if(hit.type==='army'){ const a=G.armies.find(x=>x.id===hit.id); if(a){ if(a.at){ toast('🪖 '+a.name+' is marching on '+rById[a.destRegion].name+' — ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days out'); } else selectRegion(rById[a.atRegion]); } }
     else if(hit.type==='region') selectRegion(rById[hit.id]);
     else if(hit.type==='sea') selectSea(seaById[hit.id]);
     return;
@@ -828,7 +958,7 @@ function handleTap(cx,cy){
   const [wx,wy]=s2w(cx,cy);
   if(now-lastTap<320){ zoomAt(cx,cy,view.scale*1.5); lastTap=0; return; } lastTap=now;
   // fleet?
-  for(const f of G.fleets){ const z=seaById[f.zone]; if(Math.hypot(f.x||z.x-wx, z.y-wy)<70*WS){ selectFleet(f); return; } }
+  for(const f of G.fleets){ const p=fPos(f); if(Math.hypot(p.x-wx, p.y-wy)<70*WS){ selectFleet(f); return; } }
   // region?
   let best=null,bd=1e9;
   G.regions.forEach(r=>{ const d=Math.hypot(r.x-wx,r.y-wy); if(d<bd){bd=d;best=r;} });
@@ -838,10 +968,42 @@ function handleTap(cx,cy){
   closeSheet();
 }
 
+// where did the commanding tap land? (same hit logic as handleTap, both renderers)
+function resolveOrderTap(cx,cy){
+  let hit=null;
+  if(window.R3&&window.R3.active){ const h=R3.pick(cx,cy); if(h) hit=h; }
+  else {
+    const [wx,wy]=s2w(cx,cy);
+    for(const f of G.fleets){ const p=fPos(f); if(Math.hypot(p.x-wx,p.y-wy)<70*WS){ hit={type:'fleet',id:f.id}; break; } }
+    if(!hit){ let best=null,bd=1e9; G.regions.forEach(r=>{ const d=Math.hypot(r.x-wx,r.y-wy); if(d<bd){bd=d;best=r;} });
+      if(best&&bd<130*WS) hit={type:'region',id:best.id}; }
+    if(!hit){ for(const z of G.seas){ if(Math.hypot(z.x-wx,z.y-wy)<120*WS){ hit={type:'sea',id:z.id}; break; } } }
+  }
+  const mt=marchTarget; marchTarget=null; window.__marchArmyId=null; window.__marchFleetId=null; clearOrderHint();
+  if(mt.armyId!=null){
+    const a=G.armies.find(x=>x.id===mt.armyId);
+    if(!a) return;
+    if(hit && hit.type==='region' && hit.id!==a.atRegion){ orderMarch(a, rById[hit.id]); }
+    else { selectRegion(rById[a.atRegion]); toast('March order cancelled.'); }
+    return;
+  }
+  if(mt.fleetId!=null){
+    const f=G.fleets.find(x=>x.id===mt.fleetId);
+    if(!f) return;
+    if(hit && hit.type==='region'){ const r=rById[hit.id];
+      if(r.isPort){ orderSailPort(f, r); return; }
+      selectFleet(f); toast(r.name+' has no port — tap a port (⚓) or open sea.');
+    } else if(hit && hit.type==='sea'){ orderSailZone(f, seaById[hit.id]); }
+    else { selectFleet(f); toast('Sailing order cancelled.'); }
+  }
+}
+
 /* ================= ACTION SHEETS ================= */
 const sheet=$('#sheet');
 function openSheet(){ sheet.classList.add('open'); const h=$('#hint'); if(h) h.classList.remove('show'); }
-function closeSheet(){ sheet.classList.remove('open'); selected=null; setTimeout(()=>{ if(window.updateHint) updateHint(); },60); }
+function closeSheet(){ sheet.classList.remove('open'); selected=null;
+  if(marchTarget){ marchTarget=null; window.__marchArmyId=null; window.__marchFleetId=null; clearOrderHint(); }
+  setTimeout(()=>{ if(window.updateHint && !marchTarget) updateHint(); },60); }
 $('#sheet-close').onclick=closeSheet;
 function statRow(items){ return items.map(([k,v])=>'<span class="stat">'+k+' <b>'+v+'</b></span>').join(''); }
 function actBtn(t,d,fn,cls,dis){
@@ -855,16 +1017,525 @@ function actBtn(t,d,fn,cls,dis){
 }
 function regionCost(r){ return ''; }
 
+function orderMarch(a, dest){
+  const from=rById[a.atRegion];
+  if(!from || from.owner!==a.owner){ toast('That army\'s ground is lost — order rescinded.'); return false; }
+  const path=findLandPath(a.atRegion, dest.id);
+  if(!path || !path.days){ toast('No land road from '+from.name+' to '+dest.name+'.'); return false; }
+  const eta=Math.max(1, Math.round(path.days));
+  a.path=path.nodes; a.destRegion=dest.id; a.fromRegion=a.atRegion;
+  a.departDay=G.day; a.arriveDay=G.day+eta; a.daysTotal=eta;
+  a.holdUntil=null;
+  a.at={ pos:{x:from.x, y:from.y}, fromNode:path.nodes[0], toNode:path.nodes[1]||path.nodes[0], legDepart:G.day, legArrive:G.day };
+  // compute the first leg's arrival properly (legs split proportionally by edge days)
+  a.legIndex=1; computeLeg(a);
+  if(a.owner==='player'){
+    toast('🚶 '+a.name+' marches on '+dest.name+' — ~'+eta+' days\' road');
+    pushEvent('🚶 <b>'+a.name+'</b> marches on '+dest.name+' — arrives in ~'+eta+' days.');
+    coachAdvance(1);
+  }
+  a.stance='field'; save(); return true;
+}
+function computeLeg(a){
+  // a.path nodes [n0..nk]; a.legIndex points at current target node
+  if(a.legIndex===undefined) a.legIndex=1;
+  const i=a.legIndex;
+  if(i>=a.path.length){ a.at=null; return; }
+  const fromN=WORLD_GRAPH.nodes[a.path[i-1]], toN=WORLD_GRAPH.nodes[a.path[i]];
+  const edgeDays=Math.max(0.5, Math.hypot(fromN.x-toN.x, fromN.y-toN.y)/TRAVEL.marchPerDay);
+  a.at.fromNode=a.path[i-1]; a.at.toNode=a.path[i];
+  a.at.legDepart=G.day; a.at.legDays=edgeDays; a.at.legArrive=G.day+edgeDays;
+  a.at.fromPos={x:fromN.x, y:fromN.y}; a.at.toPos={x:toN.x, y:toN.y};
+  a.at.pos={x:fromN.x, y:fromN.y};
+}
+function orderSailZone(f, destZone){
+  if(f.zone===destZone.id && !f.at){ toast(f.name+' is already on the '+destZone.name+'.'); return false; }
+  const path=findSeaZonePath(f.zone, destZone.id);
+  if(!path || !path.days){ toast('No sailing road to the '+destZone.name+'.'); return false; }
+  startFleetSail(f, path);
+  if(f.owner==='player'){ toast('⛵ '+f.name+' makes sail for the '+destZone.name); pushEvent('⛵ <b>'+f.name+'</b> sails for the '+destZone.name+'.'); }
+  save(); return true;
+}
+function orderSailPort(f, port){
+  if(!port.isPort) return false;
+  // a blockade is an act of war — peacetime squadrons anchor, they do not strangle
+  const hostile = port.owner && port.owner!==f.owner && !allied(f.owner, port.owner) && atWar(f.owner, port.owner);
+  const path=findSeaPath(f.zone, port.id);
+  if(!path){ toast('No sailing road to '+port.name+'.'); return false; }
+  startFleetSail(f, path, port.id);
+  if(f.owner==='player'){
+    toast(hostile? '⛓ '+f.name+' sails to blockade '+port.name+'…' : '⛵ '+f.name+' sails for '+port.name);
+    pushEvent(hostile? '⛓ <b>'+f.name+'</b> weighs anchor to blockade '+port.name+'.' : '⛵ <b>'+f.name+'</b> sails for '+port.name+'.');
+  }
+  save(); return true;
+}
+/* ---- where is LAND, for routing ships around it (coastline polygons, world coords) ---- */
+let LAND_SUB=null;
+function landPolys(){
+  if(LAND_SUB) return LAND_SUB;
+  LAND_SUB=LAND_PATHS.map(p=>{ const s=[]; for(let i=0;i<p.length;i+=3) s.push(p[i]); if(s.length<3) return p; return s; });
+  return LAND_SUB;
+}
+function onLandWorld(x, y){
+  for(const poly of landPolys()){
+    let inside=false;
+    for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+      const xi=poly[i][0], yi=poly[i][1], xj=poly[j][0], yj=poly[j][1];
+      if(((yi>y)!==(yj>y)) && (x<(xj-xi)*(y-yi)/(yj-yi)+xi)) inside=!inside;
+    }
+    if(inside) return true;
+  }
+  return G.regions.some(r=>r.group==='I' && ((x-r.x)/(95*WS))**2 + ((y-r.y)/(70*WS))**2 < 1);
+}
+function seaCtrl(A, B){
+  // choose a curve control point whose sampled arc stays off land — ships round coasts, they don't cross them
+  const mx=(A.x+B.x)/2, my=(A.y+B.y)/2;
+  const len=Math.hypot(B.x-A.x, B.y-A.y)||1;
+  const px=-(B.y-A.y)/len, py=(B.x-A.x)/len; // perpendicular
+  const hits=(cx,cy)=>{ let h=0; for(let i=0;i<=8;i++){ const p=i/8, q=1-p;
+    const x=q*q*A.x + 2*q*p*cx + p*p*B.x, y=q*q*A.y + 2*q*p*cy + p*p*B.y; if(onLandWorld(x,y)) h++; } return h; };
+  let best={x:mx, y:my}, bestH=hits(mx,my);
+  if(bestH===0) return best;
+  [0.18, 0.34, 0.5].forEach(mag=>{
+    [1,-1].forEach(sgn=>{
+      const cx=mx+px*len*mag*sgn, cy=my+py*len*mag*sgn;
+      const h=hits(cx,cy);
+      if(h<bestH){ bestH=h; best={x:cx, y:cy}; }
+    });
+  });
+  return best;
+}
+function startFleetSail(f, path, destPortId){
+  const legs=[];
+  for(let i=1;i<path.nodes.length;i++){
+    const A=WORLD_GRAPH.nodes[path.nodes[i-1]], B=WORLD_GRAPH.nodes[path.nodes[i]];
+    const edgeDays=Math.max(0.4, Math.hypot(A.x-B.x, A.y-B.y)/TRAVEL.sailPerDay);
+    legs.push({to:path.nodes[i], days:edgeDays, fromPos:{x:A.x,y:A.y}, toPos:{x:B.x,y:B.y}, ctrl:seaCtrl(A,B)});
+  }
+  const total=legs.reduce((s,l)=>s+l.days,0);
+  const z=seaById[f.zone];
+  f.at={ pos:{x:f.pos.x||z.x, y:f.pos.y||z.y}, legs, legIndex:0, legDepart:G.day,
+           departDay:G.day, arriveDay:G.day+total, daysTotal:total,
+           destPort:(destPortId!=null? destPortId : null), destZone:(destPortId!=null? null : (path.nodes[path.nodes.length-1].startsWith('s')? +path.nodes[path.nodes.length-1].slice(1) : null)) };
+  f.at.legArrive=G.day+legs[0].days;
+}
+function fleetDistanceTo(f, x, y){ const p=fPos(f); return Math.hypot(p.x-x, p.y-y); }
+
+/* ============================================================
+   REAL-TIME CORE — the living clock.
+   Days flow; armies march and fleets sail on timestamped legs
+   (departDay/arriveDay — never per-frame AI). Seasons still land
+   every 90 days and run the old economy; empires think monthly.
+   ============================================================ */
+function newUnitId(){ return uidSeq++; }
+function ensureIds(){
+  let m=0;
+  (G.armies||[]).forEach(a=>{ m=Math.max(m, a.id||0); });
+  (G.fleets||[]).forEach(f=>{ m=Math.max(m, f.id||0); });
+  uidSeq=m+1;
+  (G.armies||[]).forEach(a=>{ if(!a.id) a.id=newUnitId(); });
+}
+function formArmy(r, men){
+  if(!r || r.troops<men+500){ if(r && r.owner==='player') toast(r.name+' must keep 500 men as garrison — muster more first.'); return null; }
+  r.troops-=men;
+  const n=(G.armies||[]).filter(a=>a.owner===r.owner).length;
+  const a={ id:newUnitId(), owner:r.owner, men, atRegion:r.id, at:null, path:null, destRegion:null,
+    stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0,
+    name:(r.owner==='player'? 'Royal Army ' : emp(r.owner).name.split(' ')[0]+' Host ')+(n+1) };
+  G.armies.push(a);
+  if(r.owner==='player'){ toast('🪖 '+a.name+' forms at '+r.name+' — '+fmt(men)+' men under one banner'); pushEvent('🪖 <b>'+a.name+'</b> mustered at '+r.name+'.'); selectRegion(r); }
+  save(); return a;
+}
+function armiesAt(regionId){ return (G.armies||[]).filter(a=>a.atRegion===regionId); }
+function dayStamp(){ return 'Day '+Math.floor(G.day%90+1)+' · '+seasonName(); }
+function pushEvent(html){
+  tickerLines.unshift({html, t:Date.now()});
+  if(tickerLines.length>5) tickerLines.length=5;
+  renderTicker();
+}
+function renderTicker(){
+  const el=document.getElementById('ticker'); if(!el) return;
+  el.innerHTML=tickerLines.map(l=>'<div class="tick-line">'+l.html+'</div>').join('');
+}
+function nearestPortRegion(zoneId){ const z=seaById[zoneId]; if(!z) return null;
+  const list=z.ports.map(id=>rById[id]); return list.length? list[0] : null; }
+
+/* ---- simulation pause for moments that matter ---- */
+let eventPaused=false;
+function simPauseEvent(){
+  if(eventPaused) return; eventPaused=true;
+  const sw=document.getElementById('clock-state'); if(sw) sw.textContent='⏸ At your command';
+}
+function simResumeFromEvent(){ eventPaused=false; refreshClockUI(); }
+
+/* ---- arrival resolution: armies ---- */
+function armyArrive(a){
+  const dest=rById[a.destRegion]; a.at=null; a.path=null;
+  if(!dest){ G.armies=G.armies.filter(x=>x.id!==a.id); return; }
+  const wasOwn = dest.owner===a.owner;
+  a.atRegion=dest.id;
+  if(wasOwn || allied(dest.owner, a.owner)){
+    if(a.owner==='player'){ toast('🪖 '+a.name+' has reached '+dest.name+' — '+fmt(a.men)+' men stand ready'); pushEvent('🪖 <b>'+a.name+'</b> reached '+dest.name+'.'); coachAdvance(1); }
+    else if(aiSeesPlayer(a)) pushEvent('⚠ '+emp(a.owner).name+' army ('+fmt(a.men)+') is on your border at '+dest.name+'.');
+    finishArrival(a); return;
+  }
+  // hostile ground: war required vs a rival empire, free towns are fair game
+  if(dest.owner && !atWar(a.owner, dest.owner)){
+    // politics changed en route — the army camps on the border instead of attacking
+    a.atRegion=a.fromRegion; const home=rById[a.fromRegion];
+    if(home && home.owner===a.owner){ a.atRegion=home.id; }
+    if(a.owner==='player'){ toast('🕊 Peace now — '+a.name+' camps short of '+dest.name+'.'); pushEvent('🕊 <b>'+a.name+'</b> halted at the '+dest.name+' border — peace prevails.'); }
+    finishArrival(a); return;
+  }
+  resolveArmyBattle(a, dest);
+}
+function finishArrival(a){ /* stance persists ('hold' honours a pre-set dig-in order) */ }
+function resolveArmyBattle(a, dest){
+  const atkBefore=a.men, defBefore=dest.troops, prevOwner=dest.owner;
+  const res=battle(a.owner, a.men, dest);
+  const survivors=a.men-res.aLoss;
+  dest.troops=Math.max(0, dest.troops-res.dLoss);
+  const involvedPlayer = a.owner==='player' || prevOwner==='player';
+  if(res.win){
+    // taking ground costs a garrison, not the whole host: a big army leaves a watch behind and MARCHES ON
+    const garrisonTake = survivors>=1400? Math.max(400, Math.round(survivors/3)) : survivors;
+    const newGarrison=Math.max(300, garrisonTake);
+    dest.owner=a.owner; dest.troops=newGarrison;
+    if(survivors-garrisonTake>=1000){ a.men=survivors-garrisonTake; a.atRegion=dest.id; a.destRegion=null; }
+    else G.armies=G.armies.filter(x=>x.id!==a.id);
+    if(prevOwner && prevOwner!==a.owner) checkCapitalLoss(prevOwner);
+    if(a.owner==='player'){
+      const spoils=prevOwner? 120+dest.tier*60 : 40;
+      emp('player').gold+=spoils;
+      gazette('⚔ <b>'+dest.name+' has fallen!</b> '+a.name+' takes the '+['hamlet','town','city','great port'][dest.tier]+' — '+fmt(res.aLoss)+' of yours and '+fmt(res.dLoss)+' defenders fell. Spoils of '+fmt(spoils)+'g pour into your treasury.');
+      toast('🏴 '+dest.name+' is yours! +'+fmt(spoils)+'g spoils');
+      pushEvent('🏴 <b>'+dest.name+' taken!</b> '+a.name+' prevails — spoils +'+fmt(spoils)+'g.');
+      showBattle(a.name, atkBefore, dest.name, defBefore, res, true, 'Spoils: +'+fmt(spoils)+'g · '+dest.name+' flies your colours. '+(G.armies.some(x=>x.id===a.id)? a.name+' marches on with '+fmt(a.men)+' men.' : 'The host settles in as its garrison.'));
+      coachAdvance(1); simPauseEvent();
+    } else {
+      if(prevOwner==='player'){ gazette('⚔ <b>'+emp(a.owner).name+' has taken '+dest.name+'!</b> '+fmt(res.dLoss)+' of your garrison fell holding it.'); pushEvent('⚔ <b>'+dest.name+' lost!</b> '+emp(a.owner).name+' storms the town.'); simPauseEvent(); }
+      else gazette('⚔ '+emp(a.owner).name+' takes '+dest.name+(prevOwner? ' from '+emp(prevOwner).name : '')+'.');
+    }
+    if(window.animsPush) anims.push(null); // 2D wash handled via flashUntil (cheap, renderer-agnostic)
+    dest.flashUntil=performance.now()+1200;
+  } else {
+    dest.troops=Math.max(200, dest.troops);
+    if(survivors>300){
+      // remnants fall back to the last friendly ground (or disband at the border)
+      const back=rById[a.fromRegion];
+      if(back && (back.owner===a.owner||allied(back.owner,a.owner))){ a.men=survivors; a.atRegion=back.id; a.at=null; a.path=null; }
+      else G.armies=G.armies.filter(x=>x.id!==a.id);
+    } else G.armies=G.armies.filter(x=>x.id!==a.id);
+    if(a.owner==='player'){
+      gazette('⚔ <b>Repulsed at '+dest.name+'.</b> '+a.name+' broke against the defences — '+fmt(res.aLoss)+' men lost.');
+      toast('Repulsed at '+dest.name+' — '+fmt(res.aLoss)+' lost');
+      pushEvent('⚔ <b>Repulsed at '+dest.name+'</b> — the host falls back.');
+      showBattle(a.name, atkBefore, dest.name, defBefore, res, false, survivors>300?'The remnants fall back to '+rById[a.fromRegion].name+'. Reinforce and try again.':'The host is scattered. Muster anew.');
+      simPauseEvent();
+    } else if(prevOwner==='player'){
+      gazette('⚔ Your garrison at <b>'+dest.name+'</b> bloodied a '+emp(a.owner).name+' assault — '+fmt(res.dLoss)+' attackers fell.');
+      pushEvent('🛡 <b>'+dest.name+' holds!</b> The assault breaks on your walls.');
+      showBattle(emp(a.owner).name+' host', atkBefore, dest.name, defBefore, res, false, 'Your garrison holds '+dest.name+'.');
+      simPauseEvent();
+    }
+  }
+  refreshHUD();
+}
+/* ---- fleets holding a harbour mouth ---- */
+function fleetsOffPort(port){
+  const z=seaById[port.seaZone]; if(!z) return [];
+  const bx=z.x+(port.x-z.x)*(2/3), by=z.y+(port.y-z.y)*(2/3);
+  return G.fleets.filter(f=>!f.at && f.ships>0 && Math.hypot(fPos(f).x-bx, fPos(f).y-by)<200);
+}
+function navalBattle(a, d, port){
+  // squadron action off a harbour mouth — ships and gunnery (tech) decide
+  const aP=a.ships*(1+emp(a.owner).shipTech*0.4)*rr(0.85,1.2);
+  const dP=d.ships*(1+emp(d.owner).shipTech*0.4)*rr(0.85,1.2);
+  const total=aP+dP||1;
+  const aLoss=Math.min(a.ships, Math.round(a.ships*(dP/total)*rr(0.5,0.95)));
+  const dLoss=Math.min(d.ships, Math.round(d.ships*(aP/total)*rr(0.5,0.95)));
+  a.ships-=aLoss; d.ships-=dLoss;
+  const aWon=aP>dP;
+  const involvedPlayer = a.owner==='player' || d.owner==='player';
+  if(involvedPlayer){
+    const mine = a.owner==='player'? a : d;
+    const won = a.owner==='player'? aWon : !aWon;
+    showBattle((a.owner==='player'? a.name : emp(a.owner).name+' squadron'), a.ships+aLoss, port.name, d.ships+dLoss,
+      {aLoss:aLoss*100, dLoss:dLoss*100}, won,
+      won? 'The water off '+port.name+' is yours — '+(aWon? 'the blockade squadron is scattered.' : 'the blockade is broken!')
+         : 'Your squadron breaks off, mauled. '+(mine.ships>0? mine.ships+' ships limp away.' : 'No sail returns.'));
+    simPauseEvent();
+  }
+  // wrecks yield nothing but clear water: dead squadrons leave the board
+  [a,d].forEach(f=>{ if(f.ships<=0){ G.fleets=G.fleets.filter(x=>x.id!==f.id); if(f.owner==='player') gazette('⚓ <b>Your '+f.name+' is lost</b> off '+port.name+'.'); } });
+  // a beaten squadron that still floats does not keep its station — it runs for home water
+  const loser = aWon? d : a;
+  if(loser.ships>0 && G.fleets.includes(loser)){
+    const ownPorts=G.regions.filter(r=>r.isPort && r.owner===loser.owner);
+    const homeZone=ownPorts.length? ownPorts[0].seaZone : null;
+    if(homeZone!=null && homeZone!==loser.zone){
+      const p=findSeaZonePath(loser.zone, homeZone);
+      if(p){ startFleetSail(loser, p); loser.stance='patrol'; }
+    }
+  }
+  if(a.owner==='player' || d.owner==='player' || port.owner==='player')
+    pushEvent('⚓ <b>Sea battle off '+port.name+'!</b> '+(aWon? emp(a.owner).name+' holds the water.' : emp(d.owner).name+' holds the water.'));
+  return aWon;
+}
+/* ---- arrival resolution: fleets ---- */
+function fleetArrive(f){
+  const destPortId=f.at.destPort;
+  f.at=null;
+  if(destPortId!=null){
+    const port=rById[destPortId];
+    const z=seaById[port.seaZone];
+    f.zone=port.seaZone;
+    // a squadron making port does not park at the zone's middle — it anchors off the harbour mouth
+    f.pos={x: z.x+(port.x-z.x)*0.66, y: z.y+(port.y-z.y)*0.66};
+    f.node='r'+destPortId;
+    // contested water: another crown's squadron already sits off this harbour — fight for the roadstead
+    const rivals=fleetsOffPort(port).filter(x=>x.id!==f.id && x.owner!==f.owner && !allied(f.owner, x.owner));
+    if(rivals.length){
+      rivals.sort((x,y)=>y.ships-x.ships);
+      const won=navalBattle(f, rivals[0], port);
+      if(!G.fleets.includes(f)){ syncUnits(); refreshHUD(); return; } // sunk with all hands
+      if(!won){ f.stance='patrol'; if(f.owner==='player') toast('Driven off '+port.name+' — their guns hold the harbour'); syncUnits(); refreshHUD(); return; }
+    }
+    const hostile = port.owner && port.owner!==f.owner && !allied(f.owner, port.owner) && atWar(f.owner, port.owner);
+    if(hostile){
+      f.stance='blockade';
+      if(f.owner==='player'){ toast('⛓ '+port.name+' is BLOCKADED — its trade dies while you hold'); pushEvent('⛓ <b>'+port.name+' blockaded.</b> Your squadron seals the harbour.'); simPauseEvent(); }
+      else if(port.owner==='player'){ toast('⛓ '+emp(f.owner).name+' is blockading '+port.name+'!'); pushEvent('⛓ <b>'+port.name+' blockaded!</b> '+emp(f.owner).name+' seals your harbour.'); showBattle(f.name, f.ships*100, port.name, 0, {aLoss:0,dLoss:0}, false, emp(f.owner).name+' has sealed '+port.name+'. Send a fleet to break it.'); simPauseEvent(); }
+      else gazette('⛓ '+emp(f.owner).name+' blockades '+port.name+'.');
+    } else {
+      f.stance='patrol';
+      if(f.owner==='player'){ if(port.owner && port.owner!=='player'){ toast('⚓ '+f.name+' anchors off '+port.name+' — at peace, no blockade (declare war in Realm to strangle it)'); pushEvent('⚓ <b>'+f.name+'</b> anchors off '+port.name+', colours friendly.'); } else { toast('⚓ '+f.name+' anchors off '+port.name); pushEvent('⚓ <b>'+f.name+'</b> anchors off '+port.name+'.'); } }
+    }
+  } else {
+    // arrived at a sea zone: apply remembered stance intent
+    if(f.stance!=='blockade') f.stance=f.stance;
+  }
+  syncUnits(); refreshHUD();
+}
+
+/* ---- positions from timestamps (cheap, exact) ---- */
+function syncPositions(){
+  (G.armies||[]).forEach(a=>{
+    if(!a.at) return;
+    const p=a.at.legDays>0? clamp((G.day-a.at.legDepart)/a.at.legDays, 0, 1) : 1;
+    a.at.pos={ x:a.at.fromPos.x+(a.at.toPos.x-a.at.fromPos.x)*p, y:a.at.fromPos.y+(a.at.toPos.y-a.at.fromPos.y)*p };
+  });
+  (G.fleets||[]).forEach(f=>{
+    if(!f.at) return;
+    const leg=f.at.legs[f.at.legIndex];
+    if(leg){ const p=leg.days>0? clamp((G.day-f.at.legDepart)/leg.days, 0, 1) : 1;
+      if(leg.ctrl){ // quadratic coastal curve
+        const q=1-p;
+        f.at.pos={ x:q*q*leg.fromPos.x + 2*q*p*leg.ctrl.x + p*p*leg.toPos.x,
+                   y:q*q*leg.fromPos.y + 2*q*p*leg.ctrl.y + p*p*leg.toPos.y };
+      } else f.at.pos={ x:leg.fromPos.x+(leg.toPos.x-leg.fromPos.x)*p, y:leg.fromPos.y+(leg.toPos.y-leg.fromPos.y)*p }; }
+  });
+}
+
+/* ---- interception: a held army blocks the road ---- */
+function interceptCheck(){
+  const holders=(G.armies||[]).filter(a=>a.stance==='hold' && !a.at);
+  if(!holders.length) return;
+  (G.armies||[]).slice().forEach(e=>{
+    if(!e.at) return;
+    holders.forEach(h=>{
+      if(h.owner===e.owner || allied(h.owner, e.owner) || !atWar(h.owner, e.owner)) return;
+      const hr=rById[h.atRegion]; if(!hr) return;
+      if(Math.hypot(e.at.pos.x-hr.x, e.at.pos.y-hr.y) > 200) return;
+      if(e.foughtDay===Math.floor(G.day) || h.foughtDay===Math.floor(G.day)) return;
+      e.foughtDay=h.foughtDay=Math.floor(G.day);
+      // the marcher is CAUGHT — battle on open ground (no fort/wall aid for either)
+      resolveIntercept(h, e, hr);
+    });
+  });
+}
+function resolveIntercept(h, e, hr){
+  const aP=h.men*(1+(h.owner?emp(h.owner).armyTech*0.35:0))*rr(0.85,1.2);
+  const dP=e.men*(1+(e.owner?emp(e.owner).armyTech*0.3:0))*rr(0.85,1.2);
+  const total=aP+dP||1;
+  const hLoss=Math.round(h.men*(dP/total)*rr(0.5,0.9)), eLoss=Math.round(e.men*(aP/total)*rr(0.5,0.9));
+  const holderWins=aP>dP;
+  const involvedPlayer = h.owner==='player' || e.owner==='player';
+  if(holderWins){
+    h.men=Math.max(0, h.men-hLoss); e.men=Math.max(0, e.men-eLoss);
+    // marcher stopped dead — survivors retreat to origin
+    const back=rById[e.fromRegion];
+    e.at=null; e.path=null;
+    if(e.men>300 && back && (back.owner===e.owner||allied(back.owner,e.owner))){ e.atRegion=back.id; }
+    else G.armies=G.armies.filter(x=>x.id!==e.id);
+    if(h.men<200) G.armies=G.armies.filter(x=>x.id!==h.id);
+  } else {
+    e.men=Math.max(0, e.men-eLoss); h.men=Math.max(0, h.men-hLoss);
+    if(h.men>300){ const back=rById[h.atRegion]; h.at=null; G.armies=G.armies.filter(x=>x.id!==h.id); if(back) back.troops+=h.men; }
+    else G.armies=G.armies.filter(x=>x.id!==h.id);
+    // marcher fights THROUGH and continues (position kept)
+  }
+  if(involvedPlayer){
+    pushEvent('🛡 <b>Road battle at '+hr.name+'!</b> '+(holderWins? 'The blocking army stops the march.' : 'The marcher fights through the block.'));
+    if(e.owner==='player' || h.owner==='player') simPauseEvent();
+    gazette('🛡 <b>Armies clash on the '+hr.name+' road.</b> '+(holderWins? emp(h.owner).name+' holds the pass; the invading column falls back.' : emp(e.owner).name+' smashes through the blocking line.'));
+  }
+  refreshHUD();
+}
+
+/* ---- the clock itself ---- */
+function rtAdvanceDays(days){
+  if(!G || G.over || !days || days<=0) return;
+  const targetDay=G.day+days;
+  let guard=0;
+  while(G.day<targetDay && !G.over && guard++<20000){
+    G.day+=1;
+    // season seam: every 90 days the old economy breathes
+    if(Math.floor(G.day)%90===0){ endSeason(); if(G.over) break; }
+    // imperial staffs think monthly
+    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); detectWarnings(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
+    // arrivals (timestamp-exact)
+    (G.armies||[]).slice().forEach(a=>{ if(a.at && G.day>=a.arriveDay-1e-9) armyArrive(a); });
+    (G.fleets||[]).slice().forEach(f=>{ if(f.at && G.day>=f.at.arriveDay-1e-9) fleetArrive(f); });
+    // marching legs roll forward
+    (G.armies||[]).forEach(a=>{
+      if(!a.at) return;
+      while(a.at && G.day>=a.at.legArrive && a.legIndex<a.path.length){
+        a.legIndex++; if(a.legIndex>=a.path.length){ break; }
+        computeLeg(a);
+      }
+    });
+    (G.fleets||[]).forEach(f=>{
+      if(!f.at) return;
+      while(f.at && G.day>=f.at.legArrive && f.at.legIndex<f.at.legs.length-1){
+        f.at.legIndex++; f.at.legDepart=G.day; f.at.legArrive=G.day+f.at.legs[f.at.legIndex].days;
+      }
+    });
+    interceptCheck();
+    if(Math.floor(G.day)%15===0) save();
+  }
+  syncPositions();
+  refreshClockUI();
+}
+function crownAlertPending(){ return G.crownQueue.some(q=>q.urgent); }
+function aiSeesPlayer(a){ return rById[a.atRegion] && myRegions().some(r=>r.neighbors.includes(a.atRegion)); }
+
+/* ---- clock driver (one rAF-independent pump so the 2D fallback breathes too) ---- */
+function startClockLoop(){
+  if(simRunning) return; simRunning=true;
+  const pump=(now)=>{
+    requestAnimationFrame(pump);
+    if(!lastFrameMs) lastFrameMs=now;
+    const dtReal=Math.min(1000, now-lastFrameMs); lastFrameMs=now;
+    if(!G || G.over || eventPaused) return;
+    if(anyVeilOpen()) return;
+    const spd=G.clockSpeed||0;
+    if(spd<=0) return;
+    const daysFloat=spd*dtReal/1600;
+    clockBucket+=daysFloat;
+    if(clockBucket>=1){ const whole=Math.floor(clockBucket); clockBucket-=whole; rtAdvanceDays(whole); }
+  };
+  requestAnimationFrame(pump);
+}
+function anyVeilOpen(){ return !!document.querySelector('.veil.open'); }
+function setClock(speed){
+  if(!G) return;
+  if(speed==='pause'){ G.clockSpeed=0; }
+  else G.clockSpeed=speed;
+  refreshClockUI(); save();
+}
+function toggleEventPause(on){ if(!G) return; G.pauseOnEvent=!!on; refreshClockUI(); save(); }
+function refreshClockUI(){
+  const d=document.getElementById('clock-date'); if(!d || !G) return;
+  d.textContent='📅 '+seasonName()+' · Day '+Math.floor(G.day%90+1);
+  const st=document.getElementById('clock-state');
+  const spd=G.clockSpeed||0;
+  if(st && !eventPaused) st.textContent = spd===0? '⏸ Paused' : (spd===2? '▶ Flowing' : spd===4? '▶▶ Flowing fast' : spd===8? '▶▶▶ Full sail' : '▶ Flowing');
+  ['clock-pause','clock-1','clock-2','clock-4'].forEach(id=>{
+    const b=document.getElementById(id); if(!b) return;
+    const mine = (id==='clock-pause'&&spd===0)||(id==='clock-1'&&spd===2)||(id==='clock-2'&&spd===4)||(id==='clock-4'&&spd===8);
+    b.classList.toggle('active', mine);
+  });
+  const tg=document.getElementById('clock-autopause'); if(tg) tg.checked=!!G.pauseOnEvent;
+}
+
+/* ---- imperial staffs: monthly military orders on the same rules as the player ---- */
+function aiMonthlyOps(){
+  ['aurelia','meridian','sable'].forEach(id=>{
+    if(!G.empires[id]) return;
+    const e=emp(id);
+    const mine=G.regions.filter(r=>r.owner===id);
+    if(!mine.length) return;
+    // form armies from fat garrisons (cap: 3 field armies per crown; a small crown fields a 4th — kingdoms catch up, they don't confess)
+    const armyCap = mine.length<10? 4 : 3;
+    if((G.armies||[]).filter(a=>a.owner===id).length<armyCap){
+      const fat=mine.filter(r=>r.troops>=(mine.length<10? 2300 : 2600) && !(G.armies||[]).some(a=>a.atRegion===r.id && a.owner===id)).sort((a,b)=>b.troops-a.troops)[0];
+      if(fat) formArmySilent(fat, Math.min(2200, fat.troops-900));
+    }
+    // order idle armies: expand into the weakest reachable neighbour first
+    (G.armies||[]).filter(a=>a.owner===id && !a.at && a.stance!=='hold').forEach(a=>{
+      const home=rById[a.atRegion]; if(!home) return;
+      const cand=[];
+      home.neighbors.forEach(nid=>{ const n=rById[nid]; if(n.owner!==id && !allied(id,n.owner)) cand.push(n); });
+      const wider=mine.flatMap(r=>r.neighbors.map(nid=>rById[nid])).filter(n=>n && n.owner!==id && !allied(id,n.owner));
+      const pool=(cand.length? cand : wider);
+      const hostile=pool.filter(n=>!n.owner || (e.relations[n.owner] && e.relations[n.owner].war));
+      if(!hostile.length) return;
+      hostile.sort((x,y)=>x.troops-y.troops);
+      const target=hostile[0];
+      const myPower=a.men*(1+e.armyTech*0.35);
+      const defPower=target.troops*(1+(target.owner?emp(target.owner).armyTech*0.3:0))*(target.hasFort?1.45:1)*(target.hasWall?1.25:1);
+      if(target.owner && myPower<defPower*0.95) { // too strong — dig in instead of dying
+        if(target.owner==='player' && rnd()<0.4) a.stance='hold', a.holdUntil=1e9;
+        return;
+      }
+      orderMarchSilent(a, target);
+    });
+    // fleets: at war? blockade the nearest enemy port. at peace? drift/raid.
+    G.fleets.filter(f=>f.owner===id && !f.at).forEach(f=>{
+      const enemies=Object.keys(e.relations).filter(o=>e.relations[o].war);
+      if(enemies.length){
+        const ports=G.regions.filter(r=>r.isPort && enemies.includes(r.owner));
+        if(ports.length){ ports.sort((x,y)=>fleetDistanceTo(f,x.x,x.y)-fleetDistanceTo(f,y.x,y.y)); orderSailPort(f, ports[0]); }
+      } else if(rnd()<0.35){
+        const z=seaById[f.zone]; const nz=pick(z.neighbors.map(n=>seaById[n]).filter(Boolean));
+        if(nz) orderSailZone(f, nz);
+      }
+      if(f.stance==='raid' && rnd()<0.3) f.stance='patrol';
+    });
+    // border awareness: hold an army on a threatened frontier
+    (G.armies||[]).filter(a=>a.owner===id && !a.at && a.stance!=='hold').forEach(a=>{
+      const home=rById[a.atRegion]; if(!home) return;
+      const threat=home.neighbors.some(nid=>{ const n=rById[nid]; return n.owner && n.owner!==id && (e.relations[n.owner]||{}).war && n.troops>a.men*0.9; });
+      if(threat && rnd()<0.5){ a.stance='hold'; a.holdUntil=1e9; }
+    });
+  });
+}
+function formArmySilent(r, men){
+  if(r.troops<men+500) return null;
+  r.troops-=men;
+  const a={ id:newUnitId(), owner:r.owner, men, atRegion:r.id, at:null, path:null, destRegion:null,
+    stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0,
+    name:emp(r.owner).name.split(' ')[0]+' Host '+((G.armies||[]).filter(x=>x.owner===r.owner).length+1) };
+  G.armies.push(a); return a;
+}
+function orderMarchSilent(a, dest){ orderMarch(a, dest); }
+
+function showOrderHint(html){ const h=$('#hint'); if(!h) return; h.dataset.order='1'; h.innerHTML=html; h.classList.add('show'); }
+function clearOrderHint(){ const h=$('#hint'); if(!h) return; if(h.dataset.order){ delete h.dataset.order; h.classList.remove('show'); if(window.updateHint) updateHint(); } }
+
 function selectRegion(r){
   selected={type:'region',id:r.id};
   const e=r.owner? emp(r.owner):null;
   $('#sheet-title').textContent=(r.isPort?'⚓ ':'')+r.name;
   $('#sheet-sub').textContent=(e? e.name : 'Free Town')+' · '+r.terrain+' country · famed for '+GOODS[r.specialty]+
     (r.isPort? ' · on the '+seaById[r.seaZone].name : '');
+  const armiesHere=(G.armies||[]).filter(a=>a.atRegion===r.id && a.owner===r.owner);
   $('#sheet-stats').innerHTML=statRow([
     ['🏘 Settlement',['Hamlet','Town','City','Great Port'][r.tier]],
     ['👥 Population',fmt(r.pop)],
     ['⚔ Garrison',fmt(r.troops)+' men'],
+    ...(armiesHere.length?[['🪖 Field armies', armiesHere.length+' ('+fmt(armiesHere.reduce((s,a)=>s+a.men,0))+' men)']]:[]),
     ['🪙 Income','+'+regionIncome(r)+'/season'],
     ...(r.isPort?[['⛵ Trade', isBlockaded(r)?'⛓ BLOCKADED':'flowing']]:[]),
     ...(r.hasWall?[['🧱','Walls']]:[]), ...(r.hasFort?[['♜','Fort']]:[]),
@@ -874,15 +1545,37 @@ function selectRegion(r){
   if(r.owner==='player'){
     const me=emp('player');
     const cant=cost=> me.gold<cost? 'needs '+cost+'g in the treasury' : ''; // every build button prices its lock out loud
+    const mine=(G.armies||[]).filter(a=>a.atRegion===r.id && a.owner==='player');
+    // one honest explanation line — armies march, garrisons hold
+    acts.appendChild(actBtn('🎖 Your forces here',
+      mine.length? 'Field armies march and conquer. The garrison ('+fmt(r.troops)+' men) always stays behind to hold '+r.name+'.'
+                 : 'No field army here yet. Garrisons hold the town but cannot march — form a field army below to go take ground.',
+      ()=>{},'',true));
+    mine.forEach(a=>{
+      acts.appendChild(actBtn('🪖 '+a.name,
+        fmt(a.men)+' men in the field · garrison '+fmt(r.troops)+' stands apart'+(a.stance==='hold'?' · 🛡 holding this ground':''),
+        ()=>{},'',true));
+      acts.appendChild(actBtn('🚶 March / Conquer…',
+        'Then tap any lit region — roads carry the army there, day by day',
+        ()=>{ selected=null; sheet.classList.remove('open');
+          marchTarget={armyId:a.id}; window.__marchArmyId=a.id; window.__marchFleetId=null;
+          showOrderHint('🚶 <b>'+a.name+'</b> awaits orders — tap a <b>lit region</b> to march there. The road quotes its days as you choose.');
+        },'war'));
+      if(a.stance!=='hold') acts.appendChild(actBtn('🛡 Hold this Ground',
+        'Stay and block the road — enemy armies marching through must fight you',
+        ()=>{ a.stance='hold'; a.holdUntil=1e9; toast('🛡 '+a.name+' digs in at '+r.name+' — the road is blocked.'); pushEvent('🛡 <b>'+a.name+'</b> holds the road at '+r.name+'.'); selectRegion(r); save(); }));
+      if(mine.length>1){
+        const big=mine.slice().sort((x,y)=>y.men-x.men)[0];
+        if(big.id!==a.id) acts.appendChild(actBtn('➕ Join '+big.name,'Fold these '+fmt(a.men)+' men into the larger host',()=>{
+          big.men+=a.men; G.armies=G.armies.filter(x=>x.id!==a.id); toast(big.name+' now fields '+fmt(big.men)+' men'); selectRegion(r); save(); }));
+      }
+    });
+    if(r.troops>=1500) acts.appendChild(actBtn('🪖 Form Field Army (1,000 men)',
+      '1,000 men march out under their own banner — 500+ stay as garrison',
+      ()=>{ formArmy(r, 1000); },'war'));
     acts.appendChild(actBtn('⚔ Muster Regiments','+'+fmt(MUSTER_MEN)+' men · '+MUSTER_COST+'g · draws on population',
       ()=>{ doMuster(r); },'', me.gold<MUSTER_COST? 'needs '+MUSTER_COST+'g in the treasury' :
         (r.pop<MUSTER_MEN? 'needs '+fmt(MUSTER_MEN)+' souls to draw from' : '')));
-    if(r.troops>=500) r.neighbors.forEach(nid=>{ const n=rById[nid];
-      const enemy=n.owner!=='player';
-      acts.appendChild(actBtn((enemy?'⚔ March on ':'➡ Move to ')+n.name,
-        (enemy? 'Attack with '+fmt(r.troops)+' men' : 'Reposition '+fmt(r.troops)+' men')+' · ~'+landDays(r,n)+' days’ march',
-        ()=>{ doMoveArmy(r,n); }, enemy?'war':''));
-    });
     if(r.tier<3) acts.appendChild(actBtn('🏗 Grow Settlement','Raise to '+['Hamlet','Town','City','Great Port'][r.tier+1]+' · '+(120+r.tier*130)+'g',
       ()=>{ pay(120+r.tier*130); r.tier++; r.pop+=800; toast(r.name+' grows to a '+['hamlet','town','city','great port'][r.tier]+'!'); selectRegion(r); refreshHUD(); },'',cant(120+r.tier*130)));
     if(!r.hasWall) acts.appendChild(actBtn('🧱 Build Walls','Defenders fight harder here · 90g',()=>{ pay(90); r.hasWall=true; toast('Walls rise around '+r.name); selectRegion(r); refreshHUD(); },'',cant(90)));
@@ -903,6 +1596,20 @@ function selectRegion(r){
       acts.appendChild(actBtn('⚔ '+emp(r.owner).name, rel.war? 'You are at WAR. March an army in to attack.' : 'At peace. Declare war from Realm → Diplomacy.',
         ()=>{},'war',true));
     }
+    // march time from your nearest field army — the map answers "how would I take this?"
+    const mineA=(G.armies||[]).filter(a=>a.owner==='player' && !a.at);
+    if(mineA.length){
+      let best=null, bd=1e12;
+      mineA.forEach(a=>{ const p=findLandPath(a.atRegion, r.id); if(p && p.days<bd){ bd=p.days; best=a; } });
+      acts.appendChild(actBtn('🗺 Marching here',
+        best? 'Your '+best.name+' ('+fmt(best.men)+' men, at '+rById[best.atRegion].name+') could be here in ~'+Math.max(1,Math.round(bd))+' days by road.'
+            : 'No land road reaches '+r.name+' — the sea cuts this one off. Fleets can blockade its harbour; armies cannot march across water.',
+        ()=>{},'',true));
+    }
+    (G.armies||[]).filter(a=>a.atRegion===r.id && a.owner && a.owner!=='player').forEach(a=>{
+      acts.appendChild(actBtn('🪖 '+a.name+' — '+emp(a.owner).name,
+        fmt(a.men)+' men in the field here'+(a.stance==='hold'?' · 🛡 holding the road':'')+', apart from the garrison.', ()=>{},'war',true));
+    });
   }
   openSheet();
 }
@@ -911,21 +1618,55 @@ function selectFleet(f){
   selected={type:'fleet',id:f.id};
   const e=emp(f.owner), z=seaById[f.zone];
   $('#sheet-title').textContent='⛵ '+f.name;
-  $('#sheet-sub').textContent=e.name+' · '+f.ships+' '+SHIP_TECH[e.shipTech]+' · on the '+z.name+' · stance: '+f.stance;
   $('#sheet-stats').innerHTML=statRow([['⛵ Ships',f.ships],['🎖 Class',SHIP_TECH[e.shipTech]],['🌊 Sea',z.name]]);
   const acts=$('#sheet-acts'); acts.innerHTML='';
+  if(f.at){
+    const dest=f.at.destPort!=null? rById[f.at.destPort].name : (f.at.destZone!=null? seaById[f.at.destZone].name : 'sea');
+    $('#sheet-sub').textContent=e.name+' · '+f.ships+' '+SHIP_TECH[e.shipTech]+' · UNDER WAY to '+dest+' · ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days out';
+    if(f.owner==='player'){
+      acts.appendChild(actBtn('🌊 Under way','Making for '+dest+'. The squadron answers new orders when it anchors — or recall it now.',()=>{},'sea',true));
+      acts.appendChild(actBtn('⚓ Recall to the '+z.name,'Turn about and re-anchor here',()=>{ recallFleet(f); selectFleet(f); },'sea'));
+    } else {
+      acts.appendChild(actBtn('👁 Scout Report', e.name+' squadron under way · '+f.ships+' ships · bound for '+dest+'.',()=>{},'',true));
+    }
+    openSheet(); return;
+  }
+  $('#sheet-sub').textContent=e.name+' · '+f.ships+' '+SHIP_TECH[e.shipTech]+' · on the '+z.name+' · stance: '+f.stance;
   if(f.owner==='player'){
+    acts.appendChild(actBtn('🎖 Your squadron',
+      'Sail it somewhere and it goes — day by day, sail by sail. A blockade only bites when your ships are sitting off the enemy\'s harbour.',
+      ()=>{},'sea',true));
+    acts.appendChild(actBtn('⛵ Sail to a Port…',
+      'Then tap a port (⚓) — friendly, free, or an enemy harbour to blockade',
+      ()=>{ selected=null; sheet.classList.remove('open');
+        marchTarget={fleetId:f.id}; window.__marchArmyId=null; window.__marchFleetId=f.id;
+        showOrderHint('⛵ <b>'+f.name+'</b> awaits orders — tap a <b>port</b> to sail there, or <b>open sea</b> to patrol those waters.');
+      },'sea'));
     z.neighbors.forEach(nid=>{ const nz=seaById[nid];
-      acts.appendChild(actBtn('🌊 Sail to '+nz.name,'One sea zone · ~'+seaDays(z,nz)+' days at sea',()=>{ sailFleet(f,nid); },'sea')); });
-    ['patrol','blockade','raid','escort'].forEach(st=>{
-      acts.appendChild(actBtn(({patrol:'🕊 Patrol',blockade:'⛓ Blockade',raid:'🏴 Raid Lanes',escort:'🛡 Escort'})[st],
-        ({patrol:'Guard these waters',blockade:'Strangle enemy ports in this zone',raid:'Harass enemy trade here',escort:'Protect your lanes here'})[st],
-        ()=>{ f.stance=st; toast(f.name+': '+st); selectFleet(f); },'sea', f.stance===st));
+      const path=findSeaZonePath(f.zone, nz.id);
+      const days=path? Math.max(1,Math.round(path.days)) : seaDays(z,nz);
+      acts.appendChild(actBtn('🌊 Sail to '+nz.name,'Open water · ~'+days+' days at sea',()=>{ const ff=G.fleets.find(x=>x.id===f.id); orderSailZone(ff, nz); closeSheet(); },'sea')); });
+    // enemy ports in THIS water: blockade without a voyage
+    z.ports.map(id=>rById[id]).filter(p=>p.owner && p.owner!=='player' && !allied('player',p.owner)).forEach(p=>{
+      acts.appendChild(actBtn('⛓ Blockade '+p.name,'Sail to its harbour mouth and strangle its trade',()=>{ orderSailPort(f, p); closeSheet(); },'war'));
+    });
+    ['patrol','raid','escort'].forEach(st=>{
+      acts.appendChild(actBtn(({patrol:'🕊 Patrol',raid:'🏴 Raid Lanes',escort:'🛡 Escort'})[st],
+        ({patrol:'Guard these waters',raid:'Harass enemy trade here',escort:'Protect your lanes here'})[st],
+        ()=>{ f.stance=st; toast(f.name+': '+st); selectFleet(f); save(); },'sea', f.stance===st));
     });
   } else {
     acts.appendChild(actBtn('👁 Scout Report', e.name+' squadron · '+f.ships+' ships · stance '+f.stance+'.', ()=>{},'',true));
   }
   openSheet();
+}
+function recallFleet(f){
+  const z=seaById[f.zone]; if(!f.at) return;
+  const pos=fPos(f);
+  const days=Math.max(0.4, Math.hypot(pos.x-z.x, pos.y-z.y)/TRAVEL.sailPerDay);
+  f.at={ pos:{x:pos.x, y:pos.y}, legs:[{to:'s'+z.id, days, fromPos:{x:pos.x,y:pos.y}, toPos:{x:z.x,y:z.y}}],
+    legIndex:0, legDepart:G.day, legArrive:G.day+days, departDay:G.day, arriveDay:G.day+days, daysTotal:days, destPort:null, destZone:z.id };
+  toast('⚓ '+f.name+' turns for the '+z.name);
 }
 function selectSea(z){
   selected={type:'sea',id:z.id};
@@ -953,14 +1694,9 @@ function doBuildShips(r){
   if(!r.hasShipyard){ toast('No shipyard at '+r.name+' — build one before laying keels'); return; }
   pay(SHIP_COST*2);
   let f=G.fleets.find(f=>f.owner==='player'&&f.zone===r.seaZone);
-  if(!f){ f={id:G.fleets.length,owner:'player',zone:r.seaZone,ships:0,stance:'patrol',name:'Home Squadron'}; G.fleets.push(f); }
+  if(!f){ f={id:newUnitId(),owner:'player',zone:r.seaZone,node:'s'+r.seaZone,pos:{x:seaById[r.seaZone].x,y:seaById[r.seaZone].y},at:null,ships:0,stance:'patrol',name:'Home Squadron'}; G.fleets.push(f); }
   f.ships+=2; anims.push({type:'sail',x1:r.x,y1:r.y,x2:seaById[r.seaZone].x,y2:seaById[r.seaZone].y,t0:performance.now(),dur:900});
   toast('Two '+SHIP_TECH[me.shipTech]+' launched at '+r.name); selectRegion(r); refreshHUD();
-}
-function sailFleet(f,nid){
-  const from=seaById[f.zone], to=seaById[nid];
-  anims.push({type:'sail',x1:from.x,y1:from.y,x2:to.x,y2:to.y,t0:performance.now(),dur:900});
-  f.zone=nid; f.node='s'+nid; f.pos={x:to.x, y:to.y}; toast(f.name+' sails to the '+to.name); closeSheet(); selected={type:'fleet',id:f.id};
 }
 function battle(attacker, atkTroops, defRegion){
   const aTech=1+ (attacker? emp(attacker).armyTech*0.35:0);
@@ -974,38 +1710,7 @@ function battle(attacker, atkTroops, defRegion){
   const dLoss=Math.round(defRegion.troops*(aPower/total)*rr(0.5,0.9));
   return {win:aPower>dPower, aLoss:Math.min(aLoss,atkTroops), dLoss:Math.min(dLoss,defRegion.troops)};
 }
-function doMoveArmy(from,to){
-  if(from.troops<500) return;
-  const atk=from.troops;
-  if(to.owner==='player'){ to.troops+=atk; from.troops=0; toast('Army marches to '+to.name); closeSheet(); return; }
-  // hostile: neutral free town or enemy (war required vs empires)
-  if(to.owner && !atWar('player',to.owner)){
-    toast('You are at peace with '+emp(to.owner).name+' — declare war in Realm.'); return;
-  }
-  const defBefore=to.troops, atkName=from.name+' host';
-  const res=battle('player', atk, to);
-  from.troops=0; to.troops-=res.dLoss;
-  const survivors=atk-res.aLoss;
-  if(res.win){
-    const prev=to.owner; to.owner='player'; to.troops=Math.max(300,survivors);
-    const spoils=prev? 120+to.tier*60 : 40; // every conquest pays out — the tally is part of the moment
-    emp('player').gold+=spoils;
-    to.flashUntil=performance.now()+1200; anims.push({type:'wash',region:to.id,color:'#8e2f32',t0:performance.now(),dur:1100});
-    gazette('⚔ <b>'+to.name+' has fallen!</b> Your banners rise over the '+['hamlet','town','city','great port'][to.tier]+
-      ' — '+fmt(res.aLoss)+' of yours and '+fmt(res.dLoss)+' defenders fell. Spoils of '+fmt(spoils)+'g pour into your treasury.');
-    toast('🏴 '+to.name+' is yours! +'+fmt(spoils)+'g spoils');
-    coachAdvance(1);
-    checkCapitalLoss(prev);
-    showBattle(atkName,atk,to.name,defBefore,res,true,'Spoils: +'+(prev?120+to.tier*60:40)+'g · the banner of Your Crown rises over '+to.name+'.');
-  } else {
-    to.troops=Math.max(200,to.troops);
-    if(survivors>300){ /* remnants retreat home */ from.troops=survivors; }
-    gazette('⚔ <b>Repulsed at '+to.name+'.</b> Your army broke against the defences — '+fmt(res.aLoss)+' men lost.');
-    toast('Repulsed at '+to.name+' — '+fmt(res.aLoss)+' lost');
-    showBattle(atkName,atk,to.name,defBefore,res,false,survivors>300?'The remnants fall back to '+from.name+'. Reinforce and try again.':'Your host is scattered. Muster anew.');
-  }
-  closeSheet(); refreshHUD(); save();
-}
+/* doMoveArmy is GONE — armies move in real time now (orderMarch + armyArrive). */
 function checkCapitalLoss(ownerId){
   if(!ownerId||ownerId==='player') return;
   const capName=EMPIRES.find(e=>e.id===ownerId).capital;
@@ -1025,8 +1730,8 @@ function aiTurn(id){
   const mine=G.regions.filter(r=>r.owner===id);
   if(!mine.length) return;
   // income handled centrally; here: spend & move
-  // muster in strongest region (capped so no empire snowballs)
-  mine.sort((a,b)=>b.pop-a.pop).slice(0,1).forEach(r=>{
+  // muster in strongest region (capped so no empire snowballs); a small crown musters in two — laggards catch up, leaders don't compound
+  mine.sort((a,b)=>b.pop-a.pop).slice(0, mine.length<10? 2 : 1).forEach(r=>{
     if(e.gold>MUSTER_COST+80 && r.pop>MUSTER_MEN*1.5 && totalMen(id)<22000){ e.gold-=MUSTER_COST; r.pop-=MUSTER_MEN; r.troops+=MUSTER_MEN; }
   });
   // grow a town sometimes
@@ -1039,39 +1744,9 @@ function aiTurn(id){
   const shipPort=mine.find(r=>r.isPort&&r.hasShipyard);
   if(shipPort && e.gold>SHIP_COST*2+100 && totalShips(id)<14){ e.gold-=SHIP_COST*2;
     let f=G.fleets.find(f=>f.owner===id&&f.zone===shipPort.seaZone);
-    if(!f){ f={id:Date.now()+Math.floor(rnd()*999),owner:id,zone:shipPort.seaZone,node:'s'+shipPort.seaZone,
-      pos:{x:seaById[shipPort.seaZone].x, y:seaById[shipPort.seaZone].y},ships:0,stance:'patrol',name:e.name.split(' ')[0]+' Squadron'}; G.fleets.push(f);} f.ships+=2; }
-  // fleets: blockade enemy port when at war with someone
-  G.fleets.filter(f=>f.owner===id).forEach(f=>{
-    const enemies=Object.keys(e.relations).filter(o=>e.relations[o].war);
-    if(enemies.length){
-      const target=G.regions.find(r=>r.isPort&&enemies.includes(r.owner));
-      if(target){ // sail toward target zone
-        if(f.zone===target.seaZone) f.stance='blockade';
-        else { const nz=seaById[f.zone].neighbors.sort((a,b)=>Math.hypot(seaById[a].x-rById[target.id].x,seaById[a].y-rById[target.id].y)-Math.hypot(seaById[b].x-rById[target.id].x,seaById[b].y-rById[target.id].y))[0];
-          if(nz!==undefined) f.zone=nz; f.stance='patrol'; }
-      }
-    } else f.stance = rnd()<0.3? 'raid':'patrol';
-  });
-  // attacks: at most one march per season, and not every season — expansion is a campaign, not a conveyor belt
-  if(rnd()<0.62) mine.filter(r=>r.troops>=3000).sort((a,b)=>b.troops-a.troops).slice(0,1).forEach(from=>{
-    const targets=from.neighbors.map(nid=>rById[nid]).filter(n=>
-      (n.owner===null) || (n.owner!==id && e.relations[n.owner] && e.relations[n.owner].war) || (n.owner==='player'&&e.relations['player'].war));
-    if(!targets.length) return;
-    targets.sort((a,b)=>a.troops-b.troops);
-    const to=targets[0];
-    const myPower=from.troops*(1+e.armyTech*0.35), defPower=to.troops*(1+(to.owner?emp(to.owner).armyTech*0.3:0))*(to.hasFort?1.45:1)*(to.hasWall?1.25:1);
-    if(myPower < defPower*0.9 && to.owner!==null) return; // not suicidal vs empires
-    const atk=from.troops; const res=battle(id, atk, to);
-    from.troops=0; to.troops-=res.dLoss; const surv=atk-res.aLoss;
-    if(res.win){
-      const prev=to.owner; to.owner=id; to.troops=Math.max(300,surv);
-      anims.push({type:'wash',region:to.id,color:e.color,t0:performance.now(),dur:1100});
-      if(prev==='player') gazette('⚔ <b>'+e.name+' has taken '+to.name+'!</b> '+fmt(res.dLoss)+' of your garrison fell holding it.');
-      else if(to.owner==='player'){}
-      checkCapitalLoss(prev);
-    } else { to.troops=Math.max(200,to.troops); if(surv>300) from.troops=surv; if(to.owner==='player') gazette('⚔ Your garrison at <b>'+to.name+'</b> bloodied a '+e.name+' assault — '+fmt(res.dLoss)+' attackers fell.'); }
-  });
+    if(!f){ f={id:newUnitId(),owner:id,zone:shipPort.seaZone,node:'s'+shipPort.seaZone,
+      pos:{x:seaById[shipPort.seaZone].x, y:seaById[shipPort.seaZone].y},at:null,ships:0,stance:'patrol',name:e.name.split(' ')[0]+' Squadron'}; G.fleets.push(f);} f.ships+=2; }
+  // fleets and armies move in REAL time now — military orders come from aiMonthlyOps()
   // diplomacy drift: corsairs love war, league loves trade
   Object.keys(e.relations).forEach(o=>{
     if(o===id) return; const rel=e.relations[o];
@@ -1082,7 +1757,7 @@ function aiTurn(id){
       if((id==='sable'&&rnd()<0.05&&myP>plP*0.8)||(rnd()<0.02&&myP>plP*1.6)){
         rel.war=true; emp('player').relations[id].war=true;
         gazette('👑 <b>War!</b> The '+e.name+' declares war on your Crown. Their banners are on the march.');
-        G.crownQueue.push({icon:'⚔', title:e.name+' declares war!', body:'Their fleets will move to blockade your ports. Muster, and decide where to meet them.', choices:[{label:'To arms!',fn:null}]});
+        G.crownQueue.push({icon:'⚔', urgent:true, title:e.name+' declares war!', body:'Their fleets will move to blockade your ports. Muster, and decide where to meet them.', choices:[{label:'To arms!',fn:null}]});
       }
     }
   });
@@ -1114,11 +1789,22 @@ function detectWarnings(){
     const z=seaById[f.zone];
     const nearMine=[...myPortZones].some(pz=>pz===f.zone||seaById[pz].neighbors.includes(f.zone));
     if(nearMine&&f.ships>=4) G.warnings.push('⚠ '+emp(f.owner).name+' fleet massing ('+f.ships+' ships) on the '+z.name+' — near your ports.');
-    if(f.stance==='blockade'&&[...myPortZones].includes(f.zone)) G.warnings.push('⛓ Your ports on the '+z.name+' are being BLOCKADED — trade there has stopped.');
   });
   G.regions.filter(r=>r.owner==='player').forEach(r=>{
     r.neighbors.forEach(nid=>{ const n=rById[nid];
       if(n.owner&&n.owner!=='player'&&n.troops>=6000) G.warnings.push('⚠ '+emp(n.owner).name+' army of '+fmt(n.troops)+' massing at '+n.name+', on your border.'); });
+  });
+  // marching armies with days-to-arrival — the clock makes warnings honest
+  (G.armies||[]).filter(a=>a.owner!=='player' && a.at && a.destRegion!=null && rById[a.destRegion] && rById[a.destRegion].owner==='player').forEach(a=>{
+    const days=Math.max(1, Math.ceil(a.arriveDay-G.day));
+    const dest=rById[a.destRegion];
+    G.warnings.unshift('⚔ '+emp(a.owner).name+' army ('+fmt(a.men)+' men) marching on '+dest.name+' — arrives in ~'+days+' days!');
+    if(days<=7 && G.pauseOnEvent) simPauseEvent();
+  });
+  // blockades are positional now — say which harbour, not which zone
+  myPorts().filter(p=>isBlockaded(p)).forEach(p=>{
+    G.warnings.unshift('⛓ '+p.name+' is BLOCKADED — trade stopped, the town bleeds men.');
+    if(G.pauseOnEvent) simPauseEvent();
   });
   G.warnings=[...new Set(G.warnings)].slice(0,3);
 }
@@ -1165,7 +1851,7 @@ function showGazette(){
   $('#gazette-lines').innerHTML=G.gazette.length? G.gazette.map(l=>'<p>'+l+'</p>').join('') : '<p>A quiet season on the Rift.</p>';
   $('#gazette').classList.add('open');
 }
-$('#gazette-ok').onclick=()=>{ $('#gazette').classList.remove('open');
+$('#gazette-ok').onclick=()=>{ $('#gazette').classList.remove('open'); simResumeFromEvent();
   if(coachStep===2){ coachStep=99; try{localStorage.setItem('riftsail-coached','1');}catch(e){} updateHint(); }
   else updateHint();
 };
@@ -1228,6 +1914,22 @@ $('#btn-realm').onclick=()=>{
   const me=emp('player'); const b=$('#realm-body');
   let h='<p><b>Treasury:</b> '+fmt(me.gold)+'g · <b>Debt:</b> '+fmt(me.debt)+'g · <b>Men:</b> '+fmt(totalMen('player'))+' · <b>Ships:</b> '+totalShips('player')+'</p>';
   h+='<p><b>Army:</b> '+ARMY_TECH[me.armyTech]+' · <b>Navy:</b> '+SHIP_TECH[me.shipTech]+'</p>';
+  // — the kingdoms board: the political world at a glance —
+  h+='<div class="rule"></div><h3 style="font-variant:small-caps">👑 Kingdoms of the Rift</h3>';
+  h+='<p style="font-size:12px">Four crowns share this sea. Grow yours; watch theirs.</p>';
+  EMPIRES.forEach(e2=>{
+    if(!G.empires[e2.id]) return;
+    const regs=G.regions.filter(r=>r.owner===e2.id);
+    const cap=G.regions.find(r=>r.name===e2.capital);
+    const rel=e2.id==='player'? null : me.relations[e2.id];
+    const standing=e2.id==='player'? '👑 Your Crown' : (rel.war? '⚔ At war with you' : rel.ally? '🤝 Your ally' : 'At peace');
+    const arms=(G.armies||[]).filter(a=>a.owner===e2.id).reduce((s,a)=>s+a.men,0);
+    h+='<div class="dip-row"><span class="who" style="color:'+e2.color+'">◆ '+e2.name+'</span>'+
+      '<span class="rel">'+standing+' · 🏰 '+(cap? cap.name:'capital lost')+' · 🗺 '+regs.length+' regions · ⚓ '+regs.filter(r=>r.isPort).length+' ports'+
+      ' · ⚔ '+fmt(totalMen(e2.id)+arms)+' men ('+fmt(arms)+' in the field) · ⛵ '+totalShips(e2.id)+' ships'+
+      (emp(e2.id).tradeStreak>=3? ' · ⛵ leads trade ('+emp(e2.id).tradeStreak+'/5)':'')+
+      (emp(e2.id).debt>0? ' · 🏦 owes '+fmt(emp(e2.id).debt)+'g':'')+'</span></div>';
+  });
   h+='<div class="rule"></div><h3 style="font-variant:small-caps">War College &amp; Dockyards</h3>';
   h+='<p>Advance your arms. Each tier multiplies battlefield strength.</p>';
   const ab=document.createElement('div');
@@ -1265,7 +1967,11 @@ $('#btn-realm').onclick=()=>{
   $('#realm').classList.add('open');
 };
 $('#realm-close').onclick=()=>$('#realm').classList.remove('open');
-$('#btn-end').onclick=endSeason;
+$('#clock-pause').onclick=()=>{ setClock(0); };
+$('#clock-1').onclick=()=>{ simResumeFromEvent(); setClock(2); };
+$('#clock-2').onclick=()=>{ simResumeFromEvent(); setClock(4); };
+$('#clock-4').onclick=()=>{ simResumeFromEvent(); setClock(8); };
+$('#clock-autopause').onchange=e=>toggleEventPause(e.target.checked);
 $('#btn-menu').onclick=()=>$('#menu').classList.add('open');
 $('#menu-close').onclick=()=>$('#menu').classList.remove('open');
 $('#menu-continue').onclick=()=>$('#menu').classList.remove('open');
@@ -1286,7 +1992,7 @@ function updateHint(){
     h.classList.add('show');
   } else if(coachStep===1){
     window.__coachRegion=null;
-    h.innerHTML='⚔ Regiments ready. March them into a <b>neighbouring free town</b> to conquer it — or press <b>End Season</b> ⚓';
+    h.innerHTML='⚔ Regiments ready. Open Lisbon, <b>Form a Field Army</b>, then <b>March</b> it into a neighbouring free town — press <b>▶</b> and watch it march.';
     h.classList.add('show');
   } else if(coachStep===2){
     window.__coachRegion=null;
@@ -1309,18 +2015,21 @@ function showBattle(atkName,atkMen,defName,defMen,res,won,note){
   const h=$('#hint'); if(h) h.classList.remove('show');
   $('#battle').classList.add('open');
 }
-$('#battle-ok').onclick=()=>{ $('#battle').classList.remove('open'); updateHint(); };
+$('#battle-ok').onclick=()=>{ $('#battle').classList.remove('open'); simResumeFromEvent(); updateHint(); };
 
 /* ================= SAVE / LOAD / BOOT ================= */
 function save(){ syncUnits(); try{ localStorage.setItem('riftsail-save', JSON.stringify(G)); }catch(e){} }
 function load(){ try{ const s=localStorage.getItem('riftsail-save'); return s? JSON.parse(s):null; }catch(e){ return null; } }
 function startNew(){
-  G=freshState(); rebuildIndex(); selected=null; closeSheet();
+  G=freshState(); rebuildIndex(); ensureIds(); selected=null; closeSheet();
   coachStep = (localStorage.getItem('riftsail-coached')==='1')? 99 : 0;
   ['#endscreen','#menu','#gazette'].forEach(s=>$(s).classList.remove('open'));
-  fitWorld(); refreshHUD(); save();
+  eventPaused=false; tickerLines.length=0; renderTicker();
+  fitWorld(); refreshHUD(); refreshClockUI(); save();
   if(window.R3&&window.R3.rebuild) R3.rebuild();
   toast('A new reign begins — Lisbon flies your colours');
+  pushEvent('👑 <b>A new reign begins.</b> Muster an army, then press ▶ to set the world in motion.');
+  startClockLoop();
   setTimeout(updateHint,700);
 }
 $('#btn-new').onclick=()=>{ $('#start').classList.remove('open'); startNew(); };
@@ -1332,13 +2041,15 @@ fitCanvas();
   const saved=load();
   if(saved&&saved.regions){ G=migrateSave(saved); rebuildIndex(); $('#btn-continue').style.display='block'; }
   else { G=freshState(); rebuildIndex(); }
-  fitWorld(); refreshHUD();
+  ensureIds(); syncPositions();
+  fitWorld(); refreshHUD(); refreshClockUI(); renderTicker();
   requestAnimationFrame(draw);
+  startClockLoop();
   if(location.hash.includes('shot')){ // dev/QA: jump straight into a campaign for screenshots
     $('#start').classList.remove('open'); startNew();
   }
   // gentle first-season guidance
-  setTimeout(()=>{ if(G.turn===1) toast('Tap Lisbon ⚓ — muster regiments, then End Season'); },600);
+  setTimeout(()=>{ if(G.turn===1) toast('Tap Lisbon ⚓ — muster regiments, then press ▶'); },600);
 })();
 </script>
 <script type="module">
@@ -1372,13 +2083,13 @@ try{
   fill.position.set(-90, 80, -120); scene.add(fill);
 
   /* ---------- tiny geometry batcher (vertex-coloured, merged) ---------- */
-  const MAT = new THREE.MeshLambertMaterial({vertexColors:true});
+  const MAT = new THREE.MeshLambertMaterial({vertexColors:true, side:THREE.DoubleSide}); // sails & flags must read from ANY bearing
   function M4(x,y,z,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1){
     return new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),
       new THREE.Quaternion().setFromEuler(new THREE.Euler(rx,ry,rz)),
       new THREE.Vector3(sx,sy,sz));
   }
-  function Batch(){ this.pos=[]; this.nor=[]; this.col=[]; }
+  function Batch(){ this.pos=[]; this.nor=[]; this.col=[]; this.lines=[]; }
   Batch.prototype.add = function(geo, matrix, hex){
     const g = geo.index ? geo.toNonIndexed() : geo;
     g.applyMatrix4(matrix);
@@ -1393,6 +2104,13 @@ try{
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col,3));
     const m=new THREE.Mesh(g, MAT); m.matrixAutoUpdate=false; return m;
   };
+  const RIGMAT = new THREE.LineBasicMaterial({color:0x241a10, transparent:true, opacity:0.55});
+  function linesMesh(b){
+    if(!b.lines || !b.lines.length) return null;
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(b.lines,3));
+    const m=new THREE.LineSegments(g, RIGMAT); m.matrixAutoUpdate=false; return m;
+  }
   const hash=n=>{ const x=Math.sin(n*127.1)*43758.5453; return x-Math.floor(x); };
 
   /* ---------- land truth for placement (continents from LAND_PATHS, sampled) ---------- */
@@ -1444,19 +2162,78 @@ try{
     return tex;
   }
 
-  function shipBatch(b, x, y, z, s, ang, hull, sail){
+  /* ---- tall ships: a silhouette worth sailing ----
+     Built to the CC0 kit proportions (Kenney/Quaternius pirate kits) as
+     PROCEDURAL geometry \u2014 GLTF inlining would sink the one-file deploy.
+     Hull profile extrude, sterncastle, bowsprit, 2\u20133 masts with yards,
+     billowed square sails (furled in harbour), rigging lines, ensign. */
+  function sailGeo(w, h, belly){
+    const g=new THREE.PlaneGeometry(w, h, 4, 3);
+    const p=g.attributes.position;
+    for(let i=0;i<p.count;i++){
+      const u=(p.getX(i)/w)+0.5, v=(p.getY(i)/h)+0.5;
+      p.setZ(i, Math.sin(u*Math.PI)*Math.sin(v*Math.PI)*belly);
+    }
+    g.computeVertexNormals();
+    g.rotateY(Math.PI/2); // width across the beam, belly bulging forward
+    return g;
+  }
+  let HULL_GEO=null;
+  function hullGeo(){
+    if(HULL_GEO) return HULL_GEO;
+    const sh=new THREE.Shape();
+    sh.moveTo(-2.45, 1.18); sh.lineTo(-2.15, 0.18); sh.lineTo(-1.25, -0.28); sh.lineTo(0.9, -0.28);
+    sh.lineTo(1.85, 0.02); sh.lineTo(2.6, 0.78); sh.lineTo(2.32, 1.18); sh.lineTo(-2.45, 1.18);
+    const g=new THREE.ExtrudeGeometry(sh, {depth:1.5, bevelEnabled:false});
+    g.translate(0, 0, -0.75);
+    HULL_GEO=g; return g;
+  }
+  function shipBatch(b, x, y, z, s, ang, hull, sail, opts){
+    opts=opts||{};
+    const tier=opts.tier!=null? opts.tier : 1;      // 0 sloop · 1 frigate · 2 ship of the line
+    const furled=!!opts.furled;
     const cs=Math.cos(ang), sn=Math.sin(ang);
     const L=(lx,lz)=>[x+(lx*cs-lz*sn)*s, z+(lx*sn+lz*cs)*s];
-    let [hx,hz]=L(0,0);
-    b.add(new THREE.BoxGeometry(4.5,1.0,1.7), M4(hx,y+0.5*s,hz,0,-ang,0,s,s,s), hull);
-    let [bx,bz]=L(2.3,0);
-    b.add(new THREE.ConeGeometry(0.85,1.9,4), M4(bx,y+0.5*s,bz,0,-ang,-Math.PI/2,s,s,s), hull);
-    let [mx,mz]=L(0.1,0);
-    b.add(new THREE.CylinderGeometry(0.11,0.14,4.6,5), M4(mx,y+(0.95+2.3)*s,mz,0,0,0,s,s,s), '#4a3319');
-    b.add(new THREE.ConeGeometry(1.38,3.4,3), M4(mx,y+(0.95+2.85)*s,mz,0,-ang,0,s,s,0.3*s), sail);
-    let [m2x,m2z]=L(-1.3,0);
-    b.add(new THREE.CylinderGeometry(0.09,0.11,3.3,5), M4(m2x,y+(0.95+1.65)*s,m2z,0,0,0,s,s,s), '#4a3319');
-    b.add(new THREE.ConeGeometry(1.08,2.6,3), M4(m2x,y+(0.95+2.05)*s,m2z,0,-ang,0,s,s,0.3*s), sail);
+    const tScale=[0.78, 1.0, 1.22][tier];
+    const B=(geo,lx,ly,lz)=>{ const [wx,wz]=L(lx,lz); b.add(geo, M4(wx, y+ly*s, wz, 0, -ang, 0, s*tScale, s*tScale, s*tScale), hull); };
+    const C=(geo,lx,ly,lz,col,flat)=>{ const [wx,wz]=L(lx,lz); b.add(geo, M4(wx, y+ly*s, wz, 0, -ang, 0, s*tScale, s*tScale, flat? s*tScale : s*tScale), col); };
+    // hull \u2014 curved sheer, rising stern
+    { const [hx,hz]=L(0,0); b.add(hullGeo(), M4(hx, y, hz, 0, -ang, 0, s*tScale, s*tScale, s*tScale), hull); }
+    B(new THREE.BoxGeometry(1.35,0.6,1.42), -1.72, 1.32, 0);                    // sterncastle
+    C(new THREE.BoxGeometry(1.2,0.26,1.46), -1.72, 1.28, 0, '#e8d9a8');        // lit stern gallery
+    B(new THREE.BoxGeometry(4.4,0.16,1.34), 0, 1.16, 0);                       // deck line
+    // bowsprit \u2014 raked spar off the bow
+    { const [bx,bz]=L(2.9,0); b.add(new THREE.CylinderGeometry(0.055,0.085,1.9,5), M4(bx, y+1.5*s, bz, 0, -ang, -1.05, s*tScale, s*tScale, s*tScale), '#4a3319'); }
+    // masts, yards, sails (fore / main / mizzen)
+    const masts=[{mx:1.35, h:4.1, yards:[2.9, 3.6]}, {mx:0.05, h:4.9, yards:[3.3, 4.15]}, {mx:-1.42, h:3.6, yards:[3.05]}];
+    const rig=(x1,y1,z1,x2,y2,z2)=>{ const [ax,az]=L(x1,z1), [cx,cz]=L(x2,z2); b.lines.push(ax, y+y1*s, az, cx, y+y2*s, cz); };
+    masts.forEach((m, mi)=>{
+      if(tier===0 && mi===2) return; // sloops carry no mizzen
+      const [mx,mz]=L(m.mx, 0);
+      b.add(new THREE.CylinderGeometry(0.075,0.115,m.h,5), M4(mx, y+(1.1+m.h/2)*s, mz, 0, 0, 0, s*tScale, s*tScale, s*tScale), '#4a3319');
+      m.yards.forEach((yy, yi)=>{
+        const yardLen=(yi===0? 2.5 : 3.05) * (mi===1? 1.08 : 0.95);
+        const [yx,yz]=L(m.mx, 0);
+        b.add(new THREE.CylinderGeometry(0.045,0.045,yardLen,4), M4(yx, y+yy*s, yz, Math.PI/2, -ang, 0, s*tScale, s*tScale, s*tScale), '#4a3319');
+        if(furled){
+          C(sailGeo(yardLen*0.9, 0.34, 0.02), m.mx, yy-0.16, 0, '#cfc2a0');   // canvas bundled on the yard \u2014 harbour mode
+        } else {
+          const sh2=(yi===0? 1.32 : 1.58);
+          C(sailGeo(yardLen*0.92, sh2, 0.3), m.mx, yy-sh2/2-0.05, 0, sail);
+        }
+        rig(m.mx, m.h+1.05, 0, m.mx, yy, yardLen/2); rig(m.mx, m.h+1.05, 0, m.mx, yy, -yardLen/2);
+      });
+      if(mi===0) rig(m.mx, m.h+1.05, 0, 3.3, 1.9, 0);
+      if(mi===1){ rig(m.mx, m.h+1.05, 0, 1.35, 4.6, 0); rig(m.mx, m.h+1.05, 0, -2.3, 1.5, 0); }
+      if(mi===2 && tier>0) rig(m.mx, m.h+1.05, 0, 0.05, 5.3, 0);
+    });
+    // ensign at the mainmast \u2014 owner colours, readable from the chart view
+    if(opts.flag){
+      const [fx,fz]=L(0.05, 0);
+      b.add(new THREE.PlaneGeometry(0.95, 0.55), M4(fx, y+6.15*s, fz, 0, Math.PI/2-ang, 0, s*tScale, s*tScale, s*tScale), opts.flag);
+    }
+    // waterline stripe
+    C(new THREE.BoxGeometry(4.5,0.14,1.54), 0.02, 0.28, 0, '#2c1c0e');
   }
 
   function house(b, x, y, z, s, wall, roof){
@@ -1535,7 +2312,7 @@ try{
         b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*6.1-dz*1.8, by+3.5, bz+dz*6.1+dx*1.8, 0, -ang, 0), '#5e4718');
       }
       const ships = r.tier>=3?4 : r.tier>=2?3 : r.tier>=1?2 : 1; // wider harbours, more hulls — sails read at distance
-      for(let i=0;i<ships;i++) shipBatch(b, bx+dx*(11+i*5.0)-dz*(3-i*6), 0.55, bz+dz*(11+i*5.0)+dx*(3-i*6), 1.5, ang+Math.PI/2, '#5a3a1e', '#ffffff');
+      for(let i=0;i<ships;i++) shipBatch(b, bx+dx*(11+i*5.0)-dz*(3-i*6), 0.55, bz+dz*(11+i*5.0)+dx*(3-i*6), 1.6, ang+Math.PI/2, '#5a3a1e', '#ffffff', {tier: r.tier>=3?2 : r.tier>=1?1 : 0, furled:true});
       if(r.tier>=2){ // breakwater — a stone arm calming the harbour mouth
         for(let i=-2;i<=2;i++) b.add(new THREE.BoxGeometry(2.3,0.85,1.15), M4(bx+dx*14.5-dz*i*2.7, 0.5, bz+dz*14.5+dx*i*2.7, 0, -ang, 0), '#7d7466');
       }
@@ -1549,7 +2326,8 @@ try{
       b.add(new THREE.CylinderGeometry(0.11,0.13,6.4,5), M4(bx+2.2, by+3.2, bz-5.6), '#3a2812');
       b.add(new THREE.BoxGeometry(3.1,1.85,0.16), M4(bx+3.75, by+5.35, bz-5.6), ownerCol);
     }
-    return {main:b.mesh(), sat: sb.pos.length? sb.mesh() : null};
+    const rig = linesMesh(b);
+    return {main:b.mesh(), rig, sat: sb.pos.length? sb.mesh() : null};
   }
 
   /* ---------- world statics: table, water, land ---------- */
@@ -1795,9 +2573,9 @@ try{
       discFor(r);
       const sig = settleSig(r), cur = settlements.get(r.id);
       if(!cur || cur.sig !== sig){
-        if(cur){ scene.remove(cur.mesh); cur.mesh.geometry.dispose(); if(cur.sat){ scene.remove(cur.sat); cur.sat.geometry.dispose(); } }
-        const built = buildSettlement(r); scene.add(built.main); if(built.sat) scene.add(built.sat);
-        settlements.set(r.id, {mesh: built.main, sat: built.sat, sig});
+        if(cur){ scene.remove(cur.mesh); cur.mesh.geometry.dispose(); if(cur.rig){ scene.remove(cur.rig); cur.rig.geometry.dispose(); } if(cur.sat){ scene.remove(cur.sat); cur.sat.geometry.dispose(); } }
+        const built = buildSettlement(r); scene.add(built.main); if(built.rig) scene.add(built.rig); if(built.sat) scene.add(built.sat);
+        settlements.set(r.id, {mesh: built.main, rig: built.rig, sat: built.sat, sig});
       }
     });
   }
@@ -1835,27 +2613,128 @@ try{
     G.fleets.forEach((f, idx)=>{
       seen.add(f.id);
       let v = fleetVis.get(f.id);
-      const sig = f.ships + '|' + f.owner;
+      const sig = f.ships + '|' + f.owner + '|' + emp(f.owner).shipTech + '|' + (f.at? 'sail':'dock');
       if(!v || v.sig !== sig){
         if(v) scene.remove(v.group);
         const group = new THREE.Group();
-        const n = Math.min(3, Math.max(1, Math.ceil(f.ships/3)));
+        const e = emp(f.owner);
+        const n = Math.min(4, Math.max(1, Math.ceil(f.ships/3)));
+        const tier = e.shipTech; // sloops → frigates → ships of the line, visibly
         for(let i=0;i<n;i++){
-          const b=new Batch(); shipBatch(b, (i-(n-1)/2)*6.2, 0, (i%2)*3.6, 1.75, 0.5, f.owner==='player'?'#6a4020':'#54401f', '#ffffff');
+          const b=new Batch();
+          // loose LINE ASTERN — never stacked on one point
+          shipBatch(b, -i*8.6, 0, (i%2? 3.4 : -2.8), 2.05, 0, f.owner==='player'?'#6a4020':'#54401f', '#ffffff',
+            {tier, flag: i===0? e.color : null});
           group.add(b.mesh());
+          const rig = linesMesh(b); if(rig) group.add(rig);
         }
-        const z = seaById[f.zone];
-        if(!v) group.position.set(SX(z.x), 0.4, SZ(z.y));
-        else group.position.copy(v.group.position);
+        // soft wake ribbon trailing the flagship while under way
+        const wake = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 26),
+          new THREE.MeshBasicMaterial({color:0xdff3f2, transparent:true, opacity:0.0, depthWrite:false}));
+        wake.rotation.x = -Math.PI/2; wake.position.set(-16, 0.12, 0);
+        wake.visible = false; group.add(wake);
+        const pos = v? v.group.position : null;
+        if(!pos){ const z = seaById[f.zone]; group.position.set(SX(z.x), 0.4, SZ(z.y)); }
+        else group.position.copy(pos);
         scene.add(group);
-        v = {group, sig, zone: f.zone}; fleetVis.set(f.id, v);
+        v = {group, wake, sig, zone: f.zone, prevX: group.position.x, prevZ: group.position.z}; fleetVis.set(f.id, v);
       }
       v.zone = f.zone;
     });
     [...fleetVis.keys()].forEach(id=>{ if(!seen.has(id)){ scene.remove(fleetVis.get(id).group); fleetVis.delete(id); } });
   }
 
-  /* ---------- camera (constrained pan/zoom, map-tilt) ---------- */
+  /* ---------- armies on the march: banners, standards, road ribbons ---------- */
+  const armyVis = new Map(); // armyId -> {group, sig}
+  let routeGroup = null, routeTick = 0, marchRingGroup = null, lastMarchId = null, lastFleetOrderId = null;
+  const marchRingGeo = new THREE.RingGeometry(7.2, 8.6, 40);
+  function buildArmyGroup(a){
+    const b=new Batch();
+    const e=emp(a.owner);
+    b.add(new THREE.BoxGeometry(2.2,0.5,2.2), M4(0,0.25,0), '#3a2c16');
+    b.add(new THREE.CylinderGeometry(0.09,0.11,5.6,5), M4(-0.4,2.8,-0.4), '#3a2812');
+    b.add(new THREE.PlaneGeometry(1.9,1.15), M4(0.62,4.9,-0.4,0,0.15,0), e.color);
+    b.add(new THREE.CylinderGeometry(0.07,0.09,3.6,5), M4(0.9,1.8,0.7,0,0,0.5), '#3a2812');
+    const g=new THREE.Group(); g.add(b.mesh());
+    const rig=linesMesh(b); if(rig) g.add(rig);
+    g.scale.setScalar(1.6); // a marching host should read from the chart view, not just up close
+    return g;
+  }
+  function updateArmyVis(t){
+    const seen=new Set();
+    (G.armies||[]).forEach(a=>{
+      seen.add(a.id);
+      let v=armyVis.get(a.id);
+      const sig=a.owner+'|'+(a.at? 'march':'rest')+'|'+a.atRegion;
+      if(!v || v.sig!==sig){
+        if(v) scene.remove(v.group);
+        const group=buildArmyGroup(a);
+        scene.add(group);
+        v={group, sig}; armyVis.set(a.id, v);
+      }
+      const p = a.at? a.at.pos : (rById[a.atRegion]? {x:rById[a.atRegion].x, y:rById[a.atRegion].y} : null);
+      if(p){ v.group.position.set(SX(p.x), BASE_Y+0.15, SZ(p.y)); }
+      // banner bobs as it marches
+      v.group.position.y = BASE_Y+0.15 + (a.at? Math.abs(Math.sin(t*6+a.id))*0.22 : 0);
+      v.group.rotation.y = t*0.12 + a.id;
+    });
+    [...armyVis.keys()].forEach(id=>{ if(!seen.has(id)){ scene.remove(armyVis.get(id).group); armyVis.delete(id); } });
+    // marching route ribbon — origin → now → destination (throttled: markers move daily, not per frame)
+    const wantRibbon=(G.armies||[]).some(a=>a.at && a.owner==='player');
+    if(routeGroup && !wantRibbon){ scene.remove(routeGroup); routeGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); routeGroup=null; routeTick=0; }
+    if(wantRibbon && (routeTick++%8===0)){
+      if(routeGroup){ scene.remove(routeGroup); routeGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); routeGroup=null; }
+      routeGroup=new THREE.Group();
+      (G.armies||[]).filter(a=>a.at && a.owner==='player').forEach(a=>{
+        const pts=[
+          new THREE.Vector3(SX(rById[a.fromRegion].x), BASE_Y+0.35, SZ(rById[a.fromRegion].y)),
+          new THREE.Vector3(SX(a.at.pos.x), BASE_Y+0.35, SZ(a.at.pos.y)),
+          new THREE.Vector3(SX(rById[a.destRegion].x), BASE_Y+0.35, SZ(rById[a.destRegion].y))];
+        // quads, not lines — a 1px line is invisible against the road web on a phone
+        for(let i=0;i<pts.length-1;i++){
+          const p=pts[i], q=pts[i+1];
+          const len=Math.hypot(q.x-p.x, q.z-p.z); if(len<0.5) continue;
+          const geo=new THREE.PlaneGeometry(len, 1.35);
+          const seg=new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:0xffd76a, transparent:true, opacity:0.78, depthWrite:false}));
+          seg.rotation.x=-Math.PI/2; seg.rotation.z=-Math.atan2(q.z-p.z, q.x-p.x);
+          seg.position.set((p.x+q.x)/2, BASE_Y+0.32, (p.z+q.z)/2);
+          routeGroup.add(seg);
+        }
+      });
+      scene.add(routeGroup);
+    }
+    // order-mode highlights: lit regions when an army awaits a tap, lit ports for a fleet
+    const wantArmy = window.__marchArmyId!=null? G.armies.find(a=>a.id===window.__marchArmyId) : null;
+    const wantFleet = window.__marchFleetId!=null? G.fleets.find(f=>f.id===window.__marchFleetId) : null;
+    if((wantArmy && wantArmy.id)!==lastMarchId || (wantFleet && wantFleet.id)!==lastFleetOrderId || marchRingGroup && !wantArmy && !wantFleet){
+      lastMarchId = wantArmy? wantArmy.id : null;
+      lastFleetOrderId = wantFleet? wantFleet.id : null;
+      if(marchRingGroup){ scene.remove(marchRingGroup); marchRingGroup=null; }
+      if(wantArmy && !wantArmy.at){
+        marchRingGroup=new THREE.Group();
+        G.regions.forEach(r=>{
+          if(r.id===wantArmy.atRegion) return;
+          const p=findLandPath(wantArmy.atRegion, r.id); if(!p) return;
+          const hostile = r.owner && r.owner!==wantArmy.owner && !allied(wantArmy.owner, r.owner);
+          const m=new THREE.Mesh(marchRingGeo, new THREE.MeshBasicMaterial({color: hostile? 0xe0563c : 0xffd76a, transparent:true, opacity:0.75, side:THREE.DoubleSide, depthWrite:false}));
+          m.rotation.x=-Math.PI/2; m.position.set(SX(r.x), BASE_Y+0.3, SZ(r.y));
+          marchRingGroup.add(m);
+        });
+        scene.add(marchRingGroup);
+      }
+      if(wantFleet){
+        marchRingGroup=new THREE.Group();
+        G.regions.filter(r=>r.isPort).forEach(r=>{
+          const hostile = r.owner && r.owner!==wantFleet.owner && !allied(wantFleet.owner, r.owner);
+          const m=new THREE.Mesh(marchRingGeo, new THREE.MeshBasicMaterial({color: hostile? 0xe0563c : 0x9fd8ff, transparent:true, opacity:0.8, side:THREE.DoubleSide, depthWrite:false}));
+          m.rotation.x=-Math.PI/2; m.position.set(SX(r.x), BASE_Y+0.3, SZ(r.y));
+          marchRingGroup.add(m);
+        });
+        scene.add(marchRingGroup);
+      }
+    }
+    if(marchRingGroup){ const s=1+Math.sin(t*3.4)*0.06; marchRingGroup.scale.set(s,1,s); }
+  }
   const TILT = 0.92; // ~53° elevation — always reads as a chart
   const LIS0 = G.regions.find(r=>r.name==='Lisbon');
   let target = new THREE.Vector3(SX(LIS0.x), 0, SZ(LIS0.y)); // open on the player's Lisbon — coast, harbour and hinterland in one frame
@@ -1961,6 +2840,19 @@ try{
       el.textContent=z.name; el.style.display='block';
       el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
     });
+    // armies carry their own chips — a marching host announces itself
+    (G.armies||[]).forEach(a=>{
+      const v=armyVis.get(a.id); if(!v) return;
+      const p=project(v.group.position.x, BASE_Y+9.5, v.group.position.z);
+      if(!p) return;
+      const ak='a'+a.id; used.add(ak); const el=chip(ak,'chip troops');
+      el.style.background = emp(a.owner).color;
+      if(a.at){
+        const dest=rById[a.destRegion];
+        el.textContent = '🪖 '+kfmt(a.men)+' → '+dest.name+' · '+Math.max(1,Math.ceil(a.arriveDay-G.day))+'d';
+      } else el.textContent='🪖 '+kfmt(a.men)+(a.stance==='hold'?' 🛡':'');
+      el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
+    });
     chipPool.forEach((el,k)=>{ if(!used.has(k)) el.style.display='none'; });
   }
 
@@ -1970,6 +2862,9 @@ try{
     G.fleets.forEach(f=>{ const v=fleetVis.get(f.id); if(!v) return;
       const p=project(v.group.position.x, 4, v.group.position.z); if(!p) return;
       const d=Math.hypot(p[0]-cx, p[1]-cy); if(d<64 && d<bd){ bd=d; best={type:'fleet', id:f.id}; } });
+    (G.armies||[]).forEach(a=>{ const v=armyVis.get(a.id); if(!v) return;
+      const p=project(v.group.position.x, BASE_Y+4, v.group.position.z); if(!p) return;
+      const d=Math.hypot(p[0]-cx, p[1]-cy); if(d<70 && d<bd){ bd=d; best={type:'army', id:a.id}; } });
     G.regions.forEach(r=>{ const p=project(SX(r.x), BASE_Y+3, SZ(r.y)); if(!p) return;
       const d=Math.hypot(p[0]-cx, p[1]-cy); if(d<118 && d<bd){ bd=d; best={type:'region', id:r.id}; } });
     if(best) return best;
@@ -2031,19 +2926,32 @@ try{
       pos.setY(i, Math.sin(x*0.11 + t*1.1)*0.32 + Math.cos(z*0.09 + t*0.8)*0.26);
     }
     pos.needsUpdate=true; waterGeo.computeVertexNormals();
-    // fleets glide to their zones & bob
+    // fleets LIVE at their true positions — sailing ships glide, anchored ones bob
     G.fleets.forEach((f,i)=>{
       const v=fleetVis.get(f.id); if(!v) return;
+      const p=fPos(f);
       const z=seaById[f.zone];
-      const peers=G.fleets.filter(o=>o.zone===f.zone); const slot=peers.indexOf(f)-(peers.length-1)/2;
-      const tx=SX(z.x)+slot*9, tz=SZ(z.y)+ (i%2)*3;
-      const k=1-Math.exp(-dt*2.4);
-      v.group.position.x += (tx-v.group.position.x)*k;
-      v.group.position.z += (tz-v.group.position.z)*k;
+      const peers=G.fleets.filter(o=>!o.at && o.zone===f.zone); const slot=f.at? 0 : peers.indexOf(f)-(peers.length-1)/2;
+      const tx=SX(p.x)+ (f.at? 0 : slot*10), tz=SZ(p.y)+ (f.at? 0 : (i%2)*4);
+      const k=1-Math.exp(-dt*3.2);
+      const dx=tx-v.group.position.x, dz=tz-v.group.position.z;
+      v.group.position.x += dx*k;
+      v.group.position.z += dz*k;
       v.group.position.y = 0.35 + Math.sin(t*1.4 + f.id*1.7)*0.16;
-      v.group.rotation.z = Math.sin(t*1.1 + f.id)*0.03;
-      v.group.rotation.y = Math.sin(t*0.4 + f.id*2.1)*0.25;
+      if(f.at){
+        // head where she's going, heel into the wind, wake astern
+        const want=Math.atan2(dx, dz);
+        let dd=want-v.group.rotation.y; dd=((dd+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
+        v.group.rotation.y += dd*k;
+        v.group.rotation.z = 0.055 + Math.sin(t*1.6 + f.id)*0.02;
+      } else {
+        v.group.rotation.z = Math.sin(t*1.1 + f.id)*0.03;
+        v.group.rotation.y += (Math.sin(t*0.4 + f.id*2.1)*0.25 - v.group.rotation.y)*k;
+      }
+      if(v.wake){ v.wake.visible = !!f.at; if(f.at) v.wake.material.opacity = 0.22 + Math.sin(t*3+f.id)*0.05; }
     });
+    // armies march — banners on the roads, standards at rest
+    updateArmyVis(t);
     // cargo dots stream along paying lanes
     if(laneCurves.length){
       const n=Math.min(380, laneCurves.length*4);
