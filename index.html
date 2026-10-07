@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Rift &amp; Sail — Age of Sail Empire</title>
+<style>
+  :root{
+    --parchment:#e8d5a8; --parchment-dark:#c9ae77; --ink:#2b1d0e;
+    --teal:#14586b; --teal-deep:#0c3a4a; --brass:#b08a3e; --brass-light:#d9b96a;
+    --crimson:#8e2f32; --royal:#2c4a7c; --gold:#9c7418; --forest:#37603a;
+    --panel:#f3e6c3; --panel-edge:#8a6d3b;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0c2b38;}
+  body{font-family:Georgia,'Times New Roman',serif;color:var(--ink);}
+  #game{position:fixed;inset:0;}
+  #map{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;}
+  #map:active{cursor:grabbing;}
+
+  /* ---------- top ledger bar ---------- */
+  #topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:6px;
+    padding:6px 8px;background:linear-gradient(180deg,rgba(20,14,6,.88),rgba(20,14,6,.72) 80%,rgba(20,14,6,0));
+    color:#f3e6c3;z-index:20;pointer-events:none;}
+  #topbar .cell{pointer-events:auto;display:flex;align-items:center;gap:4px;background:rgba(43,29,14,.55);
+    border:1px solid rgba(217,185,106,.5);border-radius:8px;padding:5px 8px;font-size:13px;white-space:nowrap;}
+  #topbar .cell b{color:var(--brass-light);font-variant-numeric:tabular-nums;}
+  #topbar .trend-up{color:#8fd18b;} #topbar .trend-dn{color:#e08a7d;}
+  #title-cell{font-variant:small-caps;letter-spacing:1px;font-size:14px;color:var(--parchment);}
+  #btn-crown{position:relative;}
+  #crown-badge{position:absolute;top:-6px;right:-6px;background:var(--crimson);color:#fff;border-radius:50%;
+    min-width:20px;height:20px;font-size:12px;display:none;align-items:center;justify-content:center;padding:0 4px;border:1px solid #fff3;}
+  .bar-btn{pointer-events:auto;background:linear-gradient(180deg,#6d5326,#4c3a1a);color:#f7ecd0;border:1px solid var(--brass-light);
+    border-radius:8px;padding:7px 10px;font-family:inherit;font-size:13px;cursor:pointer;min-height:38px;}
+  .bar-btn:active{transform:translateY(1px);}
+  #spacer{flex:1;pointer-events:none;}
+
+  /* ---------- aims tracker ---------- */
+  #aims{position:absolute;top:56px;left:8px;z-index:15;background:rgba(243,230,195,.92);border:1px solid var(--panel-edge);
+    border-radius:10px;padding:8px 10px;max-width:230px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.35);}
+  #aims h4{font-variant:small-caps;letter-spacing:.5px;font-size:12px;color:#6d5326;margin-bottom:4px;}
+  #aims .aim{margin:3px 0;display:flex;gap:6px;align-items:baseline;}
+  #aims .aim .tick{color:var(--forest);font-weight:bold;}
+  #aims .aim .prog{color:#7a6238;font-size:11px;white-space:nowrap;}
+  @media (max-width:600px){ #aims{display:none;} #aims.show{display:block;top:auto;bottom:170px;} }
+
+  /* ---------- warnings ---------- */
+  #warnings{position:absolute;top:56px;right:8px;z-index:15;display:flex;flex-direction:column;gap:6px;max-width:260px;}
+  .warn{background:rgba(90,20,20,.92);color:#ffe9d6;border:1px solid #d98a7d;border-radius:10px;padding:7px 10px;
+    font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.4);animation:warnin .3s ease-out;}
+  @keyframes warnin{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
+
+  /* ---------- zoom controls ---------- */
+  #zoomctl{position:absolute;right:8px;bottom:150px;z-index:16;display:flex;flex-direction:column;gap:6px;}
+  #zoomctl button{width:46px;height:46px;border-radius:12px;border:1px solid var(--brass-light);
+    background:linear-gradient(180deg,#6d5326,#4c3a1a);color:#f7ecd0;font-size:22px;font-family:inherit;cursor:pointer;
+    box-shadow:0 3px 10px rgba(0,0,0,.4);}
+  #zoomctl button:active{transform:translateY(1px);}
+  @media (max-width:600px){ #zoomctl{bottom:auto;top:180px;} }
+
+  /* ---------- bottom sheet (actions) ---------- */
+  #sheet{position:absolute;left:0;right:0;bottom:0;z-index:25;background:linear-gradient(180deg,#f7ecd0,#ecd9ac);
+    border-top:3px solid var(--brass);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.5);
+    padding:12px 14px 14px;transform:translateY(105%);transition:transform .25s ease;max-height:62vh;overflow-y:auto;}
+  #sheet.open{transform:none;}
+  #sheet .grab{width:44px;height:5px;border-radius:3px;background:var(--parchment-dark);margin:0 auto 10px;}
+  #sheet h3{font-variant:small-caps;letter-spacing:.5px;font-size:19px;}
+  #sheet .sub{font-size:12.5px;color:#6d5326;margin:2px 0 8px;font-style:italic;}
+  #sheet .stats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+  #sheet .stat{background:rgba(109,83,38,.12);border:1px solid rgba(109,83,38,.35);border-radius:8px;padding:4px 8px;font-size:12.5px;}
+  #sheet .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  @media (min-width:700px){ #sheet .acts{grid-template-columns:repeat(3,1fr);} }
+  .act-btn{min-height:52px;border-radius:12px;border:1px solid var(--panel-edge);cursor:pointer;font-family:inherit;
+    background:linear-gradient(180deg,#fff6dd,#e9d5a0);color:var(--ink);padding:8px;text-align:left;
+    display:flex;flex-direction:column;gap:2px;box-shadow:0 2px 6px rgba(0,0,0,.18);}
+  .act-btn:active{transform:translateY(1px);}
+  .act-btn:disabled{opacity:.45;cursor:not-allowed;}
+  .act-btn .t{font-weight:bold;font-size:14px;}
+  .act-btn .d{font-size:11.5px;color:#6d5326;line-height:1.25;}
+  .act-btn.war{background:linear-gradient(180deg,#f3d9c8,#e0b090);border-color:#9c4a2e;}
+  .act-btn.sea{background:linear-gradient(180deg,#d3e6ea,#a9ccd4);border-color:#3d6a7c;}
+  #sheet .close-x{position:absolute;top:10px;right:12px;width:36px;height:36px;border-radius:50%;border:1px solid var(--panel-edge);
+    background:#fff6dd;font-size:18px;cursor:pointer;font-family:inherit;}
+
+  /* ---------- end season ---------- */
+  #btn-end{position:absolute;right:10px;bottom:14px;z-index:24;min-height:56px;padding:12px 20px;border-radius:14px;
+    border:2px solid var(--brass-light);background:linear-gradient(180deg,#8a6a2e,#5e4718);color:#fff3d0;
+    font-family:inherit;font-size:17px;font-variant:small-caps;letter-spacing:1px;cursor:pointer;
+    box-shadow:0 6px 20px rgba(0,0,0,.55);}
+  #btn-end:active{transform:translateY(1px);}
+  #btn-menu{position:absolute;left:10px;bottom:14px;z-index:24;}
+
+  /* ---------- overlays (gazette / sheets / start / end) ---------- */
+  .veil{position:absolute;inset:0;background:rgba(10,16,20,.62);z-index:40;display:none;align-items:center;justify-content:center;padding:14px;}
+  .veil.open{display:flex;}
+  .card{background:linear-gradient(180deg,#f8efD2,#ecd9ac);border:2px solid var(--brass);border-radius:16px;
+    max-width:560px;width:100%;max-height:86vh;overflow-y:auto;padding:20px 20px 16px;box-shadow:0 18px 60px rgba(0,0,0,.6);}
+  .card h2{font-variant:small-caps;letter-spacing:1px;text-align:center;font-size:24px;margin-bottom:2px;}
+  .card .rule{height:2px;background:linear-gradient(90deg,transparent,var(--brass),transparent);margin:8px 0 12px;}
+  .card p{font-size:14px;line-height:1.45;margin:6px 0;}
+  #gazette-lines p{border-bottom:1px dotted rgba(109,83,38,.4);padding:5px 0;font-size:13.5px;}
+  #gazette-lines p:first-child{font-weight:bold;}
+  .big-btn{display:block;width:100%;min-height:52px;margin-top:12px;border-radius:12px;border:1px solid var(--brass-light);
+    background:linear-gradient(180deg,#8a6a2e,#5e4718);color:#fff3d0;font-family:inherit;font-size:16px;
+    font-variant:small-caps;letter-spacing:1px;cursor:pointer;}
+  .big-btn.secondary{background:linear-gradient(180deg,#fff6dd,#e9d5a0);color:var(--ink);border-color:var(--panel-edge);}
+  .big-btn:active{transform:translateY(1px);}
+  .dip-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px dotted rgba(109,83,38,.4);flex-wrap:wrap;}
+  .dip-row .who{font-weight:bold;min-width:130px;}
+  .dip-row .rel{font-size:12px;color:#6d5326;}
+  .mini-btn{min-height:40px;padding:6px 10px;border-radius:9px;border:1px solid var(--panel-edge);cursor:pointer;
+    background:linear-gradient(180deg,#fff6dd,#e9d5a0);font-family:inherit;font-size:12.5px;}
+  .mini-btn:disabled{opacity:.45;}
+  .mini-btn.danger{background:linear-gradient(180deg,#f3d9c8,#e0b090);border-color:#9c4a2e;}
+
+  /* ---------- start screen ---------- */
+  #start .card{text-align:center;max-width:520px;}
+  #start .flag{font-size:40px;letter-spacing:6px;}
+  #start h1{font-size:38px;font-variant:small-caps;letter-spacing:2px;margin:2px 0;}
+  #start .tag{font-style:italic;color:#6d5326;font-size:14px;}
+  #start .howto{text-align:left;margin:12px auto 4px;max-width:420px;font-size:13.5px;line-height:1.5;}
+  #start .howto li{margin:5px 0 5px 18px;}
+
+  /* income tally toast */
+  #tally{position:absolute;left:50%;top:64px;transform:translateX(-50%) translateY(-8px);z-index:30;opacity:0;
+    background:rgba(43,29,14,.9);color:var(--brass-light);border:1px solid var(--brass-light);border-radius:12px;
+    padding:9px 16px;font-size:15px;pointer-events:none;transition:all .3s ease;white-space:nowrap;}
+  #tally.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="map"></canvas>
+
+  <div id="topbar">
+    <div class="cell" id="title-cell">⚜ Rift &amp; Sail</div>
+    <div class="cell">📅 <b id="tb-season">Spring, Year 1</b></div>
+    <div class="cell">🪙 <b id="tb-gold">0</b> <span id="tb-gold-trend"></span></div>
+    <div class="cell">⚔ <b id="tb-men">0</b></div>
+    <div class="cell">⛵ <b id="tb-ships">0</b></div>
+    <div class="cell" id="tb-debt-cell" style="display:none">🏦 <b id="tb-debt">0</b></div>
+    <div id="spacer"></div>
+    <button class="bar-btn" id="btn-crown">👑 Crown <span id="crown-badge">0</span></button>
+    <button class="bar-btn" id="btn-realm">Realm</button>
+  </div>
+
+  <div id="aims"><h4>Sovereign's Aims</h4><div id="aims-list"></div></div>
+  <div id="warnings"></div>
+  <div id="tally"></div>
+
+  <div id="zoomctl">
+    <button id="zoom-in" aria-label="Zoom in">+</button>
+    <button id="zoom-out" aria-label="Zoom out">−</button>
+    <button id="zoom-home" aria-label="Show whole world">⌂</button>
+  </div>
+
+  <button class="bar-btn" id="btn-menu">☰</button>
+  <button id="btn-end">End Season ⚓</button>
+
+  <div id="sheet">
+    <div class="grab"></div>
+    <button class="close-x" id="sheet-close">×</button>
+    <h3 id="sheet-title">—</h3>
+    <div class="sub" id="sheet-sub">—</div>
+    <div class="stats" id="sheet-stats"></div>
+    <div class="acts" id="sheet-acts"></div>
+  </div>
+
+  <!-- Gazette -->
+  <div class="veil" id="gazette"><div class="card">
+    <h2 id="gazette-title">The Gazette</h2>
+    <div class="rule"></div>
+    <div id="gazette-lines"></div>
+    <button class="big-btn" id="gazette-ok">Continue</button>
+  </div></div>
+
+  <!-- Realm sheet (tech / debt / diplomacy) -->
+  <div class="veil" id="realm"><div class="card">
+    <h2>The Realm</h2>
+    <div class="rule"></div>
+    <div id="realm-body"></div>
+    <button class="big-btn secondary" id="realm-close">Close</button>
+  </div></div>
+
+  <!-- Crown decisions -->
+  <div class="veil" id="crown"><div class="card">
+    <h2>Needs the Crown</h2>
+    <div class="rule"></div>
+    <div id="crown-body"></div>
+    <button class="big-btn secondary" id="crown-close">Decide Later</button>
+  </div></div>
+
+  <!-- Menu -->
+  <div class="veil" id="menu"><div class="card">
+    <h2>Rift &amp; Sail</h2>
+    <div class="rule"></div>
+    <button class="big-btn" id="menu-continue">Continue Campaign</button>
+    <button class="big-btn secondary" id="menu-new">New Campaign</button>
+    <button class="big-btn secondary" id="menu-how">How to Play</button>
+    <button class="big-btn secondary" id="menu-close">Close</button>
+  </div></div>
+
+  <!-- How to play -->
+  <div class="veil" id="howto"><div class="card">
+    <h2>How to Play</h2>
+    <div class="rule"></div>
+    <p><b>The goal:</b> hold 60% of the world's regions, <i>or</i> lead all empires in trade income for 5 straight seasons. Lose your capital and every port, and your line ends.</p>
+    <p><b>Each season:</b> your income arrives automatically. Then act freely — tap any region or fleet to command it. End the season when you're done; rivals move, and the Gazette reports what happened.</p>
+    <p><b>Armies:</b> muster regiments in your regions (men come from your population), then march them into neighbouring regions to conquer. Forts, walls and terrain matter. Your army's tech tier multiplies its strength.</p>
+    <p><b>Fleets:</b> build warships in ports with shipyards. Fleets sail between sea zones; park one off an enemy port to <b>blockade</b> it — a blockaded port earns no trade and slowly bleeds men.</p>
+    <p><b>Trade:</b> lanes between your ports pay every season, thicker lanes pay more. Conquer a port and its lanes become yours. Allies open their ports to your lanes.</p>
+    <p><b>The Crown:</b> momentous matters — war warnings, offers, crises — wait under the 👑 Crown button. Only big decisions reach you.</p>
+    <button class="big-btn" id="howto-close">To the Chart</button>
+  </div></div>
+
+  <!-- Start -->
+  <div class="veil open" id="start"><div class="card">
+    <div class="flag">⚜ ⚓ ⚜</div>
+    <h1>Rift &amp; Sail</h1>
+    <div class="tag">Traders &amp; Empires — an Age of Sail conquest</div>
+    <div class="rule"></div>
+    <ul class="howto">
+      <li>🗺 <b>Conquer the chart:</b> muster armies, march, and take regions and ports from rivals and free towns.</li>
+      <li>⛵ <b>Rule the sea:</b> build fleets, steal trade lanes, and blockade enemy ports until they starve.</li>
+      <li>👑 <b>Reign, don't micromanage:</b> your empire earns on its own — you make the big calls.</li>
+    </ul>
+    <button class="big-btn" id="btn-new">New Campaign</button>
+    <button class="big-btn secondary" id="btn-continue" style="display:none">Continue Campaign</button>
+  </div></div>
+
+  <!-- End screen -->
+  <div class="veil" id="endscreen"><div class="card">
+    <h2 id="end-title">Victory</h2>
+    <div class="rule"></div>
+    <p id="end-text"></p>
+    <button class="big-btn" id="end-new">New Campaign</button>
+  </div></div>
+</div>
+<script>
+'use strict';
+/* ============================================================
+   RIFT & SAIL — a hand-built Age of Sail empire game
+   One file. No dependencies. Canvas chart, turn-based seasons.
+   ============================================================ */
+
+// ---------- utilities ----------
+const $=s=>document.querySelector(s);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const kfmt=n=>n>=1000? (Math.round(n/100)/10)+'k' : ''+Math.round(n);
+let _seed=7; const rnd=()=>{_seed=(_seed*16807)%2147483647; return (_seed-1)/2147483646;};
+const rr=(a,b)=>a+rnd()*(b-a);
+const pick=a=>a[Math.floor(rnd()*a.length)];
+
+// ---------- world definition ----------
+const WORLD_W=2400, WORLD_H=1600;
+const SEASONS=['Spring','Summer','Autumn','Winter'];
+
+// terrains: plains, forest, hills, coast handled by isPort, marsh
+// x,y in world units. group: 'W' west continent, 'E' east continent, 'I' islands
+const REGION_DEFS=[
+ // name, x, y, terrain, specialty, isPort, group
+ ['Lisbon',        300, 980,'coast','grain', true,'W'],
+ ['Porto',         320, 860,'coast','timber',true,'W'],
+ ['Galicia',       300, 740,'hills','iron', false,'W'],
+ ['León',          470, 760,'plains','grain',false,'W'],
+ ['Castile',       500, 900,'plains','grain',false,'W'],
+ ['Andalusia',     430,1080,'plains','sugar',false,'W'],
+ ['Cádiz',         340,1120,'coast','sugar', true,'W'],
+ ['Gibraltar',     470,1160,'hills','iron', true,'W'],
+ ['Valencia',      640,1020,'coast','grain', true,'W'],
+ ['Catalonia',     660, 890,'hills','timber',false,'W'],
+ ['Navarre',       560, 700,'hills','iron', false,'W'],
+ ['Bordeaux',      430, 560,'coast','grain', true,'W'],
+ ['Brittany',      330, 400,'coast','timber',true,'W'],
+ ['Normandy',      520, 330,'plains','grain',false,'W'],
+ ['Paris Basin',   620, 420,'plains','grain',false,'W'],
+ ['Flanders',      640, 260,'coast','grain', true,'W'],
+ ['Holland',       740, 230,'marsh','grain', true,'W'],
+ ['Hamburg',       900, 240,'coast','timber',true,'W'],
+ ['Jutland',      1010, 190,'coast','timber',true,'W'],
+ ['London',        560, 180,'coast','grain', true,'I'],
+ ['Bristol',       430, 240,'coast','iron',  true,'I'],
+ ['Wales',         420, 150,'hills','iron',  false,'I'],
+ ['Ireland',       220, 180,'coast','grain', true,'I'],
+ ['Scotland',      330,  60,'hills','timber',false,'I'],
+ // east continent
+ ['Naples',       1520,1080,'coast','grain', true,'E'],
+ ['Rome States',  1460, 940,'hills','grain', false,'E'],
+ ['Lombardy',     1440, 760,'plains','grain',false,'E'],
+ ['Venice',       1600, 740,'coast','sugar', true,'E'],
+ ['Dalmatia',     1640, 880,'hills','timber',false,'E'],
+ ['Greece',       1700,1080,'coast','grain', true,'E'],
+ ['Constantinople',1880, 900,'coast','sugar',true,'E'],
+ ['Anatolia',     1990,1020,'hills','iron', false,'E'],
+ ['Levant',       2080,1180,'coast','sugar', true,'E'],
+ ['Egypt',        1960,1340,'plains','grain',false,'E'],
+ ['Alexandria',   1880,1280,'coast','grain', true,'E'],
+ ['Tripoli',      1560,1300,'coast','sugar', true,'E'],
+ ['Tunis',        1420,1200,'coast','grain', true,'E'],
+ ['Algiers',      1180,1180,'coast','iron',  true,'E'],
+ ['Morocco',       760,1240,'coast','sugar', true,'E'],
+ ['Danube Lands', 1560, 560,'plains','grain',false,'E'],
+ ['Hungary',      1700, 480,'plains','grain',false,'E'],
+ ['Poland',       1760, 300,'plains','grain',false,'E'],
+ ['Prussia',      1620, 220,'coast','timber',true,'E'],
+ ['Livonia',      1820, 150,'coast','timber',true,'E'],
+ ['Muscovy',      2050, 260,'forest','timber',false,'E'],
+ ['Steppe',       2150, 520,'plains','grain',false,'E'],
+ ['Caucasus',     2230, 800,'hills','iron',  false,'E'],
+ // islands
+ ['Azores',        120, 620,'coast','sugar', true,'I'],
+ ['Madeira',       180, 900,'coast','sugar', true,'I'],
+ ['Canaries',      240,1180,'coast','sugar', true,'I'],
+ ['Cape Verde',    140,1420,'coast','grain', true,'I'],
+ ['Sicily',       1560,1170,'coast','grain', true,'I'],
+ ['Sardinia',     1300,1020,'coast','timber',true,'I'],
+ ['Corsica',      1330, 900,'hills','timber',false,'I'],
+ ['Crete',        1810,1210,'coast','grain', true,'I'],
+ ['Cyprus',       2060,1090,'coast','sugar', true,'I'],
+ ['Bahamas',       960, 320,'coast','sugar', true,'I'],
+ ['Havana',        900, 520,'coast','sugar', true,'I'],
+ ['Jamaica',       820, 700,'coast','sugar', true,'I'],
+ ['Boston',       1080, 140,'coast','timber',true,'I'],
+ ['New York',     1030, 260,'coast','grain', true,'I'],
+ ['Virginia',      960, 420,'coast','grain', true,'I'],
+];
+const SEA_DEFS=[
+ // name, x, y, adjacent zone indices (filled below)
+ ['Lusitanian Sea',  180, 820],['Bay of Biscay',  300, 560],
+ ['The Channel',     520, 290],['North Sea',      760, 160],
+ ['Atlantic Deep',   700, 700],['The Rift',      1050, 850],
+ ['Gibraltar Strait',640,1170],['Western Med',  1250,1080],
+ ['Eastern Med',    1850,1120],['Aegean',       1850, 960],
+ ['Baltic Sea',     1750, 120],['Black Sea',    2150, 700],
+ ['Caribbean',       900, 620],['American Coast',1050, 330],
+];
+const EMPIRES=[
+ {id:'player', name:'Your Crown', color:'#8e2f32', dark:'#5e1d20', capital:'Lisbon'},
+ {id:'aurelia',name:'Aurelian Empire', color:'#2c4a7c', dark:'#1b2f52', capital:'Venice'},
+ {id:'meridian',name:'Meridian League', color:'#9c7418', dark:'#64490c', capital:'Holland'},
+ {id:'sable',  name:'Sable Corsairs', color:'#37603a', dark:'#22401f', capital:'Algiers'},
+];
+const ARMY_TECH=['Militia','Muskets','Line Infantry','Élite Guards'];
+const SHIP_TECH=['Sloops','Frigates','Ships of the Line'];
+const GOODS={grain:'🌾 grain',timber:'🪵 timber',iron:'⛏ iron',sugar:'🍯 sugar'};
+const MUSTER_COST=40, MUSTER_MEN=1000, SHIP_COST=120;
+const REGION_COUNT=REGION_DEFS.length;
+const WIN_REGIONS=Math.ceil(REGION_COUNT*0.6);
+
+// ---------- mutable game state ----------
+let G=null; // whole game state (serialised to localStorage)
+let rById={}, seaById={};
+
+function freshState(){
+  _seed=1234567;
+  const regions=REGION_DEFS.map((d,i)=>({
+    id:i, name:d[0], x:d[1], y:d[2], terrain:d[3], specialty:d[4], isPort:d[5], group:d[6],
+    owner:null, tier:0, // 0 hamlet 1 town 2 city 3 great port/city
+    hasWall:false, hasFort:false, hasShipyard:false, hasMarket:false,
+    pop:Math.round(rr(3000,7000)), troops:0, towns:Math.floor(rr(2,5)),
+    flashUntil:0, neighbors:[]
+  }));
+  // land adjacency: same group, within 330 units
+  regions.forEach(a=>{
+    regions.forEach(b=>{
+      if(a===b) return;
+      const dx=a.x-b.x, dy=a.y-b.y, dist=Math.hypot(dx,dy);
+      if(dist<330 && a.group===b.group && a.group!=='I') a.neighbors.push(b.id);
+    });
+  });
+  // islands link to nearest 2 regions (sea crossing allowed for armies via ports)
+  regions.filter(r=>r.group==='I').forEach(a=>{
+    const sorted=regions.filter(b=>b!==a).map(b=>({b,d:Math.hypot(a.x-b.x,a.y-b.y)})).sort((p,q)=>p.d-q.d);
+    sorted.slice(0,2).forEach(({b})=>{ if(!a.neighbors.includes(b.id))a.neighbors.push(b.id); if(!b.neighbors.includes(a.id))b.neighbors.push(a.id); });
+  });
+  // straits: Gibraltar connects west coast & Morocco side; Channel; Rift crossing Venice->west none (sea only)
+  const link=(n1,n2)=>{const a=regions.find(r=>r.name===n1),b=regions.find(r=>r.name===n2);
+    if(a&&b){ if(!a.neighbors.includes(b.id))a.neighbors.push(b.id); if(!b.neighbors.includes(a.id))b.neighbors.push(a.id);} };
+  link('Cádiz','Morocco'); link('London','Flanders'); link('Bristol','Brittany'); link('Venice','Dalmatia');
+  // sea zones
+  const seas=SEA_DEFS.map((d,i)=>({id:i,name:d[0],x:d[1],y:d[2],ports:[],neighbors:[]}));
+  regions.filter(r=>r.isPort).forEach(p=>{
+    let best=0,bd=1e9; seas.forEach(s=>{const d=Math.hypot(p.x-s.x,p.y-s.y); if(d<bd){bd=d;best=s.id;}});
+    p.seaZone=best; seas[best].ports.push(p.id);
+  });
+  seas.forEach(a=>{ seas.forEach(b=>{ if(a!==b && Math.hypot(a.x-b.x,a.y-b.y)<560) a.neighbors.push(b.id); }); });
+  // empires
+  const empires={};
+  EMPIRES.forEach(e=>{
+    const cap=regions.find(r=>r.name===e.capital);
+    empires[e.id]={id:e.id,name:e.name,color:e.color,dark:e.dark,gold:e.id==='player'?600:550,
+      armyTech:0, shipTech:0, debt:0, relations:{}, tradeStreak:0};
+    cap.owner=e.id; cap.tier=2; cap.troops=e.id==='player'?4000:5000; cap.pop=9000;
+    if(cap.isPort) cap.hasShipyard=true;
+    // two home regions around the capital
+    cap.neighbors.map(id=>regions[id]).filter(r=>!r.owner).slice(0,2).forEach(r=>{r.owner=e.id; r.tier=1; r.troops=1500;});
+  });
+  EMPIRES.forEach(a=>EMPIRES.forEach(b=>{ if(a.id!==b.id) empires[a.id].relations[b.id]={score:a.id==='player'||b.id==='player'?10:0, war:false, ally:false}; }));
+  // scattered free-town garrisons
+  regions.filter(r=>!r.owner).forEach(r=>{ r.troops=Math.round(rr(1200,3200)); });
+  const fleets=[];
+  EMPIRES.forEach(e=>{
+    const cap=regions.find(r=>r.name===e.capital);
+    fleets.push({id:fleets.length, owner:e.id, zone:cap.seaZone, ships:e.id==='player'?4:5, stance:'patrol', name:e.name.split(' ')[0]+' Squadron'});
+  });
+  return {
+    turn:1, seasonIdx:0, regions, seas, empires, fleets,
+    gazette:[], crownQueue:[], warnings:[], lastIncome:{gold:0,trade:0,upkeep:0,interest:0},
+    tradeLeaderSeasons:0, over:false, startedAt:Date.now()
+  };
+}
+
+function rebuildIndex(){ rById={}; G.regions.forEach(r=>rById[r.id]=r); seaById={}; G.seas.forEach(s=>seaById[s.id]=s); }
+function emp(id){ return G.empires[id]; }
+function seasonName(){ return SEASONS[G.seasonIdx]+', Year '+Math.ceil(G.turn/4); }
+function isPlayerRegion(r){ return r.owner==='player'; }
+function atWar(a,b){ if(!a||!b||a===b||!G.empires[a]||!G.empires[b]) return false; const rel=G.empires[a].relations[b]; return rel? !!rel.war : false; }
+function allied(a,b){ if(!a||!b||!G.empires[a]||!G.empires[b]) return false; if(a===b) return true; const rel=G.empires[a].relations[b]; return rel? !!rel.ally : false; }
+function myRegions(){ return G.regions.filter(r=>r.owner==='player'); }
+function myPorts(){ return myRegions().filter(r=>r.isPort); }
+function totalMen(id){ return G.regions.filter(r=>r.owner===id).reduce((s,r)=>s+r.troops,0); }
+function totalShips(id){ return G.fleets.filter(f=>f.owner===id).reduce((s,f)=>s+f.ships,0); }
+
+// trade lane: pairs of ports connectable if same or neighbouring sea zone
+function lanePays(a,b,ownerId){
+  if(a.id===b.id) return false;
+  const A=rById[a.id], B=rById[b.id];
+  if(!(A.owner===ownerId||allied(A.owner,ownerId))) return false;
+  if(!(B.owner===ownerId||allied(B.owner,ownerId))) return false;
+  if(A.seaZone!==B.seaZone && !seaById[A.seaZone].neighbors.includes(B.seaZone)) return false;
+  if(isBlockaded(A)||isBlockaded(B)) return false;
+  return true;
+}
+function isBlockaded(port){
+  if(!port.isPort) return false;
+  return G.fleets.some(f=>f.zone===port.seaZone && f.stance==='blockade' && f.owner!==port.owner && !allied(f.owner,port.owner));
+}
+function tradeIncome(id){
+  const ports=G.regions.filter(r=>r.isPort && (r.owner===id||allied(r.owner,id)));
+  let sum=0; const seen=new Set();
+  ports.forEach(a=>ports.forEach(b=>{
+    if(a.id>=b.id) return; const key=a.id+'-'+b.id; if(seen.has(key))return; seen.add(key);
+    if(lanePays(a,b,id)) sum+= 18 + a.tier*8 + b.tier*8;
+  }));
+  return sum;
+}
+function regionIncome(r){
+  let v = 14 + r.tier*10 + Math.round(r.pop/900);
+  if(r.hasMarket) v+=10;
+  return v;
+}
+</script>
+<script>
+/* ================= RENDERING ================= */
+const cv=$('#map'), ctx=cv.getContext('2d');
+let view={x:0,y:0,scale:1}, DPR=1;
+let selected=null; // {type:'region'|'fleet'|'sea', id}
+let anims=[]; // {type:'wash'|'count', ...}
+
+function fitCanvas(){
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  cv.width=innerWidth*DPR; cv.height=innerHeight*DPR;
+}
+function fitWorld(){
+  const s=Math.min(innerWidth/WORLD_W, innerHeight/WORLD_H)*0.98;
+  view.scale=s; view.x=(innerWidth-WORLD_W*s)/2; view.y=(innerHeight-WORLD_H*s)/2;
+}
+function w2s(x,y){ return [x*view.scale+view.x, y*view.scale+view.y]; }
+function s2w(x,y){ return [(x-view.x)/view.scale,(y-view.y)/view.scale]; }
+
+const LAND_PATHS=[ // rough continent silhouettes (world coords) for inked coastline under regions
+ [[180,60],[560,30],[820,90],[1080,140],[1120,340],[980,520],[860,760],[700,980],[760,1300],[560,1420],[330,1330],[160,1080],[140,700],[180,380]],
+ [[1150,130],[1500,80],[1980,120],[2300,240],[2330,560],[2260,900],[2140,1240],[1980,1480],[1620,1460],[1380,1300],[1240,1080],[1300,760],[1420,480],[1380,260]],
+];
+// decorative waves precomputed
+const WAVES=[]; for(let i=0;i<260;i++) WAVES.push([Math.random()*WORLD_W, Math.random()*WORLD_H, 8+Math.random()*22]);
+
+function draw(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  // sea
+  const g=ctx.createLinearGradient(0,0,0,innerHeight);
+  g.addColorStop(0,'#175d72'); g.addColorStop(.5,'#125064'); g.addColorStop(1,'#0c3a4a');
+  ctx.fillStyle=g; ctx.fillRect(0,0,innerWidth,innerHeight);
+  ctx.save(); ctx.translate(view.x,view.y); ctx.scale(view.scale,view.scale);
+  // parchment land
+  LAND_PATHS.forEach(path=>{
+    ctx.beginPath(); path.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.closePath();
+    ctx.fillStyle='#dcc491'; ctx.fill();
+    ctx.strokeStyle='#7a5c2e'; ctx.lineWidth=3/view.scale*1.4; ctx.stroke();
+    ctx.strokeStyle='rgba(122,92,46,.35)'; ctx.lineWidth=9/view.scale*1.4; ctx.stroke();
+  });
+  // island blobs
+  G.regions.filter(r=>r.group==='I').forEach(r=>{
+    ctx.beginPath(); ctx.ellipse(r.x,r.y,95,70,0,0,Math.PI*2);
+    ctx.fillStyle='#dcc491'; ctx.fill(); ctx.strokeStyle='#7a5c2e'; ctx.lineWidth=2.4; ctx.stroke();
+  });
+  // waves
+  ctx.strokeStyle='rgba(255,255,255,.14)'; ctx.lineWidth=2;
+  WAVES.forEach(w=>{ ctx.beginPath(); ctx.arc(w[0],w[1],w[2],Math.PI*1.15,Math.PI*1.55); ctx.stroke(); });
+  // region tints + blobs
+  G.regions.forEach(r=>drawRegion(r));
+  // trade lanes
+  drawLanes();
+  // fleets
+  G.fleets.forEach(f=>drawFleet(f));
+  // animations overlay
+  const now=performance.now();
+  anims=anims.filter(a=>now-a.t0<a.dur);
+  anims.forEach(a=>{
+    const p=(now-a.t0)/a.dur;
+    if(a.type==='wash'){ const r=rById[a.region]; ctx.beginPath(); ctx.ellipse(r.x,r.y,150*(0.4+p),110*(0.4+p),0,0,Math.PI*2);
+      ctx.fillStyle=a.color+Math.round((1-p)*70).toString(16).padStart(2,'0'); ctx.fill(); }
+    if(a.type==='sail'){ const [x,y]=[a.x1+(a.x2-a.x1)*p, a.y1+(a.y2-a.y1)*p]; drawShip(x,y,1.1,'#f3e6c3'); }
+  });
+  ctx.restore();
+  requestAnimationFrame(draw);
+}
+
+function regionBlob(r){
+  const rad=105+ (r.group==='I'?-15:0);
+  ctx.beginPath();
+  for(let i=0;i<8;i++){ const a=i/8*Math.PI*2, d=rad*(0.86+((r.id*37+i*13)%10)*0.03);
+    const x=r.x+Math.cos(a)*d, y=r.y+Math.sin(a)*d*0.78; i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.closePath();
+}
+function drawRegion(r){
+  const owner=r.owner? emp(r.owner):null;
+  regionBlob(r);
+  ctx.fillStyle= owner? owner.color+'55' : 'rgba(120,96,52,.18)'; ctx.fill();
+  ctx.strokeStyle= owner? owner.dark : 'rgba(122,92,46,.5)'; ctx.lineWidth= owner?2.2:1.2; ctx.stroke();
+  if(selected&&selected.type==='region'&&selected.id===r.id){
+    regionBlob(r); ctx.strokeStyle='#fff3d0'; ctx.lineWidth=4; ctx.stroke();
+  }
+  // satellite towns
+  ctx.fillStyle='rgba(90,64,28,.85)';
+  for(let i=0;i<r.towns;i++){ const a=i*2.4+r.id, tx=r.x+Math.cos(a)*62, ty=r.y+Math.sin(a)*46;
+    ctx.fillRect(tx-3,ty-2,6,5); ctx.beginPath(); ctx.moveTo(tx-4,ty-2); ctx.lineTo(tx,ty-6); ctx.lineTo(tx+4,ty-2); ctx.fill(); }
+  drawSettlement(r);
+  // fort / wall markers
+  if(r.hasFort){ ctx.font='15px serif'; ctx.fillText('♜', r.x+52, r.y-38); }
+  if(r.hasWall){ ctx.strokeStyle='rgba(60,44,20,.7)'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(r.x,r.y,34,26,0,0,Math.PI*2); ctx.stroke(); }
+  // troops banner
+  if(r.troops>=500){
+    const col=owner?owner.color:'#6b5a34';
+    ctx.fillStyle=col; ctx.fillRect(r.x+14,r.y-58,44,19);
+    ctx.beginPath(); ctx.moveTo(r.x+58,r.y-58); ctx.lineTo(r.x+66,r.y-48); ctx.lineTo(r.x+58,r.y-39); ctx.fill();
+    ctx.fillStyle='#fff6dd'; ctx.font='bold 11px Georgia'; ctx.textAlign='center';
+    ctx.fillText(kfmt(r.troops), r.x+36, r.y-44); ctx.textAlign='left';
+  }
+  // blockaded port marker
+  if(r.isPort && isBlockaded(r)){ ctx.font='16px serif'; ctx.fillText('⛓', r.x-58, r.y-44); }
+  // label
+  const showLabel = view.scale>0.55 || r.tier>=2 || (selected&&selected.id===r.id);
+  if(showLabel){ ctx.font=(r.tier>=2?'bold ':'')+'14px Georgia'; ctx.textAlign='center';
+    ctx.fillStyle='rgba(243,230,195,.85)'; const w=ctx.measureText(r.name).width+10;
+    ctx.fillRect(r.x-w/2, r.y+34, w, 17);
+    ctx.fillStyle='#2b1d0e'; ctx.fillText(r.name, r.x, r.y+47); ctx.textAlign='left'; }
+}
+function drawSettlement(r){
+  const x=r.x,y=r.y, s=1+r.tier*0.28;
+  ctx.save(); ctx.translate(x,y); ctx.scale(s,s);
+  ctx.fillStyle='#5e4718'; ctx.fillRect(-3,-26,2.4,22); // mast/steeple base
+  const houses=[[-14,0],[-4,2],[6,0],[-9,-6],[2,-7]];
+  const n=2+r.tier; // buildings grow with tier
+  for(let i=0;i<Math.min(n+1,6);i++){ const [hx,hy]=houses[i%houses.length];
+    ctx.fillStyle= i%2? '#8a6d3b':'#a3803f'; ctx.fillRect(hx,hy-8,9,9);
+    ctx.fillStyle='#5e3a1e'; ctx.beginPath(); ctx.moveTo(hx-1,hy-8); ctx.lineTo(hx+4.5,hy-13); ctx.lineTo(hx+10,hy-8); ctx.fill(); }
+  if(r.tier>=1){ ctx.fillStyle='#e8dcc0'; ctx.fillRect(-2,-24,5,16); ctx.fillStyle='#8e2f32';
+    ctx.beginPath(); ctx.moveTo(-2,-24); ctx.lineTo(6,-21); ctx.lineTo(-2,-18); ctx.fill(); } // church/flag tower
+  if(r.tier>=3){ ctx.fillStyle='#d9c491'; ctx.fillRect(-20,-4,40,4); // quay
+    drawShip(-26,6,0.65,'#7a4a22'); drawShip(24,8,0.65,'#7a4a22');
+    ctx.strokeStyle='#6d5326'; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(12,-16); ctx.lineTo(12,-4); ctx.lineTo(20,-4); ctx.stroke(); } // crane
+  ctx.restore();
+}
+function drawShip(x,y,s,sail){
+  ctx.save(); ctx.translate(x,y); ctx.scale(s,s);
+  ctx.fillStyle='#4c2f16'; ctx.beginPath(); ctx.moveTo(-12,4); ctx.lineTo(12,4); ctx.lineTo(8,9); ctx.lineTo(-8,9); ctx.fill();
+  ctx.strokeStyle='#3a2812'; ctx.beginPath(); ctx.moveTo(0,4); ctx.lineTo(0,-12); ctx.stroke();
+  ctx.fillStyle=sail; ctx.beginPath(); ctx.moveTo(1,-12); ctx.lineTo(10,2); ctx.lineTo(1,2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-1,-9); ctx.lineTo(-8,2); ctx.lineTo(-1,2); ctx.fill();
+  ctx.restore();
+}
+function drawFleet(f){
+  const z=seaById[f.zone]; const e=emp(f.owner);
+  const bob=Math.sin(performance.now()/900+f.id)*2;
+  for(let i=0;i<Math.min(3,Math.ceil(f.ships/3));i++) drawShip(z.x+(i-1)*30, z.y+bob+i*7, 1.05, f.owner==='player'?'#fff6dd':'#e8d5a8');
+  ctx.fillStyle=e.color; ctx.fillRect(z.x+12,z.y-34,40,18);
+  ctx.fillStyle='#fff6dd'; ctx.font='bold 11px Georgia'; ctx.textAlign='center';
+  ctx.fillText('⛵'+f.ships, z.x+32, z.y-21); ctx.textAlign='left';
+  if(f.stance==='blockade'){ ctx.font='14px serif'; ctx.fillText('⛓', z.x-30, z.y-18); }
+  if(selected&&selected.type==='fleet'&&selected.id===f.id){ ctx.strokeStyle='#fff3d0'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.ellipse(z.x,z.y,58,34,0,0,Math.PI*2); ctx.stroke(); }
+}
+function drawLanes(){
+  const drawn=new Set();
+  const ports=G.regions.filter(r=>r.isPort);
+  ports.forEach(a=>ports.forEach(b=>{
+    if(a.id>=b.id)return; const key=a.id+'-'+b.id; if(drawn.has(key))return; drawn.add(key);
+    const own=a.owner&&a.owner===b.owner? a.owner : (a.owner&&allied(a.owner,b.owner)?a.owner:null);
+    const pays=own&&lanePays(a,b,own);
+    if(a.seaZone!==b.seaZone && !seaById[a.seaZone].neighbors.includes(b.seaZone)) return;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y);
+    const za=seaById[a.seaZone], zb=seaById[b.seaZone];
+    ctx.quadraticCurveTo((za.x+zb.x)/2,(za.y+zb.y)/2, b.x,b.y);
+    if(pays){ ctx.strokeStyle=emp(own).color+'cc'; ctx.lineWidth=3+ (a.tier+b.tier); ctx.setLineDash([10,7]); }
+    else if(own){ ctx.strokeStyle='rgba(230,220,190,.35)'; ctx.lineWidth=1.6; ctx.setLineDash([4,7]); }
+    else return;
+    ctx.stroke(); ctx.setLineDash([]);
+  }));
+}
+</script>
+<script>
+/* ================= INPUT (pan / zoom / tap) ================= */
+let drag=null, pinch=null, moved=0;
+function ptr(e){ return e.touches? {x:e.touches[0].clientX,y:e.touches[0].clientY} : {x:e.clientX,y:e.clientY}; }
+cv.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y}; moved=0; });
+window.addEventListener('mousemove',e=>{ if(!drag)return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+  moved=Math.max(moved,Math.abs(dx)+Math.abs(dy)); view.x=drag.vx+dx; view.y=drag.vy+dy; });
+window.addEventListener('mouseup',e=>{ if(drag&&moved<6) handleTap(e.clientX,e.clientY); drag=null; });
+cv.addEventListener('touchstart',e=>{
+  if(e.touches.length===1){ const p=ptr(e); drag={x:p.x,y:p.y,vx:view.x,vy:view.y}; moved=0; }
+  else if(e.touches.length===2){ pinch={d:Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY), s:view.scale}; drag=null; }
+},{passive:false});
+cv.addEventListener('touchmove',e=>{ e.preventDefault();
+  if(pinch&&e.touches.length===2){ const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    zoomAt((e.touches[0].clientX+e.touches[1].clientX)/2,(e.touches[0].clientY+e.touches[1].clientY)/2, pinch.s*d/pinch.d); }
+  else if(drag&&e.touches.length===1){ const p=ptr(e); const dx=p.x-drag.x, dy=p.y-drag.y;
+    moved=Math.max(moved,Math.abs(dx)+Math.abs(dy)); view.x=drag.vx+dx; view.y=drag.vy+dy; }
+},{passive:false});
+cv.addEventListener('touchend',e=>{ if(drag&&moved<8&&e.changedTouches.length){ const t=e.changedTouches[0]; handleTap(t.clientX,t.clientY); } drag=null; pinch=null; });
+cv.addEventListener('wheel',e=>{ e.preventDefault(); zoomAt(e.clientX,e.clientY, view.scale*(e.deltaY<0?1.12:0.89)); },{passive:false});
+let lastTap=0;
+function zoomAt(cx,cy,ns){
+  const fit=Math.min(innerWidth/WORLD_W, innerHeight/WORLD_H);
+  ns=clamp(ns, fit*0.9, fit*6);
+  const [wx,wy]=s2w(cx,cy); view.scale=ns; view.x=cx-wx*ns; view.y=cy-wy*ns;
+}
+$('#zoom-in').onclick=()=>zoomAt(innerWidth/2,innerHeight/2,view.scale*1.3);
+$('#zoom-out').onclick=()=>zoomAt(innerWidth/2,innerHeight/2,view.scale/1.3);
+$('#zoom-home').onclick=()=>fitWorld();
+
+function handleTap(cx,cy){
+  const now=Date.now(); const [wx,wy]=s2w(cx,cy);
+  if(now-lastTap<320){ zoomAt(cx,cy,view.scale*1.5); lastTap=0; return; } lastTap=now;
+  // fleet?
+  for(const f of G.fleets){ const z=seaById[f.zone]; if(Math.hypot(f.x||z.x-wx, z.y-wy)<70){ selectFleet(f); return; } }
+  // region?
+  let best=null,bd=1e9;
+  G.regions.forEach(r=>{ const d=Math.hypot(r.x-wx,r.y-wy); if(d<bd){bd=d;best=r;} });
+  if(best&&bd<130){ selectRegion(best); return; }
+  // sea zone?
+  for(const z of G.seas){ if(Math.hypot(z.x-wx,z.y-wy)<120){ selectSea(z); return; } }
+  closeSheet();
+}
+
+/* ================= ACTION SHEETS ================= */
+const sheet=$('#sheet');
+function openSheet(){ sheet.classList.add('open'); }
+function closeSheet(){ sheet.classList.remove('open'); selected=null; }
+$('#sheet-close').onclick=closeSheet;
+function statRow(items){ return items.map(([k,v])=>'<span class="stat">'+k+' <b>'+v+'</b></span>').join(''); }
+function actBtn(t,d,fn,cls,dis){
+  const b=document.createElement('button'); b.className='act-btn '+(cls||'');
+  b.innerHTML='<span class="t">'+t+'</span><span class="d">'+d+'</span>';
+  if(dis){ b.disabled=true; } else b.onclick=()=>{ fn(); };
+  return b;
+}
+function regionCost(r){ return ''; }
+
+function selectRegion(r){
+  selected={type:'region',id:r.id};
+  const e=r.owner? emp(r.owner):null;
+  $('#sheet-title').textContent=(r.isPort?'⚓ ':'')+r.name;
+  $('#sheet-sub').textContent=(e? e.name : 'Free Town')+' · '+r.terrain+' country · famed for '+GOODS[r.specialty]+
+    (r.isPort? ' · on the '+seaById[r.seaZone].name : '');
+  $('#sheet-stats').innerHTML=statRow([
+    ['🏘 Settlement',['Hamlet','Town','City','Great Port'][r.tier]],
+    ['👥 Population',fmt(r.pop)],
+    ['⚔ Garrison',fmt(r.troops)+' men'],
+    ['🪙 Income','+'+regionIncome(r)+'/season'],
+    ...(r.isPort?[['⛵ Trade', isBlockaded(r)?'⛓ BLOCKADED':'flowing']]:[]),
+    ...(r.hasWall?[['🧱','Walls']]:[]), ...(r.hasFort?[['♜','Fort']]:[]),
+    ...(r.hasShipyard?[['🔨','Shipyard']]:[]), ...(r.hasMarket?[['⚖','Market']]:[]),
+  ]);
+  const acts=$('#sheet-acts'); acts.innerHTML='';
+  if(r.owner==='player'){
+    const me=emp('player');
+    acts.appendChild(actBtn('⚔ Muster Regiments','+'+fmt(MUSTER_MEN)+' men · '+MUSTER_COST+'g · draws on population',
+      ()=>{ doMuster(r); },'', me.gold<MUSTER_COST||r.pop<MUSTER_MEN));
+    if(r.troops>=500) r.neighbors.forEach(nid=>{ const n=rById[nid];
+      const enemy=n.owner!=='player';
+      acts.appendChild(actBtn((enemy?'⚔ March on ':'➡ Move to ')+n.name,
+        enemy? 'Attack with '+fmt(r.troops)+' men' : 'Reposition '+fmt(r.troops)+' men',
+        ()=>{ doMoveArmy(r,n); }, enemy?'war':''));
+    });
+    if(r.tier<3) acts.appendChild(actBtn('🏗 Grow Settlement','Raise to '+['Hamlet','Town','City','Great Port'][r.tier+1]+' · '+(120+r.tier*130)+'g',
+      ()=>{ pay(120+r.tier*130); r.tier++; r.pop+=800; toast(r.name+' grows to a '+['hamlet','town','city','great port'][r.tier]+'!'); selectRegion(r); refreshHUD(); }));
+    if(!r.hasWall) acts.appendChild(actBtn('🧱 Build Walls','Defenders fight harder here · 90g',()=>{ pay(90); r.hasWall=true; toast('Walls rise around '+r.name); selectRegion(r); refreshHUD(); }));
+    if(!r.hasFort) acts.appendChild(actBtn('♜ Build Fort','Strong defence · slows invaders · 110g',()=>{ pay(110); r.hasFort=true; toast('A fort guards '+r.name); selectRegion(r); refreshHUD(); }));
+    if(r.isPort&&!r.hasShipyard) acts.appendChild(actBtn('🔨 Build Shipyard','Required to build warships · 150g',()=>{ pay(150); r.hasShipyard=true; toast('Shipyard opened at '+r.name); selectRegion(r); refreshHUD(); },'sea'));
+    if(!r.hasMarket) acts.appendChild(actBtn('⚖ Build Market','+10 income each season · 80g',()=>{ pay(80); r.hasMarket=true; toast('Market square built in '+r.name); selectRegion(r); refreshHUD(); }));
+    if(r.towns<7) acts.appendChild(actBtn('🏠 Found a Town','New settlement in this region · 70g',()=>{ pay(70); r.towns++; r.pop+=600; toast('A new town is founded in '+r.name); selectRegion(r); refreshHUD(); }));
+    if(r.isPort) acts.appendChild(actBtn('⛵ Build Warships','+2 '+SHIP_TECH[me.shipTech]+' · '+(SHIP_COST*2)+'g · joins nearest fleet',
+      ()=>{ doBuildShips(r); },'sea', me.gold<SHIP_COST*2));
+  } else {
+    const rel=r.owner? emp('player').relations[r.owner] : null;
+    acts.appendChild(actBtn('👁 Scout Report',
+      (r.owner? emp(r.owner).name+' holds this place.' : 'A free town, guarded by its militia.')+
+      ' Garrison ~'+fmt(r.troops)+' · '+['hamlet','town','city','great port'][r.tier]+(r.hasFort?', fortified':'')+(r.hasWall?', walled':'')+'.',
+      ()=>{},'',true));
+    if(r.owner&&r.owner!=='player'){
+      acts.appendChild(actBtn('⚔ '+emp(r.owner).name, rel.war? 'You are at WAR. March an army in to attack.' : 'At peace. Declare war from Realm → Diplomacy.',
+        ()=>{},'war',true));
+    }
+  }
+  openSheet();
+}
+
+function selectFleet(f){
+  selected={type:'fleet',id:f.id};
+  const e=emp(f.owner), z=seaById[f.zone];
+  $('#sheet-title').textContent='⛵ '+f.name;
+  $('#sheet-sub').textContent=e.name+' · '+f.ships+' '+SHIP_TECH[e.shipTech]+' · on the '+z.name+' · stance: '+f.stance;
+  $('#sheet-stats').innerHTML=statRow([['⛵ Ships',f.ships],['🎖 Class',SHIP_TECH[e.shipTech]],['🌊 Sea',z.name]]);
+  const acts=$('#sheet-acts'); acts.innerHTML='';
+  if(f.owner==='player'){
+    z.neighbors.forEach(nid=>{ const nz=seaById[nid];
+      acts.appendChild(actBtn('🌊 Sail to '+nz.name,'Move fleet one sea zone',()=>{ sailFleet(f,nid); },'sea')); });
+    ['patrol','blockade','raid','escort'].forEach(st=>{
+      acts.appendChild(actBtn(({patrol:'🕊 Patrol',blockade:'⛓ Blockade',raid:'🏴 Raid Lanes',escort:'🛡 Escort'})[st],
+        ({patrol:'Guard these waters',blockade:'Strangle enemy ports in this zone',raid:'Harass enemy trade here',escort:'Protect your lanes here'})[st],
+        ()=>{ f.stance=st; toast(f.name+': '+st); selectFleet(f); },'sea', f.stance===st));
+    });
+  } else {
+    acts.appendChild(actBtn('👁 Scout Report', e.name+' squadron · '+f.ships+' ships · stance '+f.stance+'.', ()=>{},'',true));
+  }
+  openSheet();
+}
+function selectSea(z){
+  selected={type:'sea',id:z.id};
+  $('#sheet-title').textContent='🌊 '+z.name;
+  $('#sheet-sub').textContent='Sea zone · ports: '+(z.ports.map(id=>rById[id].name).join(', ')||'none');
+  $('#sheet-stats').innerHTML=statRow([['⚓ Ports',z.ports.length]]);
+  const acts=$('#sheet-acts'); acts.innerHTML='';
+  acts.appendChild(actBtn('👁 These Waters','Fleets here: '+(G.fleets.filter(f=>f.zone===z.id).map(f=>f.name+' ('+f.ships+')').join(', ')||'none')+'.',()=>{},'',true));
+  openSheet();
+}
+
+/* ================= ACTIONS ================= */
+function pay(n){ emp('player').gold-=n; }
+function toast(msg){ const t=$('#tally'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2600); }
+function gazette(line){ G.gazette.push(line); }
+function doMuster(r){
+  const me=emp('player'); if(me.gold<MUSTER_COST||r.pop<MUSTER_MEN) return;
+  pay(MUSTER_COST); r.pop-=MUSTER_MEN; r.troops+=MUSTER_MEN;
+  toast('Regiment mustered at '+r.name+' — '+fmt(r.troops)+' under arms');
+  selectRegion(r); refreshHUD();
+}
+function doBuildShips(r){
+  const me=emp('player'); if(me.gold<SHIP_COST*2) return; pay(SHIP_COST*2);
+  let f=G.fleets.find(f=>f.owner==='player'&&f.zone===r.seaZone);
+  if(!f){ f={id:G.fleets.length,owner:'player',zone:r.seaZone,ships:0,stance:'patrol',name:'Home Squadron'}; G.fleets.push(f); }
+  f.ships+=2; anims.push({type:'sail',x1:r.x,y1:r.y,x2:seaById[r.seaZone].x,y2:seaById[r.seaZone].y,t0:performance.now(),dur:900});
+  toast('Two '+SHIP_TECH[me.shipTech]+' launched at '+r.name); selectRegion(r); refreshHUD();
+}
+function sailFleet(f,nid){
+  const from=seaById[f.zone], to=seaById[nid];
+  anims.push({type:'sail',x1:from.x,y1:from.y,x2:to.x,y2:to.y,t0:performance.now(),dur:900});
+  f.zone=nid; toast(f.name+' sails to the '+to.name); closeSheet(); selected={type:'fleet',id:f.id};
+}
+function battle(attacker, atkTroops, defRegion){
+  const aTech=1+ (attacker? emp(attacker).armyTech*0.35:0);
+  const dTech=1+ (defRegion.owner? emp(defRegion.owner).armyTech*0.3:0);
+  let defMult=dTech;
+  if(defRegion.hasFort) defMult*=1.45; if(defRegion.hasWall) defMult*=1.25;
+  if(defRegion.terrain==='hills') defMult*=1.15; if(defRegion.terrain==='marsh') defMult*=0.9;
+  const aPower=atkTroops*aTech*rr(0.85,1.2), dPower=defRegion.troops*defMult*rr(0.85,1.2);
+  const total=aPower+dPower||1;
+  const aLoss=Math.round(atkTroops*(dPower/total)*rr(0.5,0.9));
+  const dLoss=Math.round(defRegion.troops*(aPower/total)*rr(0.5,0.9));
+  return {win:aPower>dPower, aLoss:Math.min(aLoss,atkTroops), dLoss:Math.min(dLoss,defRegion.troops)};
+}
+function doMoveArmy(from,to){
+  if(from.troops<500) return;
+  const atk=from.troops;
+  if(to.owner==='player'){ to.troops+=atk; from.troops=0; toast('Army marches to '+to.name); closeSheet(); return; }
+  // hostile: neutral free town or enemy (war required vs empires)
+  if(to.owner && !atWar('player',to.owner)){
+    toast('You are at peace with '+emp(to.owner).name+' — declare war in Realm.'); return;
+  }
+  const res=battle('player', atk, to);
+  from.troops=0; to.troops-=res.dLoss;
+  const survivors=atk-res.aLoss;
+  if(res.win){
+    const prev=to.owner; to.owner='player'; to.troops=Math.max(300,survivors);
+    to.flashUntil=performance.now()+1200; anims.push({type:'wash',region:to.id,color:'#8e2f32',t0:performance.now(),dur:1100});
+    gazette('⚔ <b>'+to.name+' has fallen!</b> Your banners rise over the '+['hamlet','town','city','great port'][to.tier]+
+      ' — '+fmt(res.aLoss)+' of yours and '+fmt(res.dLoss)+' defenders fell.'+(prev?' Spoils and harbour dues pour into your treasury.':''));
+    if(prev) emp('player').gold+=120+to.tier*60;
+    toast('🏴 '+to.name+' is yours!');
+    checkCapitalLoss(prev);
+  } else {
+    to.troops=Math.max(200,to.troops);
+    if(survivors>300){ /* remnants retreat home */ from.troops=survivors; }
+    gazette('⚔ <b>Repulsed at '+to.name+'.</b> Your army broke against the defences — '+fmt(res.aLoss)+' men lost.');
+    toast('Repulsed at '+to.name+' — '+fmt(res.aLoss)+' lost');
+  }
+  closeSheet(); refreshHUD(); save();
+}
+function checkCapitalLoss(ownerId){
+  if(!ownerId||ownerId==='player') return;
+  const capName=EMPIRES.find(e=>e.id===ownerId).capital;
+  const cap=G.regions.find(r=>r.name===capName);
+  if(cap.owner!==ownerId){
+    const hasPorts=G.regions.some(r=>r.owner===ownerId&&r.isPort);
+    const hasAny=G.regions.some(r=>r.owner===ownerId);
+    if(!hasPorts||!hasAny) gazette('👑 <b>The '+emp(ownerId).name+' has fallen.</b> Its court flees into exile; its remaining banners scatter.');
+    if(!hasAny){ G.fleets=G.fleets.filter(f=>f.owner!==ownerId); EMPIRES.forEach(e=>{ if(G.empires[e.id]) delete G.empires[e.id].relations[ownerId]; }); }
+  }
+}
+</script>
+<script>
+/* ================= AI ================= */
+function aiTurn(id){
+  const e=emp(id); if(!e) return;
+  const mine=G.regions.filter(r=>r.owner===id);
+  if(!mine.length) return;
+  // income handled centrally; here: spend & move
+  // muster in strongest region (capped so no empire snowballs)
+  mine.sort((a,b)=>b.pop-a.pop).slice(0,1).forEach(r=>{
+    if(e.gold>MUSTER_COST+80 && r.pop>MUSTER_MEN*1.5 && totalMen(id)<22000){ e.gold-=MUSTER_COST; r.pop-=MUSTER_MEN; r.troops+=MUSTER_MEN; }
+  });
+  // grow a town sometimes
+  const growable=mine.filter(r=>r.tier<3 && e.gold>260);
+  if(growable.length && rnd()<0.5){ const r=pick(growable); e.gold-=120+r.tier*130; r.tier++; r.pop+=700; }
+  // tech occasionally
+  if(e.gold>420 && e.armyTech<3 && rnd()<0.4){ e.gold-=300; e.armyTech++; }
+  if(e.gold>400 && e.shipTech<3 && rnd()<0.3){ e.gold-=320; e.shipTech++; }
+  // build ships if port with shipyard and fleet small
+  const shipPort=mine.find(r=>r.isPort&&r.hasShipyard);
+  if(shipPort && e.gold>SHIP_COST*2+100 && totalShips(id)<14){ e.gold-=SHIP_COST*2;
+    let f=G.fleets.find(f=>f.owner===id&&f.zone===shipPort.seaZone);
+    if(!f){ f={id:Date.now()+Math.floor(rnd()*999),owner:id,zone:shipPort.seaZone,ships:0,stance:'patrol',name:e.name.split(' ')[0]+' Squadron'}; G.fleets.push(f);} f.ships+=2; }
+  // fleets: blockade enemy port when at war with someone
+  G.fleets.filter(f=>f.owner===id).forEach(f=>{
+    const enemies=Object.keys(e.relations).filter(o=>e.relations[o].war);
+    if(enemies.length){
+      const target=G.regions.find(r=>r.isPort&&enemies.includes(r.owner));
+      if(target){ // sail toward target zone
+        if(f.zone===target.seaZone) f.stance='blockade';
+        else { const nz=seaById[f.zone].neighbors.sort((a,b)=>Math.hypot(seaById[a].x-rById[target.id].x,seaById[a].y-rById[target.id].y)-Math.hypot(seaById[b].x-rById[target.id].x,seaById[b].y-rById[target.id].y))[0];
+          if(nz!==undefined) f.zone=nz; f.stance='patrol'; }
+      }
+    } else f.stance = rnd()<0.3? 'raid':'patrol';
+  });
+  // attacks: at most one march per season, and not every season — expansion is a campaign, not a conveyor belt
+  if(rnd()<0.62) mine.filter(r=>r.troops>=3000).sort((a,b)=>b.troops-a.troops).slice(0,1).forEach(from=>{
+    const targets=from.neighbors.map(nid=>rById[nid]).filter(n=>
+      (n.owner===null) || (n.owner!==id && e.relations[n.owner] && e.relations[n.owner].war) || (n.owner==='player'&&e.relations['player'].war));
+    if(!targets.length) return;
+    targets.sort((a,b)=>a.troops-b.troops);
+    const to=targets[0];
+    const myPower=from.troops*(1+e.armyTech*0.35), defPower=to.troops*(1+(to.owner?emp(to.owner).armyTech*0.3:0))*(to.hasFort?1.45:1)*(to.hasWall?1.25:1);
+    if(myPower < defPower*0.9 && to.owner!==null) return; // not suicidal vs empires
+    const atk=from.troops; const res=battle(id, atk, to);
+    from.troops=0; to.troops-=res.dLoss; const surv=atk-res.aLoss;
+    if(res.win){
+      const prev=to.owner; to.owner=id; to.troops=Math.max(300,surv);
+      anims.push({type:'wash',region:to.id,color:e.color,t0:performance.now(),dur:1100});
+      if(prev==='player') gazette('⚔ <b>'+e.name+' has taken '+to.name+'!</b> '+fmt(res.dLoss)+' of your garrison fell holding it.');
+      else if(to.owner==='player'){}
+      checkCapitalLoss(prev);
+    } else { to.troops=Math.max(200,to.troops); if(surv>300) from.troops=surv; if(to.owner==='player') gazette('⚔ Your garrison at <b>'+to.name+'</b> bloodied a '+e.name+' assault — '+fmt(res.dLoss)+' attackers fell.'); }
+  });
+  // diplomacy drift: corsairs love war, league loves trade
+  Object.keys(e.relations).forEach(o=>{
+    if(o===id) return; const rel=e.relations[o];
+    if(!rel.war && !rel.ally && rnd()<0.06) rel.score+= (id==='sable'?-2:1);
+    // declare war on a weaker player now and then (sable especially)
+    if(o==='player' && !rel.war && !rel.ally){
+      const myP=totalMen(id), plP=totalMen('player');
+      if((id==='sable'&&rnd()<0.05&&myP>plP*0.8)||(rnd()<0.02&&myP>plP*1.6)){
+        rel.war=true; emp('player').relations[id].war=true;
+        gazette('👑 <b>War!</b> The '+e.name+' declares war on your Crown. Their banners are on the march.');
+        G.crownQueue.push({icon:'⚔', title:e.name+' declares war!', body:'Their fleets will move to blockade your ports. Muster, and decide where to meet them.', choices:[{label:'To arms!',fn:null}]});
+      }
+    }
+  });
+}
+
+/* ================= SEASON ENGINE ================= */
+function collectIncome(id){
+  const e=emp(id); if(!e) return {gold:0,trade:0,upkeep:0,interest:0};
+  let gold=0; G.regions.filter(r=>r.owner===id).forEach(r=>gold+=regionIncome(r));
+  const trade=tradeIncome(id);
+  const upkeep=Math.round((totalMen(id)/1000)*2.2 + totalShips(id)*3);
+  const interest=Math.round(e.debt*0.06);
+  e.gold+=gold+trade-upkeep-interest;
+  if(e.debt>0 && e.gold>0){ const payDown=Math.min(e.debt, Math.floor(e.gold*0.25)); e.debt-=payDown; e.gold-=payDown; }
+  return {gold,trade,upkeep,interest};
+}
+function growWorld(){
+  G.regions.forEach(r=>{
+    const peace=!Object.keys(G.empires).some(o=>r.owner&&o!==r.owner&&atWar(r.owner,o));
+    r.pop=Math.round(r.pop*(peace?1.025:1.005));
+    if(r.isPort&&isBlockaded(r)){ r.pop=Math.max(800,Math.round(r.pop*0.96)); r.troops=Math.max(0,r.troops-100); }
+    if(r.owner&&r.troops===0) r.troops=200; // local militia reforms
+  });
+}
+function detectWarnings(){
+  G.warnings=[];
+  const myPortZones=new Set(myPorts().map(p=>p.seaZone));
+  G.fleets.filter(f=>f.owner!=='player').forEach(f=>{
+    const z=seaById[f.zone];
+    const nearMine=[...myPortZones].some(pz=>pz===f.zone||seaById[pz].neighbors.includes(f.zone));
+    if(nearMine&&f.ships>=4) G.warnings.push('⚠ '+emp(f.owner).name+' fleet massing ('+f.ships+' ships) on the '+z.name+' — near your ports.');
+    if(f.stance==='blockade'&&[...myPortZones].includes(f.zone)) G.warnings.push('⛓ Your ports on the '+z.name+' are being BLOCKADED — trade there has stopped.');
+  });
+  G.regions.filter(r=>r.owner==='player').forEach(r=>{
+    r.neighbors.forEach(nid=>{ const n=rById[nid];
+      if(n.owner&&n.owner!=='player'&&n.troops>=6000) G.warnings.push('⚠ '+emp(n.owner).name+' army of '+fmt(n.troops)+' massing at '+n.name+', on your border.'); });
+  });
+  G.warnings=[...new Set(G.warnings)].slice(0,3);
+}
+function checkEnd(){
+  const mine=myRegions();
+  const cap=G.regions.find(r=>r.name==='Lisbon');
+  if((!mine.some(r=>r.isPort))||cap.owner!=='player'){ endGame(false,'Your capital and harbours are lost. The court sails into exile, and your line ends in a foreign port.'); return true; }
+  if(mine.length>=WIN_REGIONS){ endGame(true,'Sixty percent of the chart flies your colours. Ports from Lisbon to the Levant pay your dues — the Rift itself seems to bow. History will call this the Age of Your Crown.'); return true; }
+  if(G.empires['player'].tradeStreak>=5){ endGame(true,'Five straight seasons your lanes out-earned every empire on the sea. Rivals fly flags; you own the water beneath them. A merchant-emperor\'s victory.'); return true; }
+  return false;
+}
+function endGame(won,text){
+  G.over=true; $('#end-title').textContent=won?'👑 Victory':'The Crown Falls';
+  $('#end-text').textContent=text; $('#endscreen').classList.add('open'); save();
+}
+function endSeason(){
+  if(G.over) return;
+  closeSheet();
+  G.gazette=[];
+  // player upkeep already in collect below; order: incomes, growth, AI
+  EMPIRES.map(e=>e.id).forEach(id=>{ const inc=collectIncome(id); if(id==='player') G.lastIncome=inc; });
+  growWorld();
+  ['aurelia','meridian','sable'].forEach(id=>{ if(G.empires[id]) aiTurn(id); });
+  // trade supremacy streak
+  const trades={}; EMPIRES.forEach(e=>{ if(G.empires[e.id]) trades[e.id]=tradeIncome(e.id); });
+  const leader=Object.keys(trades).sort((a,b)=>trades[b]-trades[a])[0];
+  emp('player').tradeStreak = leader==='player'? emp('player').tradeStreak+1 : 0;
+  // season advance
+  G.seasonIdx=(G.seasonIdx+1)%4; G.turn++;
+  // headlines
+  const inc=G.lastIncome;
+  const head=['📰 <b>'+seasonName()+'</b> — Treasury '+(inc.gold+inc.trade-inc.upkeep-inc.interest>=0?'+':'')+fmt(inc.gold+inc.trade-inc.upkeep-inc.interest)+'g (taxes '+fmt(inc.gold)+', trade '+fmt(inc.trade)+', upkeep −'+fmt(inc.upkeep)+(inc.interest?', interest −'+fmt(inc.interest):'')+').'];
+  if(emp('player').debt>0) head.push('🏦 Crown debt stands at '+fmt(emp('player').debt)+'g. The bankers are patient. For now.');
+  if(emp('player').tradeStreak>0) head.push('⛵ Your lanes lead the world in trade ('+emp('player').tradeStreak+'/5 seasons toward a merchant victory).');
+  G.gazette=head.concat(G.gazette);
+  detectWarnings();
+  refreshHUD(); save();
+  if(!checkEnd()) showGazette();
+}
+function showGazette(){
+  $('#gazette-title').textContent='The Gazette — '+seasonName();
+  $('#gazette-lines').innerHTML=G.gazette.length? G.gazette.map(l=>'<p>'+l+'</p>').join('') : '<p>A quiet season on the Rift.</p>';
+  $('#gazette').classList.add('open');
+}
+$('#gazette-ok').onclick=()=>$('#gazette').classList.remove('open');
+
+/* ================= HUD / REALM / CROWN ================= */
+function refreshHUD(){
+  $('#tb-season').textContent=seasonName();
+  const me=emp('player');
+  $('#tb-gold').textContent=fmt(me.gold);
+  const net=G.lastIncome.gold+G.lastIncome.trade-G.lastIncome.upkeep-G.lastIncome.interest;
+  $('#tb-gold-trend').innerHTML= net>=0? '<span class="trend-up">▲'+fmt(net)+'</span>' : '<span class="trend-dn">▼'+fmt(Math.abs(net))+'</span>';
+  $('#tb-men').textContent=fmt(totalMen('player'));
+  $('#tb-ships').textContent=totalShips('player');
+  $('#tb-debt-cell').style.display=me.debt>0?'flex':'none';
+  $('#tb-debt').textContent=fmt(me.debt);
+  const w=$('#warnings'); w.innerHTML=G.warnings.map(x=>'<div class="warn">'+x+'</div>').join('');
+  const cb=$('#crown-badge'); const n=G.crownQueue.length;
+  cb.style.display=n?'flex':'none'; cb.textContent=n;
+  // aims
+  const aims=[
+    {t:'Hold '+WIN_REGIONS+' regions ('+myRegions().length+'/'+WIN_REGIONS+')', done:myRegions().length>=WIN_REGIONS, prog:myRegions().length/WIN_REGIONS},
+    {t:'Lead trade 5 seasons ('+me.tradeStreak+'/5)', done:me.tradeStreak>=5, prog:me.tradeStreak/5},
+    {t:'Field 25,000 men ('+kfmt(totalMen('player'))+')', done:totalMen('player')>=25000, prog:totalMen('player')/25000},
+  ];
+  $('#aims-list').innerHTML=aims.map(a=>'<div class="aim"><span class="tick">'+(a.done?'✓':'▸')+'</span><span>'+a.t+'</span></div>').join('');
+}
+$('#btn-crown').onclick=()=>{
+  const b=$('#crown-body');
+  b.innerHTML=G.crownQueue.length? '' : '<p>No matters await the Crown. The realm hums along without you — as it should.</p>';
+  G.crownQueue.forEach((q,i)=>{
+    const row=document.createElement('div'); row.className='dip-row';
+    row.innerHTML='<span style="font-size:22px">'+q.icon+'</span><div style="flex:1"><b>'+q.title+'</b><br><span class="rel">'+q.body+'</span></div>';
+    q.choices.forEach(c=>{ const btn=document.createElement('button'); btn.className='mini-btn'; btn.textContent=c.label;
+      btn.onclick=()=>{ if(c.fn) c.fn(); G.crownQueue.splice(i,1); $('#crown').classList.remove('open'); refreshHUD(); save();
+        if(G.crownQueue.length) $('#btn-crown').click(); };
+      row.appendChild(btn); });
+    b.appendChild(row);
+  });
+  $('#crown').classList.add('open');
+};
+$('#crown-close').onclick=()=>$('#crown').classList.remove('open');
+$('#btn-realm').onclick=()=>{
+  const me=emp('player'); const b=$('#realm-body');
+  let h='<p><b>Treasury:</b> '+fmt(me.gold)+'g · <b>Debt:</b> '+fmt(me.debt)+'g · <b>Men:</b> '+fmt(totalMen('player'))+' · <b>Ships:</b> '+totalShips('player')+'</p>';
+  h+='<p><b>Army:</b> '+ARMY_TECH[me.armyTech]+' · <b>Navy:</b> '+SHIP_TECH[me.shipTech]+'</p>';
+  h+='<div class="rule"></div><h3 style="font-variant:small-caps">War College &amp; Dockyards</h3>';
+  h+='<p>Advance your arms. Each tier multiplies battlefield strength.</p>';
+  const ab=document.createElement('div');
+  b.innerHTML=h;
+  const row1=document.createElement('div'); row1.className='dip-row';
+  row1.innerHTML='<span class="who">⚔ Army tech</span><span class="rel">'+(me.armyTech<3? 'Next: '+ARMY_TECH[me.armyTech+1]+' · 300g':'Élite — the finest in the world')+'</span>';
+  const abtn=document.createElement('button'); abtn.className='mini-btn'; abtn.textContent='Research'; abtn.disabled=me.armyTech>=3||me.gold<300;
+  abtn.onclick=()=>{ me.gold-=300; me.armyTech++; toast('Army advances to '+ARMY_TECH[me.armyTech]); save(); $('#btn-realm').click(); };
+  row1.appendChild(abtn); b.appendChild(row1);
+  const row2=document.createElement('div'); row2.className='dip-row';
+  row2.innerHTML='<span class="who">⛵ Naval tech</span><span class="rel">'+(me.shipTech<3? 'Next: '+SHIP_TECH[me.shipTech+1]+' · 320g':'Ships of the Line — unmatched')+'</span>';
+  const sbtn=document.createElement('button'); sbtn.className='mini-btn'; sbtn.textContent='Research'; sbtn.disabled=me.shipTech>=3||me.gold<320;
+  sbtn.onclick=()=>{ me.gold-=320; me.shipTech++; toast('Navy advances to '+SHIP_TECH[me.shipTech]); save(); $('#btn-realm').click(); };
+  row2.appendChild(sbtn); b.appendChild(row2);
+  const row3=document.createElement('div'); row3.className='dip-row';
+  row3.innerHTML='<span class="who">🏦 Crown bankers</span><span class="rel">Borrow 500g now; 6% interest each season. Bankers trust a crown with ports.</span>';
+  const bbtn=document.createElement('button'); bbtn.className='mini-btn'; bbtn.textContent='Borrow 500g';
+  bbtn.onclick=()=>{ me.gold+=500; me.debt+=500; toast('500g borrowed. The bankers bow and smile.'); refreshHUD(); save(); $('#btn-realm').click(); };
+  row3.appendChild(bbtn); b.appendChild(row3);
+  const dh=document.createElement('h3'); dh.style.fontVariant='small-caps'; dh.style.marginTop='10px'; dh.textContent='Diplomacy'; b.appendChild(dh);
+  EMPIRES.filter(e=>e.id!=='player').forEach(e=>{
+    if(!G.empires[e.id]) return;
+    const rel=me.relations[e.id];
+    const row=document.createElement('div'); row.className='dip-row';
+    row.innerHTML='<span class="who" style="color:'+e.dark+'">'+e.name+'</span><span class="rel">'+
+      (rel.war?'⚔ AT WAR':rel.ally?'🤝 Allied':'At peace')+' · relations '+Math.round(rel.score)+
+      ' · '+G.regions.filter(r=>r.owner===e.id).length+' regions · '+fmt(totalMen(e.id))+' men</span>';
+    const mk=(label,fn,danger,dis)=>{ const btn=document.createElement('button'); btn.className='mini-btn'+(danger?' danger':''); btn.textContent=label; btn.disabled=!!dis; btn.onclick=fn; row.appendChild(btn); };
+    if(!rel.war) mk('Declare War',()=>{ rel.war=true; rel.ally=false; emp(e.id).relations['player'].war=true; rel.score-=40; gazette('👑 You have declared war on the '+e.name+'.'); toast('War declared on '+e.name); save(); $('#realm').classList.remove('open'); refreshHUD(); },true);
+    if(rel.war) mk('Make Peace',()=>{ rel.war=false; emp(e.id).relations['player'].war=false; rel.score+=5; toast('Peace with '+e.name); save(); $('#btn-realm').click(); });
+    if(!rel.war&&!rel.ally) mk('Ally (+)',()=>{ if(rel.score>=20){ rel.ally=true; emp(e.id).relations['player'].ally=true; toast(e.name+' signs the alliance!'); } else { rel.score+=8; toast(e.name+' warms to you (relations '+Math.round(rel.score)+'/20 to ally).'); } save(); $('#btn-realm').click(); });
+    if(rel.ally) mk('End Alliance',()=>{ rel.ally=false; emp(e.id).relations['player'].ally=false; rel.score-=15; toast('Alliance with '+e.name+' ended.'); save(); $('#btn-realm').click(); });
+    b.appendChild(row);
+  });
+  $('#realm').classList.add('open');
+};
+$('#realm-close').onclick=()=>$('#realm').classList.remove('open');
+$('#btn-end').onclick=endSeason;
+$('#btn-menu').onclick=()=>$('#menu').classList.add('open');
+$('#menu-close').onclick=()=>$('#menu').classList.remove('open');
+$('#menu-continue').onclick=()=>$('#menu').classList.remove('open');
+$('#menu-how').onclick=()=>{ $('#menu').classList.remove('open'); $('#howto').classList.add('open'); };
+$('#howto-close').onclick=()=>$('#howto').classList.remove('open');
+$('#menu-new').onclick=()=>{ if(confirm('Abandon this campaign and start anew?')) startNew(); };
+$('#end-new').onclick=()=>startNew();
+
+/* ================= SAVE / LOAD / BOOT ================= */
+function save(){ try{ localStorage.setItem('riftsail-save', JSON.stringify(G)); }catch(e){} }
+function load(){ try{ const s=localStorage.getItem('riftsail-save'); return s? JSON.parse(s):null; }catch(e){ return null; } }
+function startNew(){
+  G=freshState(); rebuildIndex(); selected=null; closeSheet();
+  ['#endscreen','#menu','#gazette'].forEach(s=>$(s).classList.remove('open'));
+  fitWorld(); refreshHUD(); save();
+  toast('A new reign begins — Lisbon flies your colours');
+}
+$('#btn-new').onclick=()=>{ $('#start').classList.remove('open'); startNew(); };
+$('#btn-continue').onclick=()=>{ $('#start').classList.remove('open'); };
+window.addEventListener('resize',()=>{ fitCanvas(); });
+
+fitCanvas();
+(function boot(){
+  const saved=load();
+  if(saved&&saved.regions){ G=saved; rebuildIndex(); $('#btn-continue').style.display='block'; }
+  else { G=freshState(); rebuildIndex(); }
+  fitWorld(); refreshHUD();
+  requestAnimationFrame(draw);
+  // gentle first-season guidance
+  setTimeout(()=>{ if(G.turn===1) toast('Tap Lisbon ⚓ — muster regiments, then End Season'); },600);
+})();
+</script>
+</body>
+</html>
