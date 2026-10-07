@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "generated": "rift-sail asset pipeline (gltf-transform dedup+prune+meshopt)",
+  "models": {
+    "castle_tower": {
+      "file": "assets/models/castle_tower.e67ac60f.glb",
+      "bytes": 12948,
+      "tris": 176,
+      "meshes": [
+        "tower-square"
+      ]
+    },
+    "castle_wall": {
+      "file": "assets/models/castle_wall.a19e67fc.glb",
+      "bytes": 12360,
+      "tris": 126,
+      "meshes": [
+        "wall-narrow"
+      ]
+    },
+    "nat_pine": {
+      "file": "assets/models/nat_pine.f45c129f.glb",
+      "bytes": 7164,
+      "tris": 132,
+      "meshes": [
+        "Mesh tree_cone"
+      ]
+    },
+    "nat_rock": {
+      "file": "assets/models/nat_rock.19ee98df.glb",
+      "bytes": 5912,
+      "tris": 80,
+      "meshes": [
+        "Mesh rock_largeA"
+      ]
+    },
+    "nat_tree": {
+      "file": "assets/models/nat_tree.c2e69246.glb",
+      "bytes": 6580,
+      "tris": 114,
+      "meshes": [
+        "Mesh tree_default"
+      ]
+    },
+    "ship_frigate": {
+      "file": "assets/models/ship_frigate.161db56e.glb",
+      "bytes": 40648,
+      "tris": 1547,
+      "meshes": [
+        "ship-medium",
+        "sail-b",
+        "sail-a",
+        "flag-c"
+      ]
+    },
+    "ship_line": {
+      "file": "assets/models/ship_line.3bd04d5b.glb",
+      "bytes": 42292,
+      "tris": 1673,
+      "meshes": [
+        "ship-large",
+        "flag-a",
+        "sail-b",
+        "sail-a"
+      ]
+    },
+    "ship_sloop": {
+      "file": "assets/models/ship_sloop.1b891237.glb",
+      "bytes": 35840,
+      "tris": 1282,
+      "meshes": [
+        "ship-small",
+        "flag-a",
+        "sail-a"
+      ]
+    },
+    "town_door": {
+      "file": "assets/models/town_door.c00d907f.glb",
+      "bytes": 20428,
+      "tris": 376,
+      "meshes": [
+        "wall-door",
+        "door"
+      ]
+    },
+    "town_roof": {
+      "file": "assets/models/town_roof.d4c04c80.glb",
+      "bytes": 15204,
+      "tris": 72,
+      "meshes": [
+        "roof-gable"
+      ]
+    },
+    "town_roofpoint": {
+      "file": "assets/models/town_roofpoint.f889abb1.glb",
+      "bytes": 15136,
+      "tris": 44,
+      "meshes": [
+        "roof-point"
+      ]
+    },
+    "town_stall": {
+      "file": "assets/models/town_stall.856e45b9.glb",
+      "bytes": 15872,
+      "tris": 106,
+      "meshes": [
+        "stall"
+      ]
+    },
+    "town_wall": {
+      "file": "assets/models/town_wall.2341d40f.glb",
+      "bytes": 14528,
+      "tris": 32,
+      "meshes": [
+        "wall"
+      ]
+    },
+    "town_wallwood": {
+      "file": "assets/models/town_wallwood.944b6ede.glb",
+      "bytes": 14544,
+      "tris": 32,
+      "meshes": [
+        "wall-wood"
+      ]
+    },
+    "town_windmill": {
+      "file": "assets/models/town_windmill.7db9e7ff.glb",
+      "bytes": 27416,
+      "tris": 732,
+      "meshes": [
+        "windmill"
+      ]
+    }
+  },
+  "textures": {
+    "smoke_a": "assets/textures/smoke_puff_a.edbf08c4.png",
+    "smoke_b": "assets/textures/smoke_puff_b.49ee938a.png",
+    "detail_grass": "assets/textures/detail_grass.5a6996c2.jpg"
+  },
+  "sizes": {
+    "models_total_bytes": 286872,
+    "textures_total_bytes": 156574
+  }
+}
