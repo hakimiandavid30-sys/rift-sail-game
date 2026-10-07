@@ -523,6 +523,7 @@ function freshState(){
     id:i, name:d[0], x:d[1], y:d[2], terrain:d[3], specialty:d[4], isPort:d[5], group:d[6],
     owner:null, tier:0, // 0 hamlet 1 town 2 city 3 great port/city
     hasWall:false, hasFort:false, hasShipyard:false, hasMarket:false, greatWork:null,
+    gov:null, // a posted governor {name, trait, policy, since, purse, journal[], report, esc, lastPop} — never on the capital
     pop:Math.round(rr(3000,7000)), troops:0, towns:Math.floor(rr(2,5)),
     flashUntil:0, neighbors:[]
   }));
@@ -579,7 +580,8 @@ function freshState(){
     wv:WORLD_VER, turn:1, seasonIdx:0, regions, seas, empires, fleets, armies:[],
     day:0, clockSpeed:0, clockDaysPerSec:2, pauseOnEvent:true,
     gazette:[], crownQueue:[], warnings:[], lastIncome:{gold:0,trade:0,upkeep:0,interest:0},
-    tradeLeaderSeasons:0, over:false, startedAt:Date.now()
+    govPool:GOV_POOL_DEFS.map(d=>({name:d[0], trait:d[1], posted:false})),
+    tradeLeaderSeasons:0, over:false, startedAt:Date.now(), lastSeenAt:Date.now()
   };
 }
 
@@ -595,7 +597,7 @@ function rebuildIndex(){ rById={}; G.regions.forEach(r=>rById[r.id]=r); seaById=
    units with a current node (fleet.node === 's<zoneId>') and a live
    position (fleet.pos, world coords) — see syncUnits().
    ============================================================ */
-const WORLD_VER=7; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle, 6 = the 8040×5360 10x chart, 7 = town detail + great works)
+const WORLD_VER=8; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle, 6 = the 8040×5360 10x chart, 7 = town detail + great works, 8 = governors)
 // Great works: ONE landmark per crown seat, raised from the city sheet. The hook is deliberately
 // a toy, not a spreadsheet — a flag on the region, read by income/battle/ship-cost code below.
 const GREAT_WORKS=[
@@ -607,6 +609,43 @@ const GREAT_WORKS=[
  {id:'citadel',  icon:'♜', name:'The Citadel',              cost:500, hook:'Defenders here fight +30% — the bastions must crack first'},
 ];
 const CAPITAL_NAMES=EMPIRES.map(e=>e.capital);
+/* ---------- GOVERNORS ----------
+   The owner's rule, implemented literally: "assign a person to a city and they do
+   the deciding and all that; I check back — population is here, army is like this,
+   they are making money. The capital I have to run and make decisions."
+   So: any player city but the capital may hold a named governor who builds,
+   musters and trades from the city's OWN chest (its works share of income).
+   Only big things — war at the gates, hunger, petitions for glory or gold —
+   climb to the Crown. The capital never takes a governor. */
+const GOV_TRAITS={
+  builder:{label:'The Builder',  blurb:'works rise for a fifth less under his masons'},
+  hoarder:{label:'The Hoarder',  blurb:'spends nothing he can keep; glories are petitioned early'},
+  hawk:{label:'The Hawk',        blurb:'keeps the garrison a fifth deeper and musters in pairs'},
+  mariner:{label:'The Mariner',  blurb:'keels, yards and spars cost a fifth less'},
+  farmer:{label:'The Farmer',    blurb:'new towns fill a fifth fuller with souls'},
+  merchant:{label:'The Merchant',blurb:'markets and town growth cost a fifth less'},
+};
+const GOV_POOL_DEFS=[
+ ['Inês Duarte','farmer'],['Tomás Reyes','merchant'],['Marguerite Vale','builder'],
+ ['Caspar Lindqvist','hoarder'],['Beatriz Saldana','hawk'],['Henrik Voss','mariner'],
+ ['Lucia Ferrante','merchant'],['Amara Diallo','farmer'],['Pieter van der Meer','mariner'],
+ ['Isolde Brandt','builder'],['Rafael Costa','hawk'],['Nadia Rahal','hoarder'],
+];
+const GOV_POLICIES={
+  balanced:{icon:'⚖', label:'Balanced',    blurb:'A hand on every oar — walls mended, markets open, the watch kept'},
+  growth:{icon:'🌱', label:'Growth',       blurb:'New towns, full cradles, roofs against the skyline'},
+  wealth:{icon:'🪙', label:'Wealth',       blurb:'Markets, tiers and tolls — the city learns to earn'},
+  war:{icon:'⚔', label:'War footing',     blurb:'Walls, forts and deep garrisons — the city becomes a fist'},
+  harbor:{icon:'⚓', label:'Harbor',        blurb:'Yards, keels and quays — the city turns its face to the sea'},
+};
+const GOV_POLICY_LIST=['balanced','growth','wealth','war','harbor'].map(id=>Object.assign({id}, GOV_POLICIES[id]));
+const GOV_QUOTES={
+  balanced:['"All quiet; the ledgers balance."','"The town breathes easy, and so do I."'],
+  growth:['"New roofs rise faster than my clerks can count them."','"Cradles full, streets fuller."'],
+  wealth:['"Coin comes home like pigeons to the loft."','"The tolls sing a pleasant tune this season."'],
+  war:['"The walls watch; the men drill at dawn."','"Let them come. We are ready, and bored of waiting."'],
+  harbor:['"Keels in the water, coin on the quay."','"The yard smells of tar and money."'],
+};
 let WORLD_GRAPH=null;
 // the world's two narrow seas — Western↔Eastern Med (Sicily) and North Sea↔Baltic (the Danish straits)
 function weldSeaNeighbors(seas){
@@ -726,6 +765,12 @@ function migrateSave(s){
   if(s.wv===6){ // town-detail pass: every region gains a great-work slot (empty until a crown raises one)
     (s.regions||[]).forEach(r=>{ if(r.greatWork===undefined) r.greatWork=null; });
     s.wv=7;
+  }
+  if(s.wv===7){ // governors pass: cities may hold a posted hand; the Crown keeps its roster of servants
+    (s.regions||[]).forEach(r=>{ if(r.gov===undefined) r.gov=null; });
+    if(!Array.isArray(s.govPool)) s.govPool=GOV_POOL_DEFS.map(d=>({name:d[0], trait:d[1], posted:false}));
+    if(typeof s.lastSeenAt!=='number') s.lastSeenAt=Date.now();
+    s.wv=8;
   }
   return s;
 }
@@ -1618,7 +1663,7 @@ function rtAdvanceDays(days){
     // season seam: every 90 days the old economy breathes
     if(Math.floor(G.day)%90===0){ endSeason(); if(G.over) break; }
     // imperial staffs think monthly
-    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); detectWarnings(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
+    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); governorMonthly(); detectWarnings(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
     // arrivals (timestamp-exact)
     (G.armies||[]).slice().forEach(a=>{ if(a.at && G.day>=a.arriveDay-1e-9) armyArrive(a); });
     (G.fleets||[]).slice().forEach(f=>{ if(f.at && G.day>=f.at.arriveDay-1e-9) fleetArrive(f); });
@@ -1835,6 +1880,35 @@ function selectRegion(r){
       mine.length? 'Field armies march and conquer. The garrison ('+fmt(r.troops)+' men) always stays behind to hold '+r.name+'.'
                  : 'No field army here yet. Garrisons hold the town but cannot march — form a field army below to go take ground.',
       ()=>{},'',true));
+    // ---- the governorship: a named hand runs this city — never the capital ----
+    if(isPlayerCapital(r)){
+      acts.appendChild(actBtn('👑 You rule the capital yourself','No governor sits in '+r.name+' — every decision here is yours, and yours alone. Post governors to your other cities and check back on their work.',()=>{},'',true));
+    } else if(window.__govPick===r.id){
+      acts.appendChild(actBtn('🏛 Choose a governor for '+r.name,'A name, a temperament, a free hand — they build, muster and trade from the city\'s own chest. You keep the wars and the glories.',()=>{},'',true));
+      (G.govPool||[]).forEach(en=>{
+        const here=r.gov&&r.gov.name===en.name;
+        acts.appendChild(actBtn('🏛 '+en.name+' — '+GOV_TRAITS[en.trait].label,
+          GOV_TRAITS[en.trait].blurb.charAt(0).toUpperCase()+GOV_TRAITS[en.trait].blurb.slice(1)+(en.posted? (here?' · holds this city':' · posted elsewhere'):' · awaiting a posting'),
+          ()=>{ assignGovernor(r, en); },'', (en.posted&&!here)? 'already governing another city' : ''));
+      });
+      acts.appendChild(actBtn('↩ Not yet','The city stays in your own hands',()=>{ window.__govPick=null; selectRegion(r); }));
+    } else if(r.gov){
+      const gv=r.gov, inc=regionIncome(r), works=govWorksShare(r);
+      const rep=gv.report||{pop:r.pop};
+      const arr=r.pop>rep.pop?'↑':(r.pop<rep.pop?'↓':'→');
+      const lastJ=(gv.journal&&gv.journal[0])? gv.journal[0].text : 'has yet to lift a finger worth writing down';
+      acts.appendChild(actBtn('🏛 '+gv.name+' — '+GOV_TRAITS[gv.trait].label,
+        GOV_TRAITS[gv.trait].blurb.charAt(0).toUpperCase()+GOV_TRAITS[gv.trait].blurb.slice(1)+
+        ' · 👥 '+fmt(r.pop)+' '+arr+' · ⚔ '+fmt(r.troops)+' men · 🪙 +'+inc+'g a season (works '+works+'g · crown '+Math.max(0,inc-works)+'g) · chest '+fmt(gv.purse)+'g. Last act: '+lastJ+'.',
+        ()=>{},'',true));
+      GOV_POLICY_LIST.forEach(p=>{
+        acts.appendChild(actBtn(p.icon+' Course: '+p.label, p.blurb, ()=>{ setGovPolicy(r, p.id); },'', gv.policy===p.id? 'the present course' : ''));
+      });
+      acts.appendChild(actBtn('🔁 Reassign…','Send '+gv.name.split(' ')[0]+' home and post another hand',()=>{ window.__govPick=r.id; selectRegion(r); }));
+      acts.appendChild(actBtn('🚪 Dismiss '+gv.name.split(' ')[0],'The seals come back to the Crown; you rule '+r.name+' directly again',()=>{ dismissGovernor(r); }));
+    } else {
+      acts.appendChild(actBtn('🏛 Appoint a Governor…','A named hand to build, muster and trade here from the city\'s own chest — while you rule the capital yourself and think of empires',()=>{ window.__govPick=r.id; selectRegion(r); }));
+    }
     mine.forEach(a=>{
       acts.appendChild(actBtn('🪖 '+a.name,
         fmt(a.men)+' men in the field · garrison '+fmt(r.troops)+' stands apart'+(a.stance==='hold'?' · 🛡 holding this ground':''),
@@ -2111,6 +2185,186 @@ function checkCapitalLoss(ownerId){
     if(!hasAny){ G.fleets=G.fleets.filter(f=>f.owner!==ownerId); EMPIRES.forEach(e=>{ if(G.empires[e.id]) delete G.empires[e.id].relations[ownerId]; }); }
   }
 }
+
+/* ================= GOVERNORS =================
+   A posted governor decides; the Crown checks back. The governor spends ONLY
+   the city chest (the works share of that city's income — see collectIncome),
+   never the treasury. The capital is exempt by law: no assign button, no brain. */
+function isPlayerCapital(r){ return !!r && r.owner==='player' && r.name===EMPIRES[0].capital; }
+function govWorksShare(r){ return Math.round(regionIncome(r)*0.7); } // of the city's income: works 7 parts, crown tax the rest
+function govJournal(r, text){
+  const gv=r.gov; if(!gv) return;
+  (gv.journal=gv.journal||[]).unshift({day:G.day, text});
+  gv.journal.length=Math.min(gv.journal.length, 8);
+}
+function assignGovernor(r, en){
+  if(!r || !en || r.owner!=='player') return false;
+  if(isPlayerCapital(r)){ toast('👑 The capital is ruled by your own hand — no governor sits in '+r.name+'.'); return false; }
+  if(en.posted && !(r.gov && r.gov.name===en.name)) return false; // one city, one hand
+  if(r.gov) dismissGovernor(r, true);
+  en.posted=true;
+  r.gov={ name:en.name, trait:en.trait, policy:'balanced', since:G.day, purse:40,
+    journal:[{day:G.day, text:'took up the seals of '+r.name}],
+    report:{pop:r.pop, troops:r.troops, income:regionIncome(r)}, esc:{}, lastPop:r.pop };
+  window.__govPick=null;
+  toast('🏛 '+en.name+' ('+GOV_TRAITS[en.trait].label+') takes up '+r.name);
+  pushEvent('🏛 <b>'+en.name+'</b> is posted to govern '+r.name+'.');
+  selectRegion(r); save(); return true;
+}
+function dismissGovernor(r, quiet){
+  if(!r || !r.gov) return;
+  const en=(G.govPool||[]).find(p=>p.name===r.gov.name); if(en) en.posted=false;
+  const nm=r.gov.name; r.gov=null;
+  if(window.__govPick===r.id) window.__govPick=null;
+  if(!quiet){ toast(nm+' surrenders the seals of '+r.name); selectRegion(r); }
+  save();
+}
+function setGovPolicy(r, pol){
+  if(!r || !r.gov) return;
+  if(r.gov.policy!==pol){
+    r.gov.policy=pol;
+    govJournal(r, 'steers by a new course: '+GOV_POLICIES[pol].label);
+    toast('🏛 '+r.name+' steers by '+GOV_POLICIES[pol].label+' now');
+  }
+  selectRegion(r); save();
+}
+function govCostMult(gv, kind){
+  if(gv.trait==='builder' && kind!=='men') return 0.8;   // a fifth off the masons' bill
+  if(gv.trait==='mariner' && kind==='ship') return 0.8;  // a fifth off keels and yards
+  if(gv.trait==='merchant' && kind==='trade') return 0.8; // a fifth off markets and growth
+  return 1;
+}
+function govThreat(r){
+  // 0 calm · 1 watched from the border · 2 danger at the gates
+  let t=0;
+  r.neighbors.map(id=>rById[id]).forEach(n=>{ if(n && n.owner && n.owner!=='player' && atWar(n.owner,'player')){ t=Math.max(t,1); if(n.troops>=r.troops*1.2) t=2; } });
+  (G.armies||[]).forEach(a=>{ if(a.owner && a.owner!=='player' && atWar(a.owner,'player') && ((a.at && a.destRegion===r.id) || a.atRegion===r.id)) t=2; });
+  if(r.isPort && isBlockaded(r)) t=Math.max(t,1);
+  return t;
+}
+function govMood(r){
+  if(govThreat(r)===2) return '⚔ beleaguered';
+  const gv=r.gov; if(gv && gv.lastPop && r.pop<gv.lastPop*0.9) return '🌾 strained';
+  if(gv && gv.purse>=140) return '🪙 thriving';
+  if(gv && gv.journal && gv.journal[0] && G.day-gv.journal[0].day<95) return '🛠 at work';
+  return '🌿 quiet';
+}
+function govBuildShips(r){ // doBuildShips' quiet twin — paid from the city chest, not the Crown
+  let f=G.fleets.find(f=>f.owner==='player' && f.zone===r.seaZone);
+  if(!f){ f={id:newUnitId(), owner:'player', zone:r.seaZone, node:'s'+r.seaZone, pos:{x:seaById[r.seaZone].x, y:seaById[r.seaZone].y}, at:null, ships:0, stance:'patrol', name:'Home Squadron'}; G.fleets.push(f); }
+  f.ships+=2;
+}
+function govPlan(r){
+  const gv=r.gov; if(!gv) return null;
+  const pol=gv.policy, threat=govThreat(r);
+  const raidHurt = gv.lastPop && r.pop < gv.lastPop*0.72;
+  const cands=[];
+  const push=(pri,kind,cost,run,text)=>cands.push({pri,kind,cost,run,text});
+  // defence and repair first — every governor keeps the roof on
+  if(!r.hasWall && (threat>0 || raidHurt)) push(100,'build',90,()=>{ r.hasWall=true; },
+    raidHurt? 'rebuilt the walls — the last raid taught us their worth' : 'raised the walls — enemy colours are on the road');
+  if(!r.hasFort && threat===2) push(88,'build',110,()=>{ r.hasFort=true; }, 'threw up a fort — the enemy musters close');
+  if(pol==='war' && !r.hasWall) push(72,'build',90,()=>{ r.hasWall=true; }, 'raised the walls — a garrison town should look the part');
+  if(pol==='war' && r.hasWall && !r.hasFort) push(70,'build',110,()=>{ r.hasFort=true; }, 'raised a fort — walls alone are a promise; guns keep it');
+  // the muster: the garrison kept to the policy's measure
+  const base={balanced:1400+r.tier*400, growth:900, wealth:1100, war:2500+r.tier*700, harbor:1200+r.tier*300}[pol] || 1400;
+  const target=Math.round(base*(gv.trait==='hawk'?1.2:1));
+  if(r.troops<target && r.pop>1600){
+    const chunks=(pol==='war'||gv.trait==='hawk')?2:1;
+    push(pol==='war'?92:(threat>0?84:38),'men',MUSTER_COST*chunks,
+      ()=>{ let n=0; while(n<chunks && r.pop>MUSTER_MEN){ r.pop-=MUSTER_MEN; r.troops+=MUSTER_MEN; n++; } },
+      'mustered '+(chunks>1?'two regiments':'a regiment')+' — the garrison stood thin');
+  }
+  // the policy cores
+  if(pol==='growth' || pol==='balanced'){
+    if(r.towns<7) push(pol==='growth'?78:44,'build',70,()=>{ r.towns++; r.pop+=(gv.trait==='farmer'?720:600); }, 'founded a new town — the valleys crowd with children');
+    if(r.tier<3 && r.pop>5200+r.tier*2400) push(pol==='growth'?66:50,'build',120+r.tier*130,()=>{ r.tier++; r.pop+=800; }, 'raised the settlement a tier — roofs press against the walls');
+  }
+  if(pol==='wealth' || pol==='balanced'){
+    if(!r.hasMarket) push(pol==='wealth'?90:58,'trade',80,()=>{ r.hasMarket=true; }, 'opened a market — coin was sleeping in cellars');
+    if(pol==='wealth' && r.tier<3 && r.pop>4500) push(56,'trade',120+r.tier*130,()=>{ r.tier++; r.pop+=800; }, 'grew the town — richer roofs pay richer rents');
+    if(pol==='wealth' && r.towns<7) push(34,'build',70,()=>{ r.towns++; r.pop+=600; }, 'planted a new town on the toll road');
+  }
+  if(pol==='harbor' && r.isPort){
+    if(!r.hasShipyard) push(90,'ship',150,()=>{ r.hasShipyard=true; }, 'opened a shipyard — a port that cannot build is a port that begs');
+    else { const f=G.fleets.find(f=>f.owner==='player' && f.zone===r.seaZone); const ships=f? f.ships:0;
+      if(ships<6) push(74,'ship',shipPairCost(r),()=>govBuildShips(r), 'laid two keels — the squadron wanted hulls'); }
+    if(!r.hasMarket) push(42,'trade',80,()=>{ r.hasMarket=true; }, 'opened a market by the quay');
+  }
+  if(!cands.length) return null;
+  cands.sort((a,b)=>b.pri-a.pri);
+  const reserve=gv.trait==='hoarder'?60:10; // the hoarder never empties the chest
+  for(const c of cands){ const cost=Math.round(c.cost*govCostMult(gv, c.kind)); if(gv.purse-cost>=reserve) return {pri:c.pri, cost, run:c.run, text:c.text}; }
+  return null;
+}
+function govQueue(item){ // the Crown hears only what matters — and never the same matter twice
+  if(G.crownQueue.some(q=>q.key && q.key===item.key)) return false;
+  G.crownQueue.push(item); return true;
+}
+function govPetitionWork(r){
+  const byPol={wealth:'customs', war:'citadel', harbor:(r.isPort?'light':'citadel'), growth:'cathedral', balanced:(r.isPort?'light':'cathedral')};
+  return GREAT_WORKS.find(w=>w.id===byPol[r.gov.policy]) || GREAT_WORKS[0];
+}
+function govEscalate(r){
+  const gv=r.gov, esc=gv.esc||(gv.esc={}), seasonNo=Math.floor(G.day/90);
+  // war at the gates — the one message a governor must never sit on
+  const foe=(G.armies||[]).find(a=>a.owner && a.owner!=='player' && atWar(a.owner,'player') && ((a.at && a.destRegion===r.id) || a.atRegion===r.id));
+  if(foe && G.day-(esc.war||-999)>45){ esc.war=G.day;
+    govQueue({key:'govwar'+r.id, icon:'⚔', urgent:true, title:emp(foe.owner).name+' marches on '+r.name+'!',
+      body:'Governor '+gv.name+' holds '+fmt(r.troops)+' men behind '+(r.hasWall?'walls':'open streets')+' and awaits the Crown\'s pleasure.',
+      choices:[{label:'To arms!', fn:null},
+        {label:'Sound the levy (−40g, +1,000 men)', fn:()=>{ const me=emp('player');
+          if(me.gold>=MUSTER_COST && r.pop>MUSTER_MEN){ me.gold-=MUSTER_COST; r.pop-=MUSTER_MEN; r.troops+=MUSTER_MEN; toast('The levy answers at '+r.name+' — '+fmt(r.troops)+' under arms'); }
+          else toast('The Crown cannot answer — the levy fails.'); }}]});
+  }
+  // hunger — a population crash reaches the Crown the season it starts
+  if(r.pop<1500 && esc.famine!==seasonNo){ esc.famine=seasonNo;
+    govQueue({key:'govfam'+r.id+'s'+seasonNo, icon:'🌾', urgent:true, title:'Hunger stalks '+r.name,
+      body:'Governor '+gv.name+' reports empty granaries and thinning streets — '+fmt(r.pop)+' souls and falling.',
+      choices:[{label:'Open the granaries (−60g)', fn:()=>{ const me=emp('player');
+          if(me.gold>=60){ me.gold-=60; r.pop+=900; toast('Grain carts roll into '+r.name); } else toast('The treasury is bare — no grain sails.'); }},
+        {label:'Let them endure', fn:null}]});
+  }
+  // a glory petitioned — over-budget milestones are the Crown's to bless
+  if(CAPITAL_NAMES.includes(r.name) && !r.greatWork && seasonNo-(esc.gwSeason||-99)>=2){
+    const w=govPetitionWork(r), bar=w.cost*(gv.trait==='hoarder'?0.4:0.55);
+    if(gv.purse>=bar){ esc.gwSeason=seasonNo;
+      govQueue({key:'govgw'+r.id+w.id+'s'+seasonNo, icon:w.icon, urgent:false, title:gv.name+' petitions for '+w.name,
+        body:'The governor of '+r.name+' begs leave to raise '+w.name+' ('+w.cost+'g) — '+w.hook+'. The city chest holds '+fmt(gv.purse)+'g.',
+        choices:[{label:'The Crown pays '+w.cost+'g', fn:()=>{ const me=emp('player');
+            if(me.gold>=w.cost){ me.gold-=w.cost; r.greatWork=w.id; govJournal(r,'raised '+w.name+' by the Crown\'s bounty'); toast(w.icon+' '+w.name+' rises at '+r.name); } else toast('The treasury cannot carry that glory yet.'); }},
+          {label:'Fund it from the city chest', fn:()=>{ if(gv.purse>=w.cost){ gv.purse-=w.cost; r.greatWork=w.id; govJournal(r,'raised '+w.name+' from the city chest'); toast(w.icon+' '+w.name+' rises at '+r.name); } else toast('The city chest holds '+fmt(gv.purse)+'g — not yet enough.'); }},
+          {label:'Not now', fn:null}]});
+    }
+  }
+  // an empty chest with work undone — grants above 150g are the Crown's gift to give
+  if(gv.purse<45 && emp('player').gold>=350 && esc.funds!==seasonNo && govPlan(r)){ esc.funds=seasonNo;
+    govQueue({key:'govfund'+r.id+'s'+seasonNo, icon:'🏛', urgent:false, title:gv.name+' petitions for funds',
+      body:'The chest of '+r.name+' stands at '+fmt(gv.purse)+'g with works undone. A grant of 160g would set masons and sergeants moving.',
+      choices:[{label:'Grant 160g', fn:()=>{ const me=emp('player'); if(me.gold>=160){ me.gold-=160; gv.purse+=160; toast('160g rides for '+r.name); } }},
+        {label:'Deny', fn:null}]});
+  }
+}
+function govThink(r){
+  const gv=r.gov; if(!gv || r.owner!=='player' || isPlayerCapital(r)) return;
+  govEscalate(r);
+  const plan=govPlan(r);
+  if(plan){ gv.purse-=plan.cost; plan.run(); govJournal(r, plan.text); }
+  gv.lastPop=r.pop;
+}
+function governorMonthly(){
+  if(!G || G.over) return;
+  myRegions().forEach(r=>{ if(r.gov) govThink(r); });
+}
+function govReportLine(r){
+  const gv=r.gov; if(!gv) return '';
+  const rep=gv.report||{pop:r.pop, troops:r.troops, income:regionIncome(r)};
+  const arr=r.pop>rep.pop?'↑':(r.pop<rep.pop?'↓':'→');
+  const last=(gv.journal && gv.journal[0] && (G.day-gv.journal[0].day)<130)? gv.journal[0].text : pick(GOV_QUOTES[gv.policy]||GOV_QUOTES.balanced);
+  const line='🏛 <b>'+r.name+'</b> — Gov. '+gv.name+' ('+GOV_TRAITS[gv.trait].label+'): 👥 '+fmt(r.pop)+' '+arr+' · ⚔ '+fmt(r.troops)+' men · 🪙 +'+regionIncome(r)+'g — '+last;
+  gv.report={pop:r.pop, troops:r.troops, income:regionIncome(r)};
+  return line;
+}
 </script>
 <script>
 /* ================= AI ================= */
@@ -2155,7 +2409,8 @@ function aiTurn(id){
 /* ================= SEASON ENGINE ================= */
 function collectIncome(id){
   const e=emp(id); if(!e) return {gold:0,trade:0,upkeep:0,interest:0};
-  let gold=0; G.regions.filter(r=>r.owner===id).forEach(r=>gold+=regionIncome(r));
+  let gold=0; G.regions.filter(r=>r.owner===id).forEach(r=>{ gold+=regionIncome(r);
+    if(id==='player' && r.gov){ const w=govWorksShare(r); r.gov.purse=(r.gov.purse||0)+w; gold-=w; } }); // a governed city keeps its works share in its own chest; the Crown taxes the rest
   const trade=tradeIncome(id);
   const upkeep=Math.round((totalMen(id)/1000)*2.2 + totalShips(id)*3);
   const interest=Math.round(e.debt*0.06);
@@ -2229,6 +2484,9 @@ function endSeason(){
   if(emp('player').debt>0) head.push('🏦 Crown debt stands at '+fmt(emp('player').debt)+'g. The bankers are patient. For now.');
   if(emp('player').tradeStreak>0) head.push('⛵ Your lanes lead the world in trade ('+emp('player').tradeStreak+'/5 seasons toward a merchant victory).');
   G.gazette=head.concat(G.gazette);
+  // your governors render their accounts — one line each, read over breakfast
+  const govLines=myRegions().filter(r=>r.gov).map(govReportLine).filter(Boolean);
+  if(govLines.length) G.gazette.splice(1,0,'🏛 <b>Governors’ reports</b>',...govLines);
   detectWarnings();
   if(coachStep===1) coachStep=2;
   refreshHUD(); save();
@@ -2341,6 +2599,24 @@ $('#btn-realm').onclick=()=>{
       const home=rById[a.atRegion]; const p=a.at? a.at.pos : home; if(p) flyCameraToWorld(p.x, p.y, 150); };
     row.appendChild(fb); b.appendChild(row);
   });
+  // 🏛 GOVERNORS — the empire at a glance: every posted hand, one honest line each
+  const gh=document.createElement('h3'); gh.textContent='🏛 Your Governors'; b.appendChild(gh);
+  const governed=myRegions().filter(r=>r.gov);
+  if(!governed.length){
+    const np=document.createElement('p'); np.style.fontSize='12px';
+    np.textContent='No governors posted. Open any city but the capital and appoint one — they build, muster and trade from the city\'s own chest while you rule Lisbon yourself.';
+    b.appendChild(np);
+  }
+  governed.forEach(r=>{
+    const gv=r.gov, rep=gv.report||{pop:r.pop};
+    const arr=r.pop>rep.pop?'↑':(r.pop<rep.pop?'↓':'→');
+    const row=document.createElement('div'); row.className='dip-row';
+    row.innerHTML='<span class="who">🏛 '+r.name+'</span><span class="rel">'+gv.name+' · '+GOV_POLICIES[gv.policy].icon+' '+GOV_POLICIES[gv.policy].label+
+      ' · 👥 '+fmt(r.pop)+' '+arr+' · ⚔ '+fmt(r.troops)+' men · 🪙 +'+regionIncome(r)+'g · chest '+fmt(gv.purse)+'g · '+govMood(r)+'</span>';
+    const ob=document.createElement('button'); ob.className='mini-btn'; ob.textContent='Open';
+    ob.onclick=()=>{ $('#realm').classList.remove('open'); flyCameraToWorld(r.x, r.y, 200); selectRegion(r); };
+    row.appendChild(ob); b.appendChild(row);
+  });
   const row1=document.createElement('div'); row1.className='dip-row';
   row1.innerHTML='<span class="who">⚔ Army tech</span><span class="rel">'+(me.armyTech<3? 'Next: '+ARMY_TECH[me.armyTech+1]+' · 300g':'Élite — the finest in the world')+'</span>';
   const abtn=document.createElement('button'); abtn.className='mini-btn'; abtn.textContent='Research'; abtn.disabled=me.armyTech>=3||me.gold<300;
@@ -2425,7 +2701,7 @@ function showBattle(atkName,atkMen,defName,defMen,res,won,note){
 $('#battle-ok').onclick=()=>{ $('#battle').classList.remove('open'); simResumeFromEvent(); updateHint(); };
 
 /* ================= SAVE / LOAD / BOOT ================= */
-function save(){ if(window.__clashResolveNow) window.__clashResolveNow(); syncUnits(); try{ localStorage.setItem('riftsail-save', JSON.stringify(G)); }catch(e){} }
+function save(){ if(window.__clashResolveNow) window.__clashResolveNow(); syncUnits(); if(G) G.lastSeenAt=Date.now(); try{ localStorage.setItem('riftsail-save', JSON.stringify(G)); }catch(e){} }
 function load(){ try{ const s=localStorage.getItem('riftsail-save'); return s? JSON.parse(s):null; }catch(e){ return null; } }
 function startNew(){
   G=freshState(); rebuildIndex(); ensureIds(); selected=null; closeSheet();
@@ -2440,13 +2716,19 @@ function startNew(){
   setTimeout(updateHint,700);
 }
 $('#btn-new').onclick=()=>{ $('#start').classList.remove('open'); startNew(); };
-$('#btn-continue').onclick=()=>{ $('#start').classList.remove('open'); };
+$('#btn-continue').onclick=()=>{ $('#start').classList.remove('open');
+  if(window.__returnReports){ window.__returnReports=false;
+    const lines=myRegions().filter(r=>r.gov).map(govReportLine).filter(Boolean);
+    if(lines.length){ G.gazette=['📰 <b>The realm in your absence</b> — the Crown has been away; the governors render account.'].concat(lines); showGazette(); } }
+};
 window.addEventListener('resize',()=>{ fitCanvas(); if(window.R3&&window.R3.resize) R3.resize(); });
 
 fitCanvas();
 (function boot(){
   const saved=load();
-  if(saved&&saved.regions){ G=migrateSave(saved); rebuildIndex(); $('#btn-continue').style.display='block'; }
+  if(saved&&saved.regions){ G=migrateSave(saved); rebuildIndex(); $('#btn-continue').style.display='block';
+    // a Crown returning after a real day away finds its governors' accounts waiting
+    if(saved.lastSeenAt && Date.now()-saved.lastSeenAt>=86400000 && G.regions.some(r=>r.owner==='player'&&r.gov)) window.__returnReports=true; }
   else { G=freshState(); rebuildIndex(); }
   ensureIds(); syncPositions();
   fitWorld(); refreshHUD(); refreshClockUI(); renderTicker();
@@ -2484,7 +2766,7 @@ try{
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x274b5e);
-  scene.fog = new THREE.FogExp2(0xe3c298, 0.00026); // warm horizon haze — the golden hour swallows distant shores
+  scene.fog = new THREE.FogExp2(0xe3c298, 0.00016); // warm horizon haze, thinned — distant shores read golden at world zoom, not grey
   const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.5, 6000);
 
   // warm "pure sky" ambient baked from a gradient equirect (the CC0 HDRI's job, at zero payload)
@@ -2978,9 +3260,16 @@ try{
           const dock=new THREE.Group(); dock.userData.sharedGeo=true;
           const hull=new THREE.Mesh(KIT.ships[1].body, KIT.mats.pirate); hull.castShadow=true; dock.add(hull);
           const hx2=bx+dx*(qd-1.5)-dz*9.5, hz2=bz+dz*(qd-1.5)+dx*9.5;
-          dock.position.set(hx2, by+1.5, hz2); dock.rotation.y=Math.atan2(-dx,-dz)+Math.PI/2; dock.rotation.z=0.13; dock.scale.setScalar(1.05); // beached on the apron, heeled on her blocks — a hull OUT of water reads as work, not traffic
+          dock.position.set(hx2, by+1.5, hz2); dock.rotation.y=Math.atan2(-dx,-dz); dock.rotation.z=0.13; dock.scale.setScalar(1.05); // bow to home water (the kit hull's bow rides −Z), heeled on her blocks — pointing at the sea she'll meet, she reads as WORK, not traffic
           C.objs.push(dock);
-          C.b.add(new THREE.BoxGeometry(8.0,1.1,2.6), M4(hx2, by+0.55, hz2, 0, P.shoreAng, 0), '#6d5f49'); // the blocks she rests on
+          // pale timber ways — fresh-cut pine no ship's paint can mimic: the cradle is what says "arsenal"
+          C.b.add(new THREE.BoxGeometry(9.4,0.45,3.8), M4(hx2, by+0.24, hz2, 0, P.shoreAng, 0), '#d9c49a'); // the slip platform
+          for(let i=-2;i<=2;i++) C.b.add(new THREE.BoxGeometry(0.6,1.1,3.1), M4(hx2+dx*i*1.6, by+0.8, hz2+dz*i*1.6, 0, P.shoreAng, 0), '#ecd9ab'); // keel blocks, pale as sawdust
+          [-1,1].forEach(sg=>{ // scaffold rails along both bilges, posts at three stations, cross beams over the hull
+            C.b.add(new THREE.BoxGeometry(8.6,0.3,0.3), M4(hx2-dz*sg*2.7, by+3.0, hz2+dx*sg*2.7, 0, P.shoreAng, 0), '#e6d3a8');
+            for(let i=-1;i<=1;i++) C.b.add(new THREE.BoxGeometry(0.3,3.0,0.3), M4(hx2+dx*i*3.6-dz*sg*2.7, by+1.5, hz2+dz*i*3.6+dx*sg*2.7), '#dcc79c');
+            C.b.add(new THREE.BoxGeometry(0.3,0.3,5.7), M4(hx2+dx*sg*3.6, by+3.0, hz2+dz*sg*3.6, 0, P.shoreAng, 0), '#e6d3a8');
+          });
         }
         const cxp=bx+dx*(qd-1.0)-dz*3.4, czp=bz+dz*(qd-1.0)+dx*3.4;
         C.b.add(new THREE.BoxGeometry(0.42,5.2,0.42), M4(cxp, by+2.6, czp), '#5e4718');
@@ -3179,8 +3468,10 @@ try{
     // far-band silhouette (world-zoom LOD): roof-mass cone + one hero spire — the political disc names the owner
     const farB=new Batch();
     farB.add(new THREE.ConeGeometry(P.R*0.92, P.R*0.5, 10), M4(bx, by+P.R*0.22, bz), ROOF_HEX[biomeKey(r)]);
+    if(r.tier>=2||r.hasWall) farB.add(new THREE.CylinderGeometry(P.R*1.03, P.R*1.03, 1.4, 14, 1, true, 0.6, Math.PI*1.5), M4(bx, by+0.7, bz), ownerCol); // the wall arc — silhouette piece two, in the owner's stone
     const heroH=Math.max(4.5, P.R*0.55);
     farB.add(new THREE.BoxGeometry(1.6, heroH, 1.6), M4(bx+P.R*0.2, by+heroH/2, bz-P.R*0.18), '#e8dcc0');
+    farB.add(new THREE.ConeGeometry(1.95, 2.7, 6), M4(bx+P.R*0.2, by+heroH+1.35, bz-P.R*0.18), '#4a3423'); // the spire cap — piece three: roof-mass, wall arc and hero now read as a TOWN, not a blob
     if(capital) farB.add(new THREE.SphereGeometry(1.7,8,6), M4(bx, by+heroH+1.1, bz), '#e9c96e');
     const farMesh=farB.mesh(); farMesh.visible=false; objs.push(farMesh);
     return {objs, sat: satMesh, dec: decMesh, far: farMesh, near: [ftm, cam, cwm, bm].filter(Boolean)};
@@ -3262,11 +3553,13 @@ try{
     const satMesh = sb.pos.length? sb.mesh() : null;
     const mainMesh=b.mesh();
     const objs=[mainMesh]; if(rig) objs.push(rig); if(satMesh) objs.push(satMesh);
-    // far-band silhouette, same as the kit towns wear
+    // far-band silhouette, same as the kit towns wear — roof-mass, wall arc, capped hero
     const farB=new Batch();
     farB.add(new THREE.ConeGeometry(P.R*0.92, P.R*0.5, 10), M4(bx, by+P.R*0.22, bz), ROOF_HEX[biomeKey(r)]);
+    if(r.tier>=2||r.hasWall) farB.add(new THREE.CylinderGeometry(P.R*1.03, P.R*1.03, 1.4, 14, 1, true, 0.6, Math.PI*1.5), M4(bx, by+0.7, bz), ownerCol);
     const heroH=Math.max(4.5, P.R*0.55);
     farB.add(new THREE.BoxGeometry(1.6, heroH, 1.6), M4(bx+P.R*0.2, by+heroH/2, bz-P.R*0.18), '#e8dcc0');
+    farB.add(new THREE.ConeGeometry(1.95, 2.7, 6), M4(bx+P.R*0.2, by+heroH+1.35, bz-P.R*0.18), '#4a3423');
     if(capital) farB.add(new THREE.SphereGeometry(1.7,8,6), M4(bx, by+heroH+1.1, bz), '#e9c96e');
     const farMesh=farB.mesh(); farMesh.visible=false; objs.push(farMesh);
     return {objs, sat: satMesh, far: farMesh, near: [mainMesh].filter(Boolean)};
@@ -3303,7 +3596,7 @@ try{
     uTime:{value:0}, uShore:{value:shoreTexture()},
     uDeep:{value:new THREE.Color('#173f63')}, uShallow:{value:new THREE.Color('#2c7d96')},
     uSky:{value:new THREE.Color('#f4dcae')}, uFoam:{value:new THREE.Color('#eaf7f2')},
-    fogColor:{value:new THREE.Color(0xe3c298)}, fogDensity:{value:0.00026} // must match scene.fog above
+    fogColor:{value:new THREE.Color(0xe3c298)}, fogDensity:{value:0.00016} // must match scene.fog above
   };
   const waterMat = new THREE.ShaderMaterial({
     uniforms: waterUniforms,
@@ -4176,7 +4469,10 @@ try{
   /* ---------- public API + activation ---------- */
   R3.active = true;
   R3.zoomBy = f => zoomAnchored(f, innerWidth/2, innerHeight/2);
-  R3.home = () => { flyTo(new THREE.Vector3(0,0,0), fitDist(), 700); };
+  R3.home = () => { // Home frames the EMPIRE, not the empty middle of the chart — the capital in frame even on a phone
+    const cap=G.regions.find(r=>r.name===EMPIRES[0].capital && r.owner==='player') || G.regions.find(r=>r.owner==='player');
+    if(cap) flyTo(new THREE.Vector3(SX(cap.x), 0, SZ(cap.y)), Math.min(fitDist(), innerWidth<620? 620 : 880), 800);
+    else flyTo(new THREE.Vector3(0,0,0), fitDist(), 700); };
   R3.pick = pick;
   R3.resize = () => { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); };
   initKits(); // CC0 kits stream in behind the first frame; the world upgrades itself when they land
