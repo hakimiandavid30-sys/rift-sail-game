@@ -150,6 +150,8 @@
   .chip.name{background:rgba(243,230,195,.92);color:#2b1d0e;border:1px solid rgba(122,92,46,.75);
     border-radius:6px;padding:2px 7px;font-size:12.5px;box-shadow:0 2px 6px rgba(0,0,0,.35);}
   .chip.name.major{font-weight:bold;font-size:14px;background:rgba(248,239,210,.97);border-color:var(--brass);}
+  .chip.sea{background:rgba(13,50,64,.55);color:#d7edf3;border:1px solid rgba(160,210,225,.35);
+    border-radius:6px;padding:2px 7px;font-size:12px;font-style:italic;box-shadow:0 2px 6px rgba(0,0,0,.3);}
   .chip.troops{color:#fff6dd;font-weight:bold;font-size:12px;padding:3px 7px;border-radius:7px;
     border:1px solid rgba(255,246,221,.65);box-shadow:0 2px 7px rgba(0,0,0,.45);text-shadow:0 1px 2px rgba(0,0,0,.5);}
   .chip.fleet{color:#fff6dd;font-weight:bold;font-size:12px;padding:3px 7px;border-radius:7px;
@@ -179,6 +181,30 @@
   #battle .outcome{text-align:center;font-size:19px;font-variant:small-caps;letter-spacing:1px;margin:8px 0 2px;}
   #start .tag{color:var(--brass-light);}
   .card h3{color:var(--brass-light);}
+
+  /* ---------- crafted interaction polish (every surface, no default controls) ---------- */
+  button{touch-action:manipulation;}
+  .bar-btn,.mini-btn,.big-btn,.act-btn,#btn-end,#zoomctl button{
+    transition:transform .12s ease, filter .15s ease, box-shadow .15s ease;}
+  .bar-btn:hover,.mini-btn:hover,.big-btn:hover,.act-btn:hover:not(:disabled),#btn-end:hover,#zoomctl button:hover{
+    filter:brightness(1.09); box-shadow:0 6px 18px rgba(0,0,0,.38);}
+  .bar-btn:active,.mini-btn:active,.big-btn:active,.act-btn:active:not(:disabled),#btn-end:active,#zoomctl button:active{
+    transform:translateY(1px) scale(.975); filter:brightness(.95);}
+  .act-btn:disabled,.mini-btn:disabled,.big-btn:disabled{
+    filter:grayscale(.5) brightness(.8); box-shadow:none; cursor:not-allowed;}
+  .act-btn .why{display:block; color:#9b3d34; font-weight:bold; margin-top:2px;}
+  .veil.open .card{animation:cardIn .32s cubic-bezier(.18,.9,.24,1.06) both;}
+  @keyframes cardIn{from{opacity:0; transform:translateY(16px) scale(.985)} to{opacity:1; transform:none}}
+  #gazette.open .card{animation:gazetteIn .55s cubic-bezier(.16,.9,.25,1.04) both;}
+  @keyframes gazetteIn{0%{opacity:0; transform:translateY(30px) rotate(-.7deg) scale(.965)}
+    55%{opacity:1} 100%{opacity:1; transform:none}}
+  #tally{box-shadow:0 0 0 1px rgba(255,233,168,.14), 0 10px 30px rgba(0,0,0,.45);}
+  #topbar b.pulse{display:inline-block; animation:numPulse .5s ease;}
+  @keyframes numPulse{0%{transform:scale(1)} 35%{transform:scale(1.24); color:#ffe9a8; text-shadow:0 0 10px rgba(255,217,122,.85)} 100%{transform:scale(1)}}
+  .chip{transition:opacity .18s ease;}
+  #sheet{transition:transform .28s cubic-bezier(.22,.9,.26,1);}
+  #hint.show{animation:hintin .35s ease-out, hintGlow 2.8s ease-in-out .4s infinite;}
+  @keyframes hintGlow{0%,100%{box-shadow:0 8px 26px rgba(0,0,0,.55)} 50%{box-shadow:0 8px 30px rgba(217,185,106,.35)}}
 </style>
 </head>
 <body>
@@ -324,7 +350,7 @@ const rr=(a,b)=>a+rnd()*(b-a);
 const pick=a=>a[Math.floor(rnd()*a.length)];
 
 // ---------- world definition ----------
-const WORLD_W=2400, WORLD_H=1600;
+const WORLD_W=6000, WORLD_H=4000; // the grandeur chart — authored small below, stretched by WS
 const SEASONS=['Spring','Summer','Autumn','Winter'];
 
 // terrains: plains, forest, hills, coast handled by isPort, marsh
@@ -406,6 +432,21 @@ const SEA_DEFS=[
  ['Baltic Sea',     1750, 120],['Black Sea',    2150, 700],
  ['Caribbean',       900, 620],['American Coast',1050, 330],
 ];
+// ---------- grandeur scale ----------
+// REGION_DEFS / SEA_DEFS / LAND_PATHS are authored on a compact 2400×1600 chart.
+// WS stretches every anchor into a vast 6000×4000 world: same graph, real distances.
+const WS=2.5;
+REGION_DEFS.forEach(d=>{ d[1]*=WS; d[2]*=WS; });
+SEA_DEFS.forEach(d=>{ d[1]*=WS; d[2]*=WS; });
+// uninhabited islets — pure scenery (chart units, scaled here): x, y, radius
+const ISLETS=[[980,980,55],[1240,620,45],[700,1470,60],[1660,1520,40],[430,1460,50],[760,830,42]];
+ISLETS.forEach(d=>{ d[0]*=WS; d[1]*=WS; d[2]*=WS; });
+// Travel-time model, in world units per day. The movement graph (buildGraph) and
+// the future real-time engine both reason in DAYS of travel, not per-season jumps.
+const TRAVEL={marchPerDay:120, sailPerDay:300, daysPerSeason:90};
+function landDays(a,b){ return Math.max(1,Math.round(Math.hypot(a.x-b.x,a.y-b.y)/TRAVEL.marchPerDay)); }
+function seaDays(a,b){ return Math.max(1,Math.round(Math.hypot(a.x-b.x,a.y-b.y)/TRAVEL.sailPerDay)); }
+
 const EMPIRES=[
  {id:'player', name:'Your Crown', color:'#8e2f32', dark:'#5e1d20', capital:'Lisbon'},
  {id:'aurelia',name:'Aurelian Empire', color:'#2c4a7c', dark:'#1b2f52', capital:'Venice'},
@@ -437,7 +478,7 @@ function freshState(){
     regions.forEach(b=>{
       if(a===b) return;
       const dx=a.x-b.x, dy=a.y-b.y, dist=Math.hypot(dx,dy);
-      if(dist<330 && a.group===b.group && a.group!=='I') a.neighbors.push(b.id);
+      if(dist<330*WS && a.group===b.group && a.group!=='I') a.neighbors.push(b.id);
     });
   });
   // islands link to nearest 2 regions (sea crossing allowed for armies via ports)
@@ -455,7 +496,7 @@ function freshState(){
     let best=0,bd=1e9; seas.forEach(s=>{const d=Math.hypot(p.x-s.x,p.y-s.y); if(d<bd){bd=d;best=s.id;}});
     p.seaZone=best; seas[best].ports.push(p.id);
   });
-  seas.forEach(a=>{ seas.forEach(b=>{ if(a!==b && Math.hypot(a.x-b.x,a.y-b.y)<560) a.neighbors.push(b.id); }); });
+  seas.forEach(a=>{ seas.forEach(b=>{ if(a!==b && Math.hypot(a.x-b.x,a.y-b.y)<560*WS) a.neighbors.push(b.id); }); });
   // empires
   const empires={};
   EMPIRES.forEach(e=>{
@@ -476,16 +517,62 @@ function freshState(){
   const fleets=[];
   EMPIRES.forEach(e=>{
     const cap=regions.find(r=>r.name===e.capital);
-    fleets.push({id:fleets.length, owner:e.id, zone:cap.seaZone, ships:e.id==='player'?4:5, stance:'patrol', name:e.name.split(' ')[0]+' Squadron'});
+    fleets.push({id:fleets.length, owner:e.id, zone:cap.seaZone, node:'s'+cap.seaZone,
+      pos:{x:seas[cap.seaZone].x, y:seas[cap.seaZone].y},
+      ships:e.id==='player'?4:5, stance:'patrol', name:e.name.split(' ')[0]+' Squadron'});
   });
   return {
-    turn:1, seasonIdx:0, regions, seas, empires, fleets,
+    wv:WORLD_VER, turn:1, seasonIdx:0, regions, seas, empires, fleets,
     gazette:[], crownQueue:[], warnings:[], lastIncome:{gold:0,trade:0,upkeep:0,interest:0},
     tradeLeaderSeasons:0, over:false, startedAt:Date.now()
   };
 }
 
-function rebuildIndex(){ rById={}; G.regions.forEach(r=>rById[r.id]=r); seaById={}; G.seas.forEach(s=>seaById[s.id]=s); }
+function rebuildIndex(){ rById={}; G.regions.forEach(r=>rById[r.id]=r); seaById={}; G.seas.forEach(s=>seaById[s.id]=s); buildGraph(); syncUnits(); }
+
+/* ============================================================
+   MOVEMENT GRAPH — the explicit world the real-time engine will walk.
+   Nodes: every region ('r<id>') and sea zone ('s<id>'), with world
+   coordinates. Edges: 'land' (adjacent regions), 'sea' (adjacent
+   zones), 'harbor' (port region ↔ its sea zone). Every edge carries
+   dist (world units) and days (at TRAVEL speeds). Armies are
+   garrisons stationed at region nodes (region.troops); fleets are
+   units with a current node (fleet.node === 's<zoneId>') and a live
+   position (fleet.pos, world coords) — see syncUnits().
+   ============================================================ */
+const WORLD_VER=2; // saved-world layout version (2 = grandeur 6000×4000 chart)
+let WORLD_GRAPH=null;
+function buildGraph(){
+  if(!G||!G.regions||!G.seas){ WORLD_GRAPH=null; return; }
+  const nodes={}, edges=[], adj={};
+  const addEdge=(a,b,kind,dist)=>{
+    const days=dist/((kind==='land')?TRAVEL.marchPerDay:TRAVEL.sailPerDay);
+    const e={a,b,kind,dist:Math.round(dist),days:+days.toFixed(1)};
+    edges.push(e); (adj[a]=adj[a]||[]).push(e); (adj[b]=adj[b]||[]).push(e);
+  };
+  G.regions.forEach(r=>{ nodes['r'+r.id]={id:'r'+r.id, kind:'region', ref:r.id, name:r.name, x:r.x, y:r.y, isPort:!!r.isPort}; });
+  G.seas.forEach(z=>{ nodes['s'+z.id]={id:'s'+z.id, kind:'sea', ref:z.id, name:z.name, x:z.x, y:z.y}; });
+  G.regions.forEach(r=>r.neighbors.forEach(nid=>{ if(r.id<nid){ const n=rById[nid]; addEdge('r'+r.id,'r'+nid,'land',Math.hypot(r.x-n.x,r.y-n.y)); } }));
+  G.seas.forEach(z=>z.neighbors.forEach(nid=>{ if(z.id<nid){ const n=seaById[nid]; addEdge('s'+z.id,'s'+nid,'sea',Math.hypot(z.x-n.x,z.y-n.y)); } }));
+  G.regions.filter(r=>r.isPort).forEach(r=>{ const z=seaById[r.seaZone]; if(z) addEdge('r'+r.id,'s'+z.id,'harbor',Math.hypot(r.x-z.x,r.y-z.y)); });
+  WORLD_GRAPH={nodes, edges, adj, speeds:Object.assign({},TRAVEL), world:{w:WORLD_W, h:WORLD_H, scale:WS}};
+  if(typeof window!=='undefined') window.WORLD_GRAPH=WORLD_GRAPH;
+}
+// fleets always know their current node + position (single source: their zone)
+function syncUnits(){
+  if(!G||!G.fleets) return;
+  G.fleets.forEach(f=>{ const z=seaById[f.zone]; if(z){ f.node='s'+f.zone; f.pos={x:z.x, y:z.y}; } });
+}
+// pre-grandeur saves were laid out on the old 2400×1600 chart — stretch them onto the new world
+function migrateSave(s){
+  if(!s||!s.regions) return s;
+  if(s.wv!==WORLD_VER){
+    s.regions.forEach(r=>{ r.x*=WS; r.y*=WS; });
+    (s.seas||[]).forEach(z=>{ z.x*=WS; z.y*=WS; });
+    s.wv=WORLD_VER;
+  }
+  return s;
+}
 function emp(id){ return G.empires[id]; }
 function seasonName(){ return SEASONS[G.seasonIdx]+', Year '+Math.ceil(G.turn/4); }
 function isPlayerRegion(r){ return r.owner==='player'; }
@@ -548,8 +635,9 @@ const LAND_PATHS=[ // rough continent silhouettes (world coords) for inked coast
  [[180,60],[560,30],[820,90],[1080,140],[1120,340],[980,520],[860,760],[700,980],[760,1300],[560,1420],[330,1330],[160,1080],[140,700],[180,380]],
  [[1150,130],[1500,80],[1980,120],[2300,240],[2330,560],[2260,900],[2140,1240],[1980,1480],[1620,1460],[1380,1300],[1240,1080],[1300,760],[1420,480],[1380,260]],
 ];
+LAND_PATHS.forEach(p=>p.forEach(q=>{ q[0]*=WS; q[1]*=WS; })); // stretch the silhouettes onto the grandeur chart
 // decorative waves precomputed
-const WAVES=[]; for(let i=0;i<260;i++) WAVES.push([Math.random()*WORLD_W, Math.random()*WORLD_H, 8+Math.random()*22]);
+const WAVES=[]; for(let i=0;i<340;i++) WAVES.push([Math.random()*WORLD_W, Math.random()*WORLD_H, (8+Math.random()*22)*WS]);
 
 function draw(){
   if(window.R3&&window.R3.active){ requestAnimationFrame(draw); return; } // 3D diorama owns the screen
@@ -568,8 +656,13 @@ function draw(){
   });
   // island blobs
   G.regions.filter(r=>r.group==='I').forEach(r=>{
-    ctx.beginPath(); ctx.ellipse(r.x,r.y,95,70,0,0,Math.PI*2);
-    ctx.fillStyle='#dcc491'; ctx.fill(); ctx.strokeStyle='#7a5c2e'; ctx.lineWidth=2.4; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(r.x,r.y,95*WS,70*WS,0,0,Math.PI*2);
+    ctx.fillStyle='#dcc491'; ctx.fill(); ctx.strokeStyle='#7a5c2e'; ctx.lineWidth=2.4*WS; ctx.stroke();
+  });
+  // uninhabited islets — scenery only
+  ISLETS.forEach(it=>{
+    ctx.beginPath(); ctx.ellipse(it[0],it[1],it[2],it[2]*0.72,0,0,Math.PI*2);
+    ctx.fillStyle='#d8c28c'; ctx.fill(); ctx.strokeStyle='rgba(122,92,46,.7)'; ctx.lineWidth=1.8*WS; ctx.stroke();
   });
   // waves
   ctx.strokeStyle='rgba(255,255,255,.14)'; ctx.lineWidth=2;
@@ -585,16 +678,16 @@ function draw(){
   anims=anims.filter(a=>now-a.t0<a.dur);
   anims.forEach(a=>{
     const p=(now-a.t0)/a.dur;
-    if(a.type==='wash'){ const r=rById[a.region]; ctx.beginPath(); ctx.ellipse(r.x,r.y,150*(0.4+p),110*(0.4+p),0,0,Math.PI*2);
+    if(a.type==='wash'){ const r=rById[a.region]; ctx.beginPath(); ctx.ellipse(r.x,r.y,150*WS*(0.4+p),110*WS*(0.4+p),0,0,Math.PI*2);
       ctx.fillStyle=a.color+Math.round((1-p)*70).toString(16).padStart(2,'0'); ctx.fill(); }
-    if(a.type==='sail'){ const [x,y]=[a.x1+(a.x2-a.x1)*p, a.y1+(a.y2-a.y1)*p]; drawShip(x,y,1.1,'#f3e6c3'); }
+    if(a.type==='sail'){ const [x,y]=[a.x1+(a.x2-a.x1)*p, a.y1+(a.y2-a.y1)*p]; drawShip(x,y,1.1*WS,'#f3e6c3'); }
   });
   ctx.restore();
   requestAnimationFrame(draw);
 }
 
 function regionBlob(r){
-  const rad=105+ (r.group==='I'?-15:0);
+  const rad=(105+ (r.group==='I'?-15:0))*WS;
   ctx.beginPath();
   for(let i=0;i<8;i++){ const a=i/8*Math.PI*2, d=rad*(0.86+((r.id*37+i*13)%10)*0.03);
     const x=r.x+Math.cos(a)*d, y=r.y+Math.sin(a)*d*0.78; i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
@@ -604,37 +697,37 @@ function drawRegion(r){
   const owner=r.owner? emp(r.owner):null;
   regionBlob(r);
   ctx.fillStyle= owner? owner.color+'55' : 'rgba(120,96,52,.18)'; ctx.fill();
-  ctx.strokeStyle= owner? owner.dark : 'rgba(122,92,46,.5)'; ctx.lineWidth= owner?2.2:1.2; ctx.stroke();
+  ctx.strokeStyle= owner? owner.dark : 'rgba(122,92,46,.5)'; ctx.lineWidth= (owner?2.2:1.2)*WS; ctx.stroke();
   if(selected&&selected.type==='region'&&selected.id===r.id){
-    regionBlob(r); ctx.strokeStyle='#fff3d0'; ctx.lineWidth=4; ctx.stroke();
+    regionBlob(r); ctx.strokeStyle='#fff3d0'; ctx.lineWidth=4*WS; ctx.stroke();
   }
-  // satellite towns
+  // satellite hamlets — few, and at a real walk from the town (never touching it)
   ctx.fillStyle='rgba(90,64,28,.85)';
-  for(let i=0;i<r.towns;i++){ const a=i*2.4+r.id, tx=r.x+Math.cos(a)*62, ty=r.y+Math.sin(a)*46;
-    ctx.fillRect(tx-3,ty-2,6,5); ctx.beginPath(); ctx.moveTo(tx-4,ty-2); ctx.lineTo(tx,ty-6); ctx.lineTo(tx+4,ty-2); ctx.fill(); }
+  for(let i=0;i<Math.min(r.towns,2);i++){ const a=i*2.4+r.id, tx=r.x+Math.cos(a)*150*WS, ty=r.y+Math.sin(a)*110*WS;
+    ctx.fillRect(tx-3*WS,ty-2*WS,6*WS,5*WS); ctx.beginPath(); ctx.moveTo(tx-4*WS,ty-2*WS); ctx.lineTo(tx,ty-6*WS); ctx.lineTo(tx+4*WS,ty-2*WS); ctx.fill(); }
   drawSettlement(r);
   // fort / wall markers
-  if(r.hasFort){ ctx.font='15px serif'; ctx.fillText('♜', r.x+52, r.y-38); }
-  if(r.hasWall){ ctx.strokeStyle='rgba(60,44,20,.7)'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(r.x,r.y,34,26,0,0,Math.PI*2); ctx.stroke(); }
+  if(r.hasFort){ ctx.font=(15*WS)+'px serif'; ctx.fillText('♜', r.x+52*WS, r.y-38*WS); }
+  if(r.hasWall){ ctx.strokeStyle='rgba(60,44,20,.7)'; ctx.lineWidth=2*WS; ctx.beginPath(); ctx.ellipse(r.x,r.y,34*WS,26*WS,0,0,Math.PI*2); ctx.stroke(); }
   // troops banner
   if(r.troops>=500){
     const col=owner?owner.color:'#6b5a34';
-    ctx.fillStyle=col; ctx.fillRect(r.x+14,r.y-58,44,19);
-    ctx.beginPath(); ctx.moveTo(r.x+58,r.y-58); ctx.lineTo(r.x+66,r.y-48); ctx.lineTo(r.x+58,r.y-39); ctx.fill();
-    ctx.fillStyle='#fff6dd'; ctx.font='bold 11px Georgia'; ctx.textAlign='center';
-    ctx.fillText(kfmt(r.troops), r.x+36, r.y-44); ctx.textAlign='left';
+    ctx.fillStyle=col; ctx.fillRect(r.x+14*WS,r.y-58*WS,44*WS,19*WS);
+    ctx.beginPath(); ctx.moveTo(r.x+58*WS,r.y-58*WS); ctx.lineTo(r.x+66*WS,r.y-48*WS); ctx.lineTo(r.x+58*WS,r.y-39*WS); ctx.fill();
+    ctx.fillStyle='#fff6dd'; ctx.font='bold '+(11*WS)+'px Georgia'; ctx.textAlign='center';
+    ctx.fillText(kfmt(r.troops), r.x+36*WS, r.y-44*WS); ctx.textAlign='left';
   }
   // blockaded port marker
-  if(r.isPort && isBlockaded(r)){ ctx.font='16px serif'; ctx.fillText('⛓', r.x-58, r.y-44); }
+  if(r.isPort && isBlockaded(r)){ ctx.font=(16*WS)+'px serif'; ctx.fillText('⛓', r.x-58*WS, r.y-44*WS); }
   // label
   const showLabel = view.scale>0.55 || r.tier>=2 || (selected&&selected.id===r.id);
-  if(showLabel){ ctx.font=(r.tier>=2?'bold ':'')+'14px Georgia'; ctx.textAlign='center';
-    ctx.fillStyle='rgba(243,230,195,.85)'; const w=ctx.measureText(r.name).width+10;
-    ctx.fillRect(r.x-w/2, r.y+34, w, 17);
-    ctx.fillStyle='#2b1d0e'; ctx.fillText(r.name, r.x, r.y+47); ctx.textAlign='left'; }
+  if(showLabel){ ctx.font=(r.tier>=2?'bold ':'')+(14*WS)+'px Georgia'; ctx.textAlign='center';
+    ctx.fillStyle='rgba(243,230,195,.85)'; const w=ctx.measureText(r.name).width+10*WS;
+    ctx.fillRect(r.x-w/2, r.y+34*WS, w, 17*WS);
+    ctx.fillStyle='#2b1d0e'; ctx.fillText(r.name, r.x, r.y+47*WS); ctx.textAlign='left'; }
 }
 function drawSettlement(r){
-  const x=r.x,y=r.y, s=1+r.tier*0.28;
+  const x=r.x,y=r.y, s=(1+r.tier*0.28)*WS;
   ctx.save(); ctx.translate(x,y); ctx.scale(s,s);
   ctx.fillStyle='#5e4718'; ctx.fillRect(-3,-26,2.4,22); // mast/steeple base
   const houses=[[-14,0],[-4,2],[6,0],[-9,-6],[2,-7]];
@@ -659,14 +752,14 @@ function drawShip(x,y,s,sail){
 }
 function drawFleet(f){
   const z=seaById[f.zone]; const e=emp(f.owner);
-  const bob=Math.sin(performance.now()/900+f.id)*2;
-  for(let i=0;i<Math.min(3,Math.ceil(f.ships/3));i++) drawShip(z.x+(i-1)*30, z.y+bob+i*7, 1.05, f.owner==='player'?'#fff6dd':'#e8d5a8');
-  ctx.fillStyle=e.color; ctx.fillRect(z.x+12,z.y-34,40,18);
-  ctx.fillStyle='#fff6dd'; ctx.font='bold 11px Georgia'; ctx.textAlign='center';
-  ctx.fillText('⛵'+f.ships, z.x+32, z.y-21); ctx.textAlign='left';
-  if(f.stance==='blockade'){ ctx.font='14px serif'; ctx.fillText('⛓', z.x-30, z.y-18); }
-  if(selected&&selected.type==='fleet'&&selected.id===f.id){ ctx.strokeStyle='#fff3d0'; ctx.lineWidth=3;
-    ctx.beginPath(); ctx.ellipse(z.x,z.y,58,34,0,0,Math.PI*2); ctx.stroke(); }
+  const bob=Math.sin(performance.now()/900+f.id)*2*WS;
+  for(let i=0;i<Math.min(3,Math.ceil(f.ships/3));i++) drawShip(z.x+(i-1)*30*WS, z.y+bob+i*7*WS, 1.05*WS, f.owner==='player'?'#fff6dd':'#e8d5a8');
+  ctx.fillStyle=e.color; ctx.fillRect(z.x+12*WS,z.y-34*WS,40*WS,18*WS);
+  ctx.fillStyle='#fff6dd'; ctx.font='bold '+(11*WS)+'px Georgia'; ctx.textAlign='center';
+  ctx.fillText('⛵'+f.ships, z.x+32*WS, z.y-21*WS); ctx.textAlign='left';
+  if(f.stance==='blockade'){ ctx.font=(14*WS)+'px serif'; ctx.fillText('⛓', z.x-30*WS, z.y-18*WS); }
+  if(selected&&selected.type==='fleet'&&selected.id===f.id){ ctx.strokeStyle='#fff3d0'; ctx.lineWidth=3*WS;
+    ctx.beginPath(); ctx.ellipse(z.x,z.y,58*WS,34*WS,0,0,Math.PI*2); ctx.stroke(); }
 }
 function drawLanes(){
   const drawn=new Set();
@@ -679,8 +772,8 @@ function drawLanes(){
     ctx.beginPath(); ctx.moveTo(a.x,a.y);
     const za=seaById[a.seaZone], zb=seaById[b.seaZone];
     ctx.quadraticCurveTo((za.x+zb.x)/2,(za.y+zb.y)/2, b.x,b.y);
-    if(pays){ ctx.strokeStyle=emp(own).color+'cc'; ctx.lineWidth=3+ (a.tier+b.tier); ctx.setLineDash([10,7]); }
-    else if(own){ ctx.strokeStyle='rgba(230,220,190,.35)'; ctx.lineWidth=1.6; ctx.setLineDash([4,7]); }
+    if(pays){ ctx.strokeStyle=emp(own).color+'cc'; ctx.lineWidth=(3+ (a.tier+b.tier))*WS; ctx.setLineDash([10*WS,7*WS]); }
+    else if(own){ ctx.strokeStyle='rgba(230,220,190,.35)'; ctx.lineWidth=1.6*WS; ctx.setLineDash([4*WS,7*WS]); }
     else return;
     ctx.stroke(); ctx.setLineDash([]);
   }));
@@ -730,13 +823,13 @@ function handleTap(cx,cy){
   const [wx,wy]=s2w(cx,cy);
   if(now-lastTap<320){ zoomAt(cx,cy,view.scale*1.5); lastTap=0; return; } lastTap=now;
   // fleet?
-  for(const f of G.fleets){ const z=seaById[f.zone]; if(Math.hypot(f.x||z.x-wx, z.y-wy)<70){ selectFleet(f); return; } }
+  for(const f of G.fleets){ const z=seaById[f.zone]; if(Math.hypot(f.x||z.x-wx, z.y-wy)<70*WS){ selectFleet(f); return; } }
   // region?
   let best=null,bd=1e9;
   G.regions.forEach(r=>{ const d=Math.hypot(r.x-wx,r.y-wy); if(d<bd){bd=d;best=r;} });
-  if(best&&bd<130){ selectRegion(best); return; }
+  if(best&&bd<130*WS){ selectRegion(best); return; }
   // sea zone?
-  for(const z of G.seas){ if(Math.hypot(z.x-wx,z.y-wy)<120){ selectSea(z); return; } }
+  for(const z of G.seas){ if(Math.hypot(z.x-wx,z.y-wy)<120*WS){ selectSea(z); return; } }
   closeSheet();
 }
 
@@ -748,8 +841,11 @@ $('#sheet-close').onclick=closeSheet;
 function statRow(items){ return items.map(([k,v])=>'<span class="stat">'+k+' <b>'+v+'</b></span>').join(''); }
 function actBtn(t,d,fn,cls,dis){
   const b=document.createElement('button'); b.className='act-btn '+(cls||'');
+  if(dis){ // disabled states say WHY, in the open — never a dead grey box
+    b.disabled=true;
+    if(typeof dis==='string') d+='<span class="why">Locked: '+dis+'</span>';
+  } else b.onclick=()=>{ fn(); };
   b.innerHTML='<span class="t">'+t+'</span><span class="d">'+d+'</span>';
-  if(dis){ b.disabled=true; } else b.onclick=()=>{ fn(); };
   return b;
 }
 function regionCost(r){ return ''; }
@@ -772,23 +868,26 @@ function selectRegion(r){
   const acts=$('#sheet-acts'); acts.innerHTML='';
   if(r.owner==='player'){
     const me=emp('player');
+    const cant=cost=> me.gold<cost? 'needs '+cost+'g in the treasury' : ''; // every build button prices its lock out loud
     acts.appendChild(actBtn('⚔ Muster Regiments','+'+fmt(MUSTER_MEN)+' men · '+MUSTER_COST+'g · draws on population',
-      ()=>{ doMuster(r); },'', me.gold<MUSTER_COST||r.pop<MUSTER_MEN));
+      ()=>{ doMuster(r); },'', me.gold<MUSTER_COST? 'needs '+MUSTER_COST+'g in the treasury' :
+        (r.pop<MUSTER_MEN? 'needs '+fmt(MUSTER_MEN)+' souls to draw from' : '')));
     if(r.troops>=500) r.neighbors.forEach(nid=>{ const n=rById[nid];
       const enemy=n.owner!=='player';
       acts.appendChild(actBtn((enemy?'⚔ March on ':'➡ Move to ')+n.name,
-        enemy? 'Attack with '+fmt(r.troops)+' men' : 'Reposition '+fmt(r.troops)+' men',
+        (enemy? 'Attack with '+fmt(r.troops)+' men' : 'Reposition '+fmt(r.troops)+' men')+' · ~'+landDays(r,n)+' days’ march',
         ()=>{ doMoveArmy(r,n); }, enemy?'war':''));
     });
     if(r.tier<3) acts.appendChild(actBtn('🏗 Grow Settlement','Raise to '+['Hamlet','Town','City','Great Port'][r.tier+1]+' · '+(120+r.tier*130)+'g',
-      ()=>{ pay(120+r.tier*130); r.tier++; r.pop+=800; toast(r.name+' grows to a '+['hamlet','town','city','great port'][r.tier]+'!'); selectRegion(r); refreshHUD(); }));
-    if(!r.hasWall) acts.appendChild(actBtn('🧱 Build Walls','Defenders fight harder here · 90g',()=>{ pay(90); r.hasWall=true; toast('Walls rise around '+r.name); selectRegion(r); refreshHUD(); }));
-    if(!r.hasFort) acts.appendChild(actBtn('♜ Build Fort','Strong defence · slows invaders · 110g',()=>{ pay(110); r.hasFort=true; toast('A fort guards '+r.name); selectRegion(r); refreshHUD(); }));
-    if(r.isPort&&!r.hasShipyard) acts.appendChild(actBtn('🔨 Build Shipyard','Required to build warships · 150g',()=>{ pay(150); r.hasShipyard=true; toast('Shipyard opened at '+r.name); selectRegion(r); refreshHUD(); },'sea'));
-    if(!r.hasMarket) acts.appendChild(actBtn('⚖ Build Market','+10 income each season · 80g',()=>{ pay(80); r.hasMarket=true; toast('Market square built in '+r.name); selectRegion(r); refreshHUD(); }));
-    if(r.towns<7) acts.appendChild(actBtn('🏠 Found a Town','New settlement in this region · 70g',()=>{ pay(70); r.towns++; r.pop+=600; toast('A new town is founded in '+r.name); selectRegion(r); refreshHUD(); }));
+      ()=>{ pay(120+r.tier*130); r.tier++; r.pop+=800; toast(r.name+' grows to a '+['hamlet','town','city','great port'][r.tier]+'!'); selectRegion(r); refreshHUD(); },'',cant(120+r.tier*130)));
+    if(!r.hasWall) acts.appendChild(actBtn('🧱 Build Walls','Defenders fight harder here · 90g',()=>{ pay(90); r.hasWall=true; toast('Walls rise around '+r.name); selectRegion(r); refreshHUD(); },'',cant(90)));
+    if(!r.hasFort) acts.appendChild(actBtn('♜ Build Fort','Strong defence · slows invaders · 110g',()=>{ pay(110); r.hasFort=true; toast('A fort guards '+r.name); selectRegion(r); refreshHUD(); },'',cant(110)));
+    if(r.isPort&&!r.hasShipyard) acts.appendChild(actBtn('🔨 Build Shipyard','Required to build warships · 150g',()=>{ pay(150); r.hasShipyard=true; toast('Shipyard opened at '+r.name); selectRegion(r); refreshHUD(); },'sea',cant(150)));
+    if(!r.hasMarket) acts.appendChild(actBtn('⚖ Build Market','+10 income each season · 80g',()=>{ pay(80); r.hasMarket=true; toast('Market square built in '+r.name); selectRegion(r); refreshHUD(); },'',cant(80)));
+    if(r.towns<7) acts.appendChild(actBtn('🏠 Found a Town','New settlement in this region · 70g',()=>{ pay(70); r.towns++; r.pop+=600; toast('A new town is founded in '+r.name); selectRegion(r); refreshHUD(); },'',cant(70)));
     if(r.isPort) acts.appendChild(actBtn('⛵ Build Warships','+2 '+SHIP_TECH[me.shipTech]+' · '+(SHIP_COST*2)+'g · joins nearest fleet',
-      ()=>{ doBuildShips(r); },'sea', me.gold<SHIP_COST*2));
+      ()=>{ doBuildShips(r); },'sea', !r.hasShipyard? 'build a shipyard here first' :
+        (me.gold<SHIP_COST*2? 'needs '+(SHIP_COST*2)+'g in the treasury' : '')));
   } else {
     const rel=r.owner? emp('player').relations[r.owner] : null;
     acts.appendChild(actBtn('👁 Scout Report',
@@ -812,7 +911,7 @@ function selectFleet(f){
   const acts=$('#sheet-acts'); acts.innerHTML='';
   if(f.owner==='player'){
     z.neighbors.forEach(nid=>{ const nz=seaById[nid];
-      acts.appendChild(actBtn('🌊 Sail to '+nz.name,'Move fleet one sea zone',()=>{ sailFleet(f,nid); },'sea')); });
+      acts.appendChild(actBtn('🌊 Sail to '+nz.name,'One sea zone · ~'+seaDays(z,nz)+' days at sea',()=>{ sailFleet(f,nid); },'sea')); });
     ['patrol','blockade','raid','escort'].forEach(st=>{
       acts.appendChild(actBtn(({patrol:'🕊 Patrol',blockade:'⛓ Blockade',raid:'🏴 Raid Lanes',escort:'🛡 Escort'})[st],
         ({patrol:'Guard these waters',blockade:'Strangle enemy ports in this zone',raid:'Harass enemy trade here',escort:'Protect your lanes here'})[st],
@@ -845,7 +944,9 @@ function doMuster(r){
   selectRegion(r); refreshHUD();
 }
 function doBuildShips(r){
-  const me=emp('player'); if(me.gold<SHIP_COST*2) return; pay(SHIP_COST*2);
+  const me=emp('player'); if(me.gold<SHIP_COST*2) return;
+  if(!r.hasShipyard){ toast('No shipyard at '+r.name+' — build one before laying keels'); return; }
+  pay(SHIP_COST*2);
   let f=G.fleets.find(f=>f.owner==='player'&&f.zone===r.seaZone);
   if(!f){ f={id:G.fleets.length,owner:'player',zone:r.seaZone,ships:0,stance:'patrol',name:'Home Squadron'}; G.fleets.push(f); }
   f.ships+=2; anims.push({type:'sail',x1:r.x,y1:r.y,x2:seaById[r.seaZone].x,y2:seaById[r.seaZone].y,t0:performance.now(),dur:900});
@@ -854,7 +955,7 @@ function doBuildShips(r){
 function sailFleet(f,nid){
   const from=seaById[f.zone], to=seaById[nid];
   anims.push({type:'sail',x1:from.x,y1:from.y,x2:to.x,y2:to.y,t0:performance.now(),dur:900});
-  f.zone=nid; toast(f.name+' sails to the '+to.name); closeSheet(); selected={type:'fleet',id:f.id};
+  f.zone=nid; f.node='s'+nid; f.pos={x:to.x, y:to.y}; toast(f.name+' sails to the '+to.name); closeSheet(); selected={type:'fleet',id:f.id};
 }
 function battle(attacker, atkTroops, defRegion){
   const aTech=1+ (attacker? emp(attacker).armyTech*0.35:0);
@@ -882,11 +983,12 @@ function doMoveArmy(from,to){
   const survivors=atk-res.aLoss;
   if(res.win){
     const prev=to.owner; to.owner='player'; to.troops=Math.max(300,survivors);
+    const spoils=prev? 120+to.tier*60 : 40; // every conquest pays out — the tally is part of the moment
+    emp('player').gold+=spoils;
     to.flashUntil=performance.now()+1200; anims.push({type:'wash',region:to.id,color:'#8e2f32',t0:performance.now(),dur:1100});
     gazette('⚔ <b>'+to.name+' has fallen!</b> Your banners rise over the '+['hamlet','town','city','great port'][to.tier]+
-      ' — '+fmt(res.aLoss)+' of yours and '+fmt(res.dLoss)+' defenders fell.'+(prev?' Spoils and harbour dues pour into your treasury.':''));
-    if(prev) emp('player').gold+=120+to.tier*60;
-    toast('🏴 '+to.name+' is yours!');
+      ' — '+fmt(res.aLoss)+' of yours and '+fmt(res.dLoss)+' defenders fell. Spoils of '+fmt(spoils)+'g pour into your treasury.');
+    toast('🏴 '+to.name+' is yours! +'+fmt(spoils)+'g spoils');
     coachAdvance(1);
     checkCapitalLoss(prev);
     showBattle(atkName,atk,to.name,defBefore,res,true,'Spoils: +'+(prev?120+to.tier*60:40)+'g · the banner of Your Crown rises over '+to.name+'.');
@@ -932,7 +1034,8 @@ function aiTurn(id){
   const shipPort=mine.find(r=>r.isPort&&r.hasShipyard);
   if(shipPort && e.gold>SHIP_COST*2+100 && totalShips(id)<14){ e.gold-=SHIP_COST*2;
     let f=G.fleets.find(f=>f.owner===id&&f.zone===shipPort.seaZone);
-    if(!f){ f={id:Date.now()+Math.floor(rnd()*999),owner:id,zone:shipPort.seaZone,ships:0,stance:'patrol',name:e.name.split(' ')[0]+' Squadron'}; G.fleets.push(f);} f.ships+=2; }
+    if(!f){ f={id:Date.now()+Math.floor(rnd()*999),owner:id,zone:shipPort.seaZone,node:'s'+shipPort.seaZone,
+      pos:{x:seaById[shipPort.seaZone].x, y:seaById[shipPort.seaZone].y},ships:0,stance:'patrol',name:e.name.split(' ')[0]+' Squadron'}; G.fleets.push(f);} f.ships+=2; }
   // fleets: blockade enemy port when at war with someone
   G.fleets.filter(f=>f.owner===id).forEach(f=>{
     const enemies=Object.keys(e.relations).filter(o=>e.relations[o].war);
@@ -1063,16 +1166,19 @@ $('#gazette-ok').onclick=()=>{ $('#gazette').classList.remove('open');
 };
 
 /* ================= HUD / REALM / CROWN ================= */
+// ledger numbers pulse when they change — the treasury should feel alive, not repaint silently
+function setNum(sel,txt){ const el=$(sel); if(!el) return;
+  if(el.textContent!==txt){ el.textContent=txt; el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); } }
 function refreshHUD(){
   $('#tb-season').textContent=seasonName();
   const me=emp('player');
-  $('#tb-gold').textContent=fmt(me.gold);
+  setNum('#tb-gold',fmt(me.gold));
   const net=G.lastIncome.gold+G.lastIncome.trade-G.lastIncome.upkeep-G.lastIncome.interest;
   $('#tb-gold-trend').innerHTML= net>=0? '<span class="trend-up">▲'+fmt(net)+'</span>' : '<span class="trend-dn">▼'+fmt(Math.abs(net))+'</span>';
-  $('#tb-men').textContent=fmt(totalMen('player'));
-  $('#tb-ships').textContent=totalShips('player');
+  setNum('#tb-men',fmt(totalMen('player')));
+  setNum('#tb-ships',''+totalShips('player'));
   $('#tb-debt-cell').style.display=me.debt>0?'flex':'none';
-  $('#tb-debt').textContent=fmt(me.debt);
+  setNum('#tb-debt',fmt(me.debt));
   const w=$('#warnings'); w.innerHTML=G.warnings.map(x=>'<div class="warn">'+x+'</div>').join('');
   const cb=$('#crown-badge'); const n=G.crownQueue.length;
   cb.style.display=n?'flex':'none'; cb.textContent=n;
@@ -1201,7 +1307,7 @@ function showBattle(atkName,atkMen,defName,defMen,res,won,note){
 $('#battle-ok').onclick=()=>{ $('#battle').classList.remove('open'); updateHint(); };
 
 /* ================= SAVE / LOAD / BOOT ================= */
-function save(){ try{ localStorage.setItem('riftsail-save', JSON.stringify(G)); }catch(e){} }
+function save(){ syncUnits(); try{ localStorage.setItem('riftsail-save', JSON.stringify(G)); }catch(e){} }
 function load(){ try{ const s=localStorage.getItem('riftsail-save'); return s? JSON.parse(s):null; }catch(e){ return null; } }
 function startNew(){
   G=freshState(); rebuildIndex(); selected=null; closeSheet();
@@ -1219,7 +1325,7 @@ window.addEventListener('resize',()=>{ fitCanvas(); if(window.R3&&window.R3.resi
 fitCanvas();
 (function boot(){
   const saved=load();
-  if(saved&&saved.regions){ G=saved; rebuildIndex(); $('#btn-continue').style.display='block'; }
+  if(saved&&saved.regions){ G=migrateSave(saved); rebuildIndex(); $('#btn-continue').style.display='block'; }
   else { G=freshState(); rebuildIndex(); }
   fitWorld(); refreshHUD();
   requestAnimationFrame(draw);
@@ -1251,8 +1357,8 @@ try{
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0d4258);
-  scene.fog = new THREE.Fog(0x0d4258, 620, 1250);
-  const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.5, 3000);
+  scene.fog = new THREE.Fog(0x0d4258, 1000, 2400);
+  const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.5, 5000);
 
   scene.add(new THREE.HemisphereLight(0xfff1cf, 0x1d4a5c, 1.05));
   const sun = new THREE.DirectionalLight(0xffe3ae, 1.5);
@@ -1317,26 +1423,26 @@ try{
     const sb=new Batch();       // satellite hamlets — hidden at far zoom
     const bx=SX(r.x), bz=SZ(r.y), by=BASE_Y;
     const ownerCol = r.owner? emp(r.owner).color : '#8a6d3b';
-    const walls=['#cbb27a','#bfa065','#d6c088','#c2a878'];
+    const walls=['#cbb27a','#bfa065','#d6c088','#c2a878','#e3d3ac','#b98d5f'];
     const capital = !!isCapitalOf(r);
-    // main cluster — FEWER, BIGGER, distinct buildings with varied roofs
-    const nH = 2 + r.tier + (capital?1:0);
+    // main cluster — ONE distinct town: few, big, readable buildings, clear ground around it
+    const nH = 2 + r.tier + (capital?3:0);
     for(let i=0;i<nH;i++){
-      const a=i*2.35+r.id*1.7, d=2.7+ (i%3)*2.1;
-      const s=1.55+(i%3)*0.28 + r.tier*0.16 + (capital?0.15:0);
+      const a=i*2.35+r.id*1.7, d=2.8+ (i%3)*2.2;
+      const s=(1.42+(i%3)*0.26 + r.tier*0.14 + (capital?0.12:0))*(capital?1.15:1);
       house(b, bx+Math.cos(a)*d, by, bz+Math.sin(a)*d*0.85, s, walls[i%4],
         ROOFS3D[Math.floor(hash(r.id*7+i*13)*ROOFS3D.length)]);
     }
-    // satellite hamlets — at most 2 modest clusters (zoom-gated in the frame loop)
+    // satellite hamlets — at most 2, placed at a REAL distance from town (zoom-gated in the frame loop)
     const sats=Math.min(r.towns,2);
     for(let i=0;i<sats;i++){
-      const a=i*2.7+r.id*1.3, hx=bx+Math.cos(a)*10.5, hz=bz+Math.sin(a)*8.0;
-      house(sb, hx, by, hz, 0.95, walls[(i+1)%4], ROOFS3D[Math.floor(hash(r.id*3+i*11)*ROOFS3D.length)]);
-      house(sb, hx+2.3, by, hz+1.1, 0.8, walls[i%4], ROOFS3D[Math.floor(hash(r.id*5+i*7)*ROOFS3D.length)]);
+      const a=i*2.7+r.id*1.3, hx=bx+Math.cos(a)*17.5, hz=bz+Math.sin(a)*13.5;
+      house(sb, hx, by, hz, 1.1, walls[(i+1)%4], ROOFS3D[Math.floor(hash(r.id*3+i*11)*ROOFS3D.length)]);
+      house(sb, hx+3.0, by, hz+1.4, 0.95, walls[i%4], ROOFS3D[Math.floor(hash(r.id*5+i*7)*ROOFS3D.length)]);
     }
     if(r.tier>=1) tower(b, bx-2.6, by, bz-1.7, 1.3, '#e8dcc0', '#8e2f32', 4.4); // church tower
-    if(r.tier>=2 || r.hasWall){ // curtain wall ring — chunkier blocks
-      const nB=10, rad=6.6;
+    if(r.tier>=2 || r.hasWall){ // curtain wall ring — chunkier blocks, houses keep inside it
+      const nB=10, rad=7.4;
       for(let i=0;i<nB;i++){ const a=i/nB*Math.PI*2;
         b.add(new THREE.BoxGeometry(4.1,2.1,1.0), M4(bx+Math.cos(a)*rad, by+1.05, bz+Math.sin(a)*rad, 0, -a+Math.PI/2, 0), '#9a8a70'); }
     }
@@ -1346,10 +1452,10 @@ try{
       b.add(new THREE.BoxGeometry(5.6,2.8,2.8), M4(bx+0.5,by+1.4,bz+0.8), '#d9c8a4');
       b.add(new THREE.ConeGeometry(2.1,2.9,4), M4(bx+0.5,by+4.25,bz+0.8,0,Math.PI/4,0), '#5e4718');
     }
-    if(capital){ // golden dome + tall spire — unmistakable at world zoom
-      b.add(new THREE.SphereGeometry(1.6,10,8), M4(bx+0.5, by+6.3, bz+0.8), '#e9c96e');
-      b.add(new THREE.CylinderGeometry(0.32,0.52,3.0,6), M4(bx+0.5, by+7.9, bz+0.8), '#c9a24b');
-      b.add(new THREE.ConeGeometry(2.0,6.6,6), M4(bx+0.5, by+12.6, bz+0.8), '#e9c96e');
+    if(capital){ // golden dome + soaring spire — a skyline that dwarfs hamlets from across the map
+      b.add(new THREE.SphereGeometry(1.8,10,8), M4(bx+0.5, by+7.4, bz+0.8), '#e9c96e');
+      b.add(new THREE.CylinderGeometry(0.36,0.6,3.8,6), M4(bx+0.5, by+9.4, bz+0.8), '#c9a24b');
+      b.add(new THREE.ConeGeometry(2.3,8.6,6), M4(bx+0.5, by+15.2, bz+0.8), '#e9c96e');
     }
     if(r.hasFort) tower(b, bx+6.4, by, bz-4.6, 1.25, '#8d8272', '#4c4438', 4.8);
     if(r.isPort){
@@ -1361,8 +1467,8 @@ try{
         b.add(new THREE.BoxGeometry(0.4,3.6,0.4), M4(bx+dx*5.2-dz*1.8, by+1.8, bz+dz*5.2+dx*1.8), '#5e4718');
         b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*6.1-dz*1.8, by+3.5, bz+dz*6.1+dx*1.8, 0, -ang, 0), '#5e4718');
       }
-      const ships = r.tier>=3?2 : 1; // every harbour keeps a tall ship — sails read at distance
-      for(let i=0;i<ships;i++) shipBatch(b, bx+dx*(11+i*4.2)-dz*(2.6-i*5.2), 0.55, bz+dz*(11+i*4.2)+dx*(2.6-i*5.2), 1.5, ang+Math.PI/2, '#5a3a1e', '#ffffff');
+      const ships = r.tier>=3?3 : r.tier>=1?2 : 1; // wider harbours, more hulls — sails read at distance
+      for(let i=0;i<ships;i++) shipBatch(b, bx+dx*(11+i*5.0)-dz*(3-i*6), 0.55, bz+dz*(11+i*5.0)+dx*(3-i*6), 1.5, ang+Math.PI/2, '#5a3a1e', '#ffffff');
       if(r.tier>=2 && (r.name==='Gibraltar'||r.name==='London'||r.name==='Havana')){ // lighthouse
         b.add(new THREE.CylinderGeometry(0.75,1.0,4.8,7), M4(bx-dx*5.5, by+2.4, bz-dz*5.5), '#efe6cc');
         b.add(new THREE.SphereGeometry(0.62,8,6), M4(bx-dx*5.5, by+5.1, bz-dz*5.5), '#ffd97a');
@@ -1379,12 +1485,12 @@ try{
   /* ---------- world statics: table, water, land ---------- */
   const worldGroup = new THREE.Group(); scene.add(worldGroup);
   { // captain's table — a walnut frame far below the sea, glimpsed only at the horizon
-    const table = new THREE.Mesh(new THREE.BoxGeometry(1500, 6, 1150), new THREE.MeshLambertMaterial({color:0x2f1f10}));
+    const table = new THREE.Mesh(new THREE.BoxGeometry(2300, 6, 1760), new THREE.MeshLambertMaterial({color:0x2f1f10}));
     table.position.y=-4.6; worldGroup.add(table);
-    const rim = new THREE.Mesh(new THREE.BoxGeometry(1240, 3.2, 940), new THREE.MeshLambertMaterial({color:0x54391c}));
+    const rim = new THREE.Mesh(new THREE.BoxGeometry(1920, 3.2, 1520), new THREE.MeshLambertMaterial({color:0x54391c}));
     rim.position.y=-2.7; worldGroup.add(rim);
   }
-  const waterGeo = new THREE.PlaneGeometry(1120, 820, 64, 46);
+  const waterGeo = new THREE.PlaneGeometry(1560, 1120, 76, 54);
   waterGeo.rotateX(-Math.PI/2);
   const waterBase = waterGeo.attributes.position.array.slice();
   const water = new THREE.Mesh(waterGeo, new THREE.MeshPhongMaterial({color:0x14607a, specular:0x8fc3dd, shininess:110, transparent:true, opacity:0.97}));
@@ -1403,18 +1509,28 @@ try{
   }
   { // landmasses + inked coastlines
     const landMat = new THREE.MeshStandardMaterial({color:0xd9c28c, roughness:1, metalness:0});
+    const landPolys = []; // smoothed continent outlines in 3D coords — countryside scatter lives inside these
     LAND_PATHS.forEach(path=>{
       const smooth = smoothShape(path);
+      landPolys.push(smooth.map(p=>[SX(p.x), SZ(p.y)]));
       const m = new THREE.Mesh(extrudeLand(smooth, 2.6), landMat); worldGroup.add(m);
       const linePts = smooth.map(p=>new THREE.Vector3(SX(p.x), BASE_Y+0.12, SZ(p.y)));
       const lg = new THREE.BufferGeometry().setFromPoints(linePts);
       worldGroup.add(new THREE.LineLoop(lg, new THREE.LineBasicMaterial({color:0x6b4c22, transparent:true, opacity:0.85})));
     });
     G.regions.filter(r=>r.group==='I').forEach(r=>{
-      const pts=[]; for(let i=0;i<20;i++){ const a=i/20*Math.PI*2; pts.push([r.x+Math.cos(a)*95, r.y+Math.sin(a)*70]); }
+      const pts=[]; for(let i=0;i<20;i++){ const a=i/20*Math.PI*2; pts.push([r.x+Math.cos(a)*95*WS, r.y+Math.sin(a)*70*WS]); }
       const smooth = smoothShape(pts);
       const m = new THREE.Mesh(extrudeLand(smooth, 2.2), landMat); worldGroup.add(m);
       const linePts = smooth.map(p=>new THREE.Vector3(SX(p.x), BASE_Y-0.35, SZ(p.y)));
+      worldGroup.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(linePts), new THREE.LineBasicMaterial({color:0x6b4c22, transparent:true, opacity:0.7})));
+    });
+    // uninhabited islets — pure scenery scattered across the wide water
+    ISLETS.forEach(it=>{
+      const pts=[]; for(let i=0;i<16;i++){ const a=i/16*Math.PI*2; pts.push([it[0]+Math.cos(a)*it[2], it[1]+Math.sin(a)*it[2]*0.72]); }
+      const smooth = smoothShape(pts);
+      const m = new THREE.Mesh(extrudeLand(smooth, 1.7), landMat); worldGroup.add(m);
+      const linePts = smooth.map(p=>new THREE.Vector3(SX(p.x), BASE_Y-0.5, SZ(p.y)));
       worldGroup.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(linePts), new THREE.LineBasicMaterial({color:0x6b4c22, transparent:true, opacity:0.7})));
     });
     // scattered trees, rolling hills & a mountain range (instanced, static)
@@ -1436,17 +1552,42 @@ try{
       if(MTN_RANGES.includes(r.name)) for(let i=0;i<4;i++){ const a=hash(r.id*53+i*7)*Math.PI*2, d=3+hash(r.id*29+i*3)*5;
         mtnPos.push([SX(r.x)+Math.cos(a)*d, SZ(r.y)+Math.sin(a)*d*0.8, 0.85+hash(r.id*7+i)*0.55]); }
     });
+    // ---- open countryside: forests & hill country BETWEEN towns, never inside them ----
+    // The vastness has to read as land, not void — but every grove keeps its distance from settlements.
+    const anchorsXY = G.regions.map(r=>[SX(r.x), SZ(r.y)]);
+    function inPoly(x,z,poly){ let inside=false;
+      for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const xi=poly[i][0],zi=poly[i][1],xj=poly[j][0],zj=poly[j][1];
+        if(((zi>z)!==(zj>z)) && (x<(xj-xi)*(z-zi)/(zj-zi)+xi)) inside=!inside; }
+      return inside; }
+    let _cs=987654321; const csRnd=()=>{ _cs=(_cs*16807)%2147483647; return _cs/2147483647; };
+    function scatterCountry(poly,count,arr,isTree,minD){
+      const xs=poly.map(p=>p[0]), zs=poly.map(p=>p[1]);
+      const x0=Math.min.apply(null,xs), x1=Math.max.apply(null,xs), z0=Math.min.apply(null,zs), z1=Math.max.apply(null,zs);
+      let placed=0, guard=0;
+      while(placed<count && guard++<count*40){
+        const x=x0+csRnd()*(x1-x0), z=z0+csRnd()*(z1-z0);
+        if(!inPoly(x,z,poly)) continue;
+        let clear=true;
+        for(let k=0;k<anchorsXY.length;k++){ const dx=anchorsXY[k][0]-x, dz=anchorsXY[k][1]-z;
+          if(dx*dx+dz*dz<minD*minD){ clear=false; break; } }
+        if(!clear) continue;
+        if(isTree) arr.push([x,z]); else arr.push([x,z, 0.9+csRnd()*1.1]);
+        placed++;
+      }
+    }
+    landPolys.forEach(poly=>{ scatterCountry(poly,420,treePos,true,14); scatterCountry(poly,140,hillPos,false,17); scatterCountry(poly,48,rockPos,false,15); });
+    ISLETS.forEach(it=>{ treePos.push([SX(it[0])+2.5, SZ(it[1])+1.5]); treePos.push([SX(it[0])-3, SZ(it[1])-1]); });
     const treeIM = new THREE.InstancedMesh(new THREE.ConeGeometry(0.95, 2.8, 6), new THREE.MeshLambertMaterial({color:0x3f612e}), Math.max(treePos.length,1));
     treePos.forEach((p,i)=> treeIM.setMatrixAt(i, M4(p[0], BASE_Y+1.55, p[1], 0, hash(i)*3, 0, 1.5, 1.35+hash(i*3)*0.75, 1.5)));
     treeIM.instanceMatrix.needsUpdate=true; worldGroup.add(treeIM);
     const rockIM = new THREE.InstancedMesh(new THREE.ConeGeometry(1.6, 2.2, 5), new THREE.MeshLambertMaterial({color:0x8d8272}), Math.max(rockPos.length,1));
     rockPos.forEach((p,i)=> rockIM.setMatrixAt(i, M4(p[0], BASE_Y+0.8, p[1], 0, hash(i*7)*3, 0, p[2], p[2], p[2])));
     rockIM.instanceMatrix.needsUpdate=true; worldGroup.add(rockIM);
-    const hillIM = new THREE.InstancedMesh(new THREE.ConeGeometry(3.1, 1.8, 7), new THREE.MeshLambertMaterial({color:0xb3a068}), Math.max(hillPos.length,1));
-    hillPos.forEach((p,i)=> hillIM.setMatrixAt(i, M4(p[0], BASE_Y+0.85*p[2], p[1], 0, hash(i*11)*3, 0, p[2], p[2], p[2])));
+    const hillIM = new THREE.InstancedMesh(new THREE.ConeGeometry(3.4, 2.2, 7), new THREE.MeshLambertMaterial({color:0xa8945e}), Math.max(hillPos.length,1));
+    hillPos.forEach((p,i)=> hillIM.setMatrixAt(i, M4(p[0], BASE_Y+1.05*p[2], p[1], 0, hash(i*11)*3, 0, p[2], p[2], p[2])));
     hillIM.instanceMatrix.needsUpdate=true; worldGroup.add(hillIM);
-    const mtnIM = new THREE.InstancedMesh(new THREE.ConeGeometry(2.5, 4.4, 6), new THREE.MeshLambertMaterial({color:0x7e7263}), Math.max(mtnPos.length,1));
-    mtnPos.forEach((p,i)=> mtnIM.setMatrixAt(i, M4(p[0], BASE_Y+2.1*p[2], p[1], 0, hash(i*13)*3, 0, p[2], p[2], p[2])));
+    const mtnIM = new THREE.InstancedMesh(new THREE.ConeGeometry(2.7, 6.8, 6), new THREE.MeshLambertMaterial({color:0x7e7263}), Math.max(mtnPos.length,1));
+    mtnPos.forEach((p,i)=> mtnIM.setMatrixAt(i, M4(p[0], BASE_Y+3.3*p[2], p[1], 0, hash(i*13)*3, 0, p[2], p[2], p[2])));
     mtnIM.instanceMatrix.needsUpdate=true; worldGroup.add(mtnIM);
   }
 
@@ -1464,7 +1605,7 @@ try{
   function discFor(r){
     let d = discs.get(r.id);
     if(!d){
-      const rad = (r.group==='I'? 6.8 : 8.3);
+      const rad = (r.group==='I'? 6.8 : 8.3) + (CAPITALS.includes(r.name)? 2.4 : 0);
       const fill = new THREE.Mesh(new THREE.CircleGeometry(rad, 40).rotateX(-Math.PI/2),
         new THREE.MeshBasicMaterial({transparent:true, opacity:0.44, depthWrite:false}));
       const ring = new THREE.Mesh(new THREE.RingGeometry(rad, rad+1.15, 40).rotateX(-Math.PI/2),
@@ -1549,18 +1690,32 @@ try{
 
   /* ---------- camera (constrained pan/zoom, map-tilt) ---------- */
   const TILT = 0.92; // ~53° elevation — always reads as a chart
-  let target = new THREE.Vector3(SX(300), 0, SZ(980)); // open on the player's Lisbon
-  let dist = 150;
+  const LIS0 = G.regions.find(r=>r.name==='Lisbon');
+  let target = new THREE.Vector3(SX(LIS0.x), 0, SZ(LIS0.y)); // open close on the player's Lisbon — world rolling away off-screen
+  let dist = 120;
   function fitDist(){
     const t = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
-    const dv = (175/2)/t, dh = (255/2)/(t*camera.aspect);
-    return THREE.MathUtils.clamp(Math.max(dv, dh)*1.08, 90, 560);
+    const dv = (WORLD_H/20)/t, dh = (WORLD_W/20)/(t*camera.aspect);
+    return THREE.MathUtils.clamp(Math.max(dv, dh)*1.06, 90, 880);
   }
-  function clampTarget(){ target.x = THREE.MathUtils.clamp(target.x, -165, 165); target.z = THREE.MathUtils.clamp(target.z, -120, 120); }
+  function clampTarget(){ target.x = THREE.MathUtils.clamp(target.x, -(WORLD_W/20+60), WORLD_W/20+60); target.z = THREE.MathUtils.clamp(target.z, -(WORLD_H/20+60), WORLD_H/20+60); }
   function updateCamera(){
     clampTarget();
     camera.position.set(target.x, Math.sin(TILT)*dist, target.z + Math.cos(TILT)*dist);
     camera.lookAt(target.x, 2, target.z);
+  }
+  // gentle eased flights for programmed framing (Home / rebuild) — hands on the wheel cancel instantly
+  let camAnim = null;
+  function flyTo(t, d, ms){
+    camAnim = {t0: performance.now(), dur: ms||600, fromT: target.clone(), fromD: dist,
+      toT: t.clone(), toD: THREE.MathUtils.clamp(d, 40, 880)};
+  }
+  function stepCam(now){
+    if(!camAnim) return;
+    const p = Math.min(1, (now-camAnim.t0)/camAnim.dur), e = 1-Math.pow(1-p, 3);
+    target.lerpVectors(camAnim.fromT, camAnim.toT, e);
+    dist = camAnim.fromD + (camAnim.toD-camAnim.fromD)*e;
+    if(p>=1) camAnim = null;
   }
   const ray = new THREE.Raycaster(), groundPlane = new THREE.Plane(new THREE.Vector3(0,1,0), -BASE_Y);
   function groundPoint(cx, cy){
@@ -1570,8 +1725,9 @@ try{
     return ray.ray.intersectPlane(groundPlane, out) ? out : null;
   }
   function zoomAnchored(f, cx, cy){
+    camAnim = null; // direct input always wins over a programmed flight
     const before = (cx!==undefined)? groundPoint(cx, cy) : null;
-    dist = THREE.MathUtils.clamp(dist/f, 42, 560);
+    dist = THREE.MathUtils.clamp(dist/f, 40, 880);
     updateCamera();
     if(before){ const after = groundPoint(cx, cy);
       if(after){ target.x += before.x-after.x; target.z += before.z-after.z; updateCamera(); } }
@@ -1595,14 +1751,14 @@ try{
     const major = r => r.tier>=2 || CAPITALS.includes(r.name);
     G.regions.forEach(r=>{
       const p = project(SX(r.x), BASE_Y+7.5, SZ(r.y));
-      const showName = p && (dist<120 || (dist<265 && major(r)) || CAPITALS.includes(r.name) || (selected&&selected.type==='region'&&selected.id===r.id));
+      const showName = p && (dist<150 || (dist<330 && major(r)) || CAPITALS.includes(r.name) || (selected&&selected.type==='region'&&selected.id===r.id));
       const nk = 'n'+r.id;
       if(showName){
         used.add(nk); const el = chip(nk, 'chip name'+(major(r)?' major':''));
         el.textContent = r.name;
         el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
       }
-      if(r.troops>=500 && (dist<140 || (r.owner && dist<320)) && p){
+      if(r.troops>=500 && (dist<170 || (r.owner && dist<400)) && p){
         const p2 = project(SX(r.x)+1.7, BASE_Y+10.5, SZ(r.y)-4.8);
         if(p2){ const tk='t'+r.id; used.add(tk); const el=chip(tk,'chip troops');
           el.style.background = r.owner? emp(r.owner).color : '#6b5a34';
@@ -1622,13 +1778,20 @@ try{
       const fk='f'+f.id; used.add(fk); const el=chip(fk,'chip fleet');
       el.style.background = emp(f.owner).color;
       el.textContent = '⛵ '+f.ships + (f.stance==='blockade'?' ⛓':'');
-      el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
+      el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+(p[1]+(dist>330?16:0)).toFixed(1)+'px)';
     });
     ['Gibraltar Strait','The Channel'].forEach(nm=>{
-      const z = G.seas.find(s=>s.name===nm); if(!z || dist>215) return;
+      const z = G.seas.find(s=>s.name===nm); if(!z || dist>340) return;
       const p = project(SX(z.x), 4, SZ(z.y)); if(!p) return;
       const sk='s'+nm; used.add(sk); const el=chip(sk,'chip name');
       el.textContent='⚓ '+nm; el.style.display='block';
+      el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
+    });
+    // the oceans name themselves as you pull back — vast water should read as PLACES, not void
+    if(dist>=170) G.seas.forEach(z=>{
+      const p = project(SX(z.x), 3, SZ(z.y)); if(!p) return;
+      const zk='z'+z.id; used.add(zk); const el=chip(zk,'chip sea');
+      el.textContent=z.name; el.style.display='block';
       el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
     });
     chipPool.forEach((el,k)=>{ if(!used.has(k)) el.style.display='none'; });
@@ -1653,6 +1816,7 @@ try{
   const pointers = new Map(); let dragInfo=null, pinchD=0;
   el.style.touchAction='none';
   el.addEventListener('pointerdown', e=>{ el.setPointerCapture(e.pointerId);
+    camAnim = null;
     pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if(pointers.size===1) dragInfo={x:e.clientX, y:e.clientY, moved:0, t:Date.now()};
     if(pointers.size===2){ const [a,b]=[...pointers.values()]; pinchD=Math.hypot(a.x-b.x, a.y-b.y); dragInfo=null; }
@@ -1734,11 +1898,13 @@ try{
       coachRing.material.opacity=0.65+Math.sin(t*2.6)*0.3;
     } else coachRing.visible=false;
     // satellite hamlets only exist up close — far zoom stays clean
-    const showSats = dist < 330;
+    const showSats = dist < 360;
+    discs.forEach(d=>{ if(d.owner) d.fill.material.opacity = dist>330? 0.62 : 0.5; }); // empires deepen as you pull back
     settlements.forEach(v=>{ if(v.sat && v.sat.visible !== showSats) v.sat.visible = showSats; });
     // periodic state diffing (ownership, tiers, lanes, fleets)
     diffT+=dt;
     if(diffT>0.35){ diffT=0; refreshSettlements(); refreshLanes(); refreshFleets(); }
+    stepCam(performance.now());
     updateCamera(); updateChips();
     renderer.render(scene, camera);
   }
@@ -1746,15 +1912,18 @@ try{
   /* ---------- public API + activation ---------- */
   R3.active = true;
   R3.zoomBy = f => zoomAnchored(f, innerWidth/2, innerHeight/2);
-  R3.home = () => { target.set(0,0,0); dist = fitDist(); updateCamera(); };
+  R3.home = () => { flyTo(new THREE.Vector3(0,0,0), fitDist(), 700); };
   R3.pick = pick;
   R3.resize = () => { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); };
   R3.rebuild = () => { settlements.forEach(v=>{ scene.remove(v.mesh); v.mesh.geometry.dispose(); if(v.sat){ scene.remove(v.sat); v.sat.geometry.dispose(); } }); settlements.clear();
-    laneSig=''; refreshSettlements(); refreshLanes(); refreshFleets(); R3.home();
-    target.set(SX(300),0,SZ(980)); dist=150; updateCamera(); };
+    laneSig=''; refreshSettlements(); refreshLanes(); refreshFleets();
+    const lis = G.regions.find(r=>r.name==='Lisbon');
+    if(lis) flyTo(new THREE.Vector3(SX(lis.x), 0, SZ(lis.y)), 120, 700); };
   container.style.display='block';
   document.getElementById('map').style.display='none';
   refreshSettlements(); refreshLanes(); refreshFleets();
+  const CAMH = location.hash.match(/cam=(-?[\d.]+),(-?[\d.]+),(\d+(?:\.\d+)?)/); // QA hook: frame world coords directly
+  if(CAMH){ target.set(SX(+CAMH[1]), 0, SZ(+CAMH[2])); dist=+CAMH[3]; camAnim=null; }
   updateCamera(); frame();
 }catch(err){
   // 3D unavailable (offline CDN / no WebGL): the 2D chart stays in charge.
