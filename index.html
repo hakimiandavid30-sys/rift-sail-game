@@ -60,10 +60,20 @@
   /* narrow phones: condense the ledger chips so Crown & Realm never clip */
   @media (max-width:640px){
     #topbar #title-cell{display:none;}
-    #topbar{gap:3px;padding:5px 6px;}
+    /* WAVE 17: the crown bar WRAPS — nothing hides off the right edge any more.
+       The spacer claims a row of its own so the ledger chips ride the first line and
+       the buttons the second; chips shrink first, tap targets never (44px floors).
+       The bar sits ABOVE the veils (z 45) and the bottom clockbar is untouched:
+       the date keeps its own ground, no control may sit on it. */
+    #topbar{flex-wrap:wrap;gap:4px 3px;padding:5px 6px;}
     #topbar .cell{font-size:11px;padding:3px 5px;gap:3px;}
-    #topbar .bar-btn, .bar-btn{padding:6px 8px;font-size:12px;min-height:34px;}
-    #btn-crown{margin-right:4px;}
+    #topbar .bar-btn, .bar-btn{padding:6px 10px;font-size:12px;min-height:44px;}
+    #topbar .bar-btn{min-width:44px;}
+    #spacer{flex:1 1 100%;height:0;}
+    #btn-crown{margin-left:auto;}
+    #game #aims{top:100px;}
+    #game #warnings{top:100px;}
+    #game #tally{top:102px;}
   }
 
   /* ---------- aims tracker ---------- */
@@ -74,11 +84,11 @@
   #aims .aim .tick{color:var(--forest);font-weight:bold;}
   #aims .aim .prog{color:#7a6238;font-size:11px;white-space:nowrap;}
   @media (max-width:600px){
-    /* every control stays reachable on a phone: the crown bar scrolls sideways rather than clipping */
-    #topbar{overflow-x:auto; scrollbar-width:none;} #topbar::-webkit-scrollbar{display:none;}
+    /* WAVE 17: the crown bar WRAPS onto two rows now (see the 640px block) — no sideways hunting,
+       nothing clipped; chips keep their natural width and the buttons keep their 44px floors */
     #topbar .cell, #topbar .bar-btn{flex:none;}
     /* CLEAN CROWN: the sovereign's aims ride as one small chip — tap to unfold the full list */
-    #aims{top:48px;left:6px;padding:5px 9px;max-width:62vw;cursor:pointer;}
+    #aims{top:100px;left:6px;padding:5px 9px;max-width:62vw;cursor:pointer;}
     #aims h4{margin-bottom:0;font-size:11px;white-space:nowrap;}
     #aims .aims-sum{font-variant:normal;letter-spacing:0;color:#8a6a35;font-size:11px;margin-left:4px;}
     #aims #aims-list{display:none;}
@@ -2356,7 +2366,7 @@ function rtAdvanceDays(days){
     // season seam: every 90 days the old economy breathes
     if(Math.floor(G.day)%90===0){ endSeason(); if(G.over) break; }
     // imperial staffs think monthly
-    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); governorMonthly(); detectWarnings(); borderWatch(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
+    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); governorMonthly(); detectWarnings(); borderWatch(); successionTestCheck(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
     // arrivals (timestamp-exact)
     (G.armies||[]).slice().forEach(a=>{ if(a.at && G.day>=a.arriveDay-1e-9) armyArrive(a); });
     (G.fleets||[]).slice().forEach(f=>{ if(f.at && G.day>=f.at.arriveDay-1e-9) fleetArrive(f); });
@@ -4294,107 +4304,6 @@ if(prev){ const moved=['aurelia','meridian','sable'].filter(id=>now[id]!=null&&p
       : '🗺 <b>The '+emp(moved.id).name+' shrinks.</b> '+(-moved.d)+' towns have slipped their grasp since last season — somewhere, a rival court reads its own bad news tonight.'); } }
 G.rivalCounts=now;
 }
-/* WAVE 16: THE SUCCESSION QUESTION. In the eighth year of a reign with real weight, the
-   council stops pretending the question is not in the room. One card, once per save, three
-   honest answers — each priced in print, each moving the ledger, the governors' purses, and
-   the season's story. And whichever way the Crown answers, the court nursing the longest
-   list against the player sends a probe to test the new order: real spears or real sails,
-   moved by the ordinary staff orders, telegraphed by the ordinary border watch.
-   No scripted harm — the probe only ever walks, and the watch only ever names it. */
-function belovedCommander(){
-  let best=null;
-  (G.armies||[]).filter(a=>a.owner==='player').forEach(a=>{ const g=a.general||{}; const score=(g.wins||0)*3+(a.vet||0); if(!best||score>best.score) best={kind:'army', unit:a, name:g.name||a.name, score}; });
-  (G.fleets||[]).filter(f=>f.owner==='player'&&f.admiral).forEach(f=>{ const g=f.admiral; const score=(g.wins||0)*3+(f.vet||0); if(!best||score>best.score) best={kind:'fleet', unit:f, name:g.name, score}; });
-  if(!best){ const gv=myRegions().filter(r=>r.gov).sort((a,b)=>(b.gov.purse||0)-(a.gov.purse||0))[0]; if(gv) best={kind:'gov', unit:gv, name:gv.gov.name+' of '+gv.name, score:0}; }
-  return best;
-}
-function successionTester(){
-  const me=emp('player');
-  const cands=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!allied(id,'player')&&G.regions.some(r=>r.owner===id));
-  if(!cands.length) return null;
-  cands.sort((a,b)=>(((me.relations[b]||{}).grievance||0)-((me.relations[a]||{}).grievance||0))
-    || (((me.relations[b]||{}).threat||0)-((me.relations[a]||{}).threat||0)) || (crownPower(b)-crownPower(a)));
-  return cands[0];
-}
-function armSuccessionProbe(){
-  const F=G.flags||(G.flags={});
-  const t=successionTester();
-  F.successionProbe=t||null; F.successionProbeTries=0;
-}
-function runSuccessionProbe(id, mine){
-  const F=G.flags; if(!F||F.successionProbe!==id) return;
-  const rel=emp('player').relations[id];
-  const done=()=>{ F.successionProbe=null; F.successionProbeTries=0; };
-  if(!mine.length || (rel&&(rel.war||rel.ally))){ done(); return; } // nothing left to test with — or the test is already running in earnest
-  const border=mine.filter(r=>r.neighbors.some(nid=>rById[nid]&&rById[nid].owner==='player'));
-  let army=(G.armies||[]).filter(a=>a.owner===id&&!a.at&&!a.siegeId&&a.men>=1500).sort((a,b)=>b.men-a.men)[0];
-  if(!army && border.length){
-    const fat=border.filter(r=>r.troops>=2500).sort((a,b)=>b.troops-a.troops)[0] || mine.filter(r=>r.troops>=2500).sort((a,b)=>b.troops-a.troops)[0];
-    if(fat) army=formArmySilent(fat, 2000);
-  }
-  if(army && border.length){
-    const dest=border.slice().sort((a,b)=>b.troops-a.troops)[0];
-    if(army.atRegion===dest.id){ army.stance='hold'; army.holdUntil=1e9; done(); return; }
-    if(orderMarchSilent(army, dest)){ army.stance='hold'; army.holdUntil=1e9; done(); return; }
-    return; // no road found this month — the staff will try again
-  }
-  // no shared border, or no host to send: the test comes by water, to your home roads
-  const fleet=(G.fleets||[]).filter(f=>f.owner===id&&f.ships>0).sort((a,b)=>b.ships-a.ships)[0];
-  const capR=G.regions.find(r=>r.name===emp('player').capitalName);
-  if(fleet && capR && capR.seaZone!=null && seaById[capR.seaZone]){ orderSailZone(fleet, seaById[capR.seaZone]); done(); return; }
-  F.successionProbeTries=(F.successionProbeTries||0)+1;
-  if(F.successionProbeTries>=3) done(); // too weak to test anyone — the silence is its own answer
-}
-function successionBeat(){
-  const F=G.flags||(G.flags={});
-  if(F.succession) return;
-  if(G.turn<29) return; // the eighth year by the clerks' count (ceil(29/4) = 8), not a season sooner
-  if(!(myRegions().length>=10 || totalMen('player')>=20000)) return; // a realm with something to bequeath
-  if((G.crownQueue||[]).some(c=>(c.title||'').includes('Succession Question'))) return;
-  F.succession=1; F.successionAskedDay=G.day;
-  const me=emp('player');
-  const rivals=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!allied(id,'player'));
-  const governed=myRegions().filter(r=>r.gov);
-  const cmdr=belovedCommander();
-  const HEIR=120, CLOSED=60;
-  const tester=successionTester(), testerName=tester? emp(tester).name : null;
-  const elevEff= cmdr? (cmdr.kind==='gov'? 'their chest is fattened <b>+40g</b> and their town told of it' : (cmdr.kind==='army'? 'their host takes <b>+1 veteran chevron</b> (three is the most any colours carry)' : 'their squadron takes <b>+1 veteran chevron</b> (three is the most any ensign carries)')) : '';
-  noteSeasonBeat('the Succession Question was laid on the council table, and every counting-house in the Rift leaned closer to listen');
-  G.crownQueue.push({icon:'👑', urgent:true, title:'The Succession Question',
-  body:'Eight years under your flag, and the council has stopped pretending the question is not in the room: <b>who stands after the throne?</b> The counting-houses are already quietly pricing the answer. <b>Name the heir ('+fmt(HEIR)+'g in proclamations, feasts and seals):</b> a settled succession steadies every ledger in the Rift — <b>grievance −4, trust +3 with every court</b> — and your '+governed.length+' governors take the news with full chests (<b>+25g to each purse</b>).'
-    +(cmdr? ' <b>Elevate '+cmdr.name+' (no coin — the realm pays in honour):</b> your most-proven sword stands named before the throne; '+elevEff+'; the courts take <b>trust +3</b> for a name they know from the Gazette — but the longest list against you curdles, <b>grievance +3 with '+(testerName||'the crown that hates you most')+'</b>; your governors drink to it (war-minded <b>+20g</b>, the rest <b>+8g</b>).' : '')
-    +' <b>Keep the question closed ('+fmt(CLOSED)+'g in masses, candles and discreet reassurance):</b> the fog stays; the courts lean closer to listen — <b>trust −2, dependence +2 with every court</b> — and every governor quietly hoards against an unnamed day (<b>−12g from each purse</b>).'
-    +(testerName? ' And know this, whichever you answer: <b>'+testerName+'</b> nurses the longest list against your Crown, and a new order invites a test — expect their spears or sails at your marches within a season or two. Your own border watch will name it when it comes.' : '')
-    +' <b>Your treasury:</b> '+fmt(me.gold)+'g'+((me.debt||0)>0? ', debt '+fmt(me.debt)+'g':'')+' — coin short is notes, as ever.',
-  choices:[
-  {label:'👑 Name the heir — '+fmt(HEIR)+'g', fn:()=>{
-    const short=Math.max(0, HEIR-me.gold); me.gold=Math.max(0, me.gold-HEIR); if(short) me.debt=(me.debt||0)+short;
-    rivals.forEach(id=>{ ledger(id,'grievance',-4,'an heir stands named after your throne — their counting-houses can price the future again'); ledger(id,'trust',3,'a settled succession, proclaimed with seals and feasts'); });
-    governed.forEach(r=>{ if(r.gov) r.gov.purse=(r.gov.purse||0)+25; });
-    noteSeasonBeat('an heir stands named after the throne, and the realm breathes easier for knowing its tomorrow');
-    gazette('👑 <b>An heir stands named.</b> The proclamations are read from every quay you hold'+(short? ' — '+fmt(short)+'g of the feasting on Crown notes, and the bankers smile into their sleeves':'')+'. In every foreign court the clerks unclench: a succession they can price is a succession they need not test. Your governors receive the word with full chests.');
-    armSuccessionProbe(); toast('👑 The succession is settled — the heir’s name is on every dock from here to the straits.'); save(); }},
-  ...(cmdr? [{label:'🎖 Elevate '+cmdr.name, fn:()=>{
-    if(cmdr.kind==='army') cmdr.unit.vet=Math.min(3,(cmdr.unit.vet||0)+1);
-    else if(cmdr.kind==='fleet') cmdr.unit.vet=Math.min(3,(cmdr.unit.vet||0)+1);
-    else if(cmdr.kind==='gov') cmdr.unit.gov.purse=(cmdr.unit.gov.purse||0)+40;
-    rivals.forEach(id=>ledger(id,'trust',3,'a proven sword stands named before your throne — the courts respect a record'));
-    if(tester) ledger(tester,'grievance',3,'your elevation of '+cmdr.name+' — a soldier at the throne steps offends the old blood');
-    governed.forEach(r=>{ if(r.gov) r.gov.purse=(r.gov.purse||0)+((r.gov.policy==='war')? 20:8); });
-    noteSeasonBeat(cmdr.name+' was raised up before the throne, and the old families are still deciding what to think');
-    gazette('🎖 <b>'+cmdr.name+' is raised up.</b> No coin changed hands; the realm paid in honour, and every tavern wall in the Rift has the name chalked by morning. The courts write of respect — mostly. The old blood writes longer letters.');
-    armSuccessionProbe(); toast('🎖 '+cmdr.name+' stands named before the throne.'); save(); }}] : []),
-  {label:'🕯 Keep the question closed — '+fmt(CLOSED)+'g', fn:()=>{
-    const short=Math.max(0, CLOSED-me.gold); me.gold=Math.max(0, me.gold-CLOSED); if(short) me.debt=(me.debt||0)+short;
-    rivals.forEach(id=>{ ledger(id,'trust',-2,'your throne answers its largest question with a closed door'); ledger(id,'dependence',2,'your silence on the succession — they lean closer, and listen harder'); });
-    governed.forEach(r=>{ if(r.gov) r.gov.purse=Math.max(0,(r.gov.purse||0)-12); });
-    noteSeasonBeat('the Succession Question was asked at last — and the Crown let it hang in the air, unanswered');
-    gazette('🕯 <b>The question stays closed.</b> Masses are said, candles bought, and nothing is named. The courts send shorter letters than they used to, and your governors have begun keeping their own coin closer. An unanswered throne is a tide-table nobody can read.');
-    armSuccessionProbe(); toast('🕯 The question stays closed. The realm holds its breath.'); save(); }}]});
-  gazette('👑 <b>The Succession Question.</b> Eight years into the reign, the council has laid it on the table in plain words, and every counting-house in the Rift is waiting on the Crown’s answer.');
-  pushEvent('👑 <b>The Succession Question</b> — the council awaits the Crown’s word. See <b>⚑ Crown</b> above.');
-  refreshHUD(); save();
-}
 /* WAVE 16: THE SUCCESSION QUESTION. In the eighth year of a reign with weight, the council
    stops pretending the question is not in the room. One card, once per save, three honest
    answers — each priced in print, each moving the ledger, the governors' purses, and the
@@ -4434,16 +4343,70 @@ function runSuccessionProbe(id, mine){
   }
   if(army && border.length){
     const dest=border.slice().sort((a,b)=>b.troops-a.troops)[0];
-    if(army.atRegion===dest.id){ army.stance='hold'; army.holdUntil=1e9; done(); return; }
-    if(orderMarchSilent(army, dest)){ army.stance='hold'; army.holdUntil=1e9; done(); return; }
+    if(army.atRegion===dest.id){ army.stance='hold'; army.holdUntil=1e9; F.successionTest={id, kind:'land', region:dest.id, armyId:army.id}; done(); return; }
+    if(orderMarch(army, dest)){ army.stance='hold'; army.holdUntil=1e9; F.successionTest={id, kind:'land', region:dest.id, armyId:army.id}; done(); return; }
     return; // no road found this month — the staff tries again
   }
   // no shared border, or no host to send: the test comes by water, to your home roads
   const fleet=(G.fleets||[]).filter(f=>f.owner===id&&f.ships>0).sort((a,b)=>b.ships-a.ships)[0];
   const capR=G.regions.find(r=>r.name===emp('player').capitalName);
-  if(fleet && capR && capR.seaZone!=null && seaById[capR.seaZone]){ orderSailZone(fleet, seaById[capR.seaZone]); done(); return; }
+  if(fleet && capR && capR.seaZone!=null && seaById[capR.seaZone]){
+    if(fleet.zone===capR.seaZone && !fleet.at){ F.successionTest={id, kind:'sea', zone:capR.seaZone, fleetId:fleet.id}; done(); return; } // their canvas is already in your roads — the test already stands
+    if(orderSailZone(fleet, seaById[capR.seaZone])){ F.successionTest={id, kind:'sea', zone:capR.seaZone, fleetId:fleet.id}; done(); return; }
+  }
   F.successionProbeTries=(F.successionProbeTries||0)+1;
   if(F.successionProbeTries>=3) done(); // too weak to test anyone — the silence is its own answer
+}
+/* WAVE 17 — THE TEST ANSWERED. A standing probe is a question, and the Crown may answer it.
+   Mass as many of your own spears on the ground facing the test host — or ride more canvas
+   than their probe carries into the tester's own home roads — and the tester reads the
+   answer plain: trust ticks up, the Gazette prints it, and the host goes home under real
+   orders (the same roads and sailing legs everything else obeys — no teleports, no scripted
+   harm). Detection reads only live strength and position; the record spends itself the
+   moment it fires, so one succession earns exactly one answer, never two. */
+function successionTestCheck(){
+  const F=G.flags; if(!F||!F.successionTest) return;
+  const T=F.successionTest, id=T.id, e=emp(id);
+  if(!e){ F.successionTest=null; return; }
+  const rel=emp('player').relations[id];
+  if((rel&&(rel.war||rel.ally)) || !(G.regions||[]).some(r=>r.owner===id)){ F.successionTest=null; return; } // earnest war, new friendship, or a crown gone from the chart — the test is moot
+  let probe=null, answered=false, whereName='';
+  if(T.kind==='sea'){
+    probe=(G.fleets||[]).find(f=>f.id===T.fleetId) || (G.fleets||[]).filter(f=>f.owner===id&&!f.at&&f.zone===T.zone).sort((a,b)=>b.ships-a.ships)[0];
+    if(!probe||!(probe.ships>0)){ F.successionTest=null; return; } // their ensigns are gone from your roads — nothing left to answer
+    const homeR=G.regions.find(r=>r.name===e.capitalName), homeZ=homeR? homeR.seaZone : null;
+    if(homeZ==null||!seaById[homeZ]){ F.successionTest=null; return; }
+    const mine=(G.fleets||[]).filter(f=>f.owner==='player'&&!f.at&&f.zone===homeZ).reduce((s,f)=>s+(f.ships||0),0);
+    answered = mine>probe.ships; // superior means superior — a tie is only a conversation
+    whereName='the '+(seaById[homeZ].name||'home roads');
+  } else {
+    probe=(G.armies||[]).find(a=>a.id===T.armyId) || (G.armies||[]).filter(a=>a.owner===id&&!a.at&&!a.siegeId&&a.atRegion===T.region).sort((a,b)=>b.men-a.men)[0];
+    if(!probe){ F.successionTest=null; return; } // the host is gone — broken, folded into another banner, or marched away
+    if(probe.at) return; // still on the road to its post — the test stands when it stands
+    const post=rById[T.region]; if(!post){ F.successionTest=null; return; }
+    const face=new Set(post.neighbors||[]);
+    const mine=(G.armies||[]).filter(a=>a.owner==='player'&&!a.at&&!a.siegeId&&face.has(a.atRegion)).reduce((s,a)=>s+(a.men||0),0);
+    answered = mine>=probe.men; // spear for spear — as many as they brought, and steadier
+    whereName=post.name;
+  }
+  if(!answered) return;
+  F.successionTest=null; // spent before it sings — it cannot fire twice
+  ledger(id,'trust',4,'your banners answered their succession test face to face — the '+e.name+' respects a Crown that shows up');
+  if(T.kind==='sea'){
+    const homeR=G.regions.find(r=>r.name===e.capitalName), homeZ=homeR? homeR.seaZone : null;
+    if(homeZ!=null && seaById[homeZ] && (probe.zone!==homeZ||probe.at)) orderSailZone(probe, seaById[homeZ]); // home by water, on real legs
+    gazette('⚓ <b>The test is answered.</b> More of your canvas rides in '+whereName+' than their probe ever showed in yours — and the '+e.name+' reads the measure of it plainly. Their ensigns dip, their squadron weighs for home water, and in the counting-houses the word goes round: this Crown shows up.');
+    pushEvent('⚓ <b>The test is answered</b> — the '+e.name+' squadron weighs for home water.');
+  } else {
+    const home=G.regions.find(r=>r.name===e.capitalName&&r.owner===id) || (G.regions||[]).filter(r=>r.owner===id).sort((a,b)=>b.troops-a.troops)[0];
+    let sent=false;
+    if(home && probe.atRegion!==home.id) sent=orderMarch(probe, home); // home by road, on real legs
+    if(!sent){ probe.stance='field'; probe.holdUntil=null; } // no road home from here — released to its own staff, on real ground
+    gazette('🛡 <b>The test is answered.</b> Your banners stand at '+whereName+' spear for spear with the '+e.name+' host — as many spears as they brought, and steadier. It is the '+e.name+' who looks away first: the tents come down, the host marches for home, and the counting-houses write it down. This Crown shows up.');
+    pushEvent('🛡 <b>The test is answered</b> — the '+e.name+' host strikes its tents and marches home.');
+  }
+  noteSeasonBeat('the succession test was answered face to face, and the testing crown looked away first');
+  save();
 }
 function successionBeat(){
   const F=G.flags||(G.flags={});
@@ -4464,7 +4427,7 @@ function successionBeat(){
   body:'Eight years under your flag, and the council has stopped pretending the question is not in the room: <b>who stands after the throne?</b> The counting-houses are already quietly pricing the answer. <b>Name the heir ('+fmt(HEIR)+'g in proclamations, feasts and seals):</b> a settled succession steadies every ledger in the Rift — <b>grievance −4, trust +3 with every court</b> — and your governors take the news with full chests (<b>+25g to each purse</b>).'
     +(cmdr? ' <b>Elevate '+cmdr.name+' (no coin — the realm pays in honour):</b> your most-proven sword stands named before the throne; '+elevEff+'; the courts take <b>trust +3</b> for a name they know from the Gazette — but the longest list against you curdles, <b>grievance +3 with '+(testerName||'the crown that hates you most')+'</b>; your governors drink to it (war-minded <b>+20g</b>, the rest <b>+8g</b>).' : '')
     +' <b>Keep the question closed ('+fmt(CLOSED)+'g in masses, candles and discreet reassurance):</b> the fog stays; the courts lean closer to listen — <b>trust −2, dependence +2 with every court</b> — and every governor quietly hoards against an unnamed day (<b>−12g from each purse</b>).'
-    +(testerName? ' And know this, whichever you answer: <b>'+testerName+'</b> nurses the longest list against your Crown, and a new order invites a test — expect their spears or sails at your marches within a season or two. Your own border watch will name it when it comes.' : '')
+    +(testerName? ' And know this, whichever you answer: <b>'+testerName+'</b> nurses the longest list against your Crown, and a new order invites a test — expect their spears or sails at your marches within a season or two. Your own border watch will name it when it comes. <b>And a test can be answered:</b> mass as many of your own spears on the ground facing theirs — or ride a stronger squadron into their home roads — and their host will strike its tents and go home with new respect for this Crown (<b>trust +4 with '+testerName+'</b>).' : '')
     +' <b>Your treasury:</b> '+fmt(me.gold)+'g'+((me.debt||0)>0? ', debt '+fmt(me.debt)+'g':'')+' — coin short is notes, as ever.',
   choices:[
   {label:'👑 Name the heir — '+fmt(HEIR)+'g', fn:()=>{
@@ -5636,9 +5599,10 @@ try{
     return flagMatCache[col];
   }
   /* WAVE 16: far-capital pennants flutter INSIDE the merged far mesh. farProxy bakes the cloth
-     as the last six verts of the batch; the caller stamps an aFlag weight on those verts
+     as the last verts of the batch; the caller stamps an aFlag weight on those verts
      (hoist 0 = pinned, fly tip 1 = free) and this MAT clone breathes only weighted verts on
-     the shared wind clock. One material for every capital, no new mesh, no new draw. */
+     the shared wind clock. One material for every capital, no new mesh, no new draw.
+     WAVE 17: the cloth grows a streamer tail — twenty-four verts now, tail freest of all. */
   let _farFlagMat=null;
   function farFlagMat(){
     if(_farFlagMat) return _farFlagMat;
@@ -5654,10 +5618,11 @@ try{
     m.customProgramCacheKey=()=>'farflag16';
     _farFlagMat=m; return m;
   }
-  function dressFarPennant(farMesh){ // stamp the flutter weights on the pennant's six verts
+  function dressFarPennant(farMesh){ // stamp the flutter weights on the pennant's twenty-four verts
     const g=farMesh.geometry, n=g.attributes.position.count;
-    const w=new Float32Array(n), wv=[0,0,0.55, 0,0.55,1]; // hoist pinned, fly end free (per cloth plane)
-    for(let k=0;k<2;k++) for(let i=0;i<6;i++) w[n-12+k*6+i]=wv[i];
+    // per cloth plane: hoist pinned (0), mid-cloth breathing, fly end free (1), streamer freest (per cloth plane)
+    const w=new Float32Array(n), wv=[0,0,0.55, 0,0.55,1, 1,1.3,1.25, 1.05,1.25,1.05];
+    for(let k=0;k<2;k++) for(let i=0;i<12;i++) w[n-24+k*12+i]=wv[i];
     g.setAttribute('aFlag', new THREE.BufferAttribute(w,1));
     farMesh.material=farFlagMat();
   }
@@ -6259,18 +6224,21 @@ try{
     }
     // WAVE 16: the mast-cap bead becomes a PENNANT. Cloth beats a bead at chart distance — a
     // triangle flag in the holder's colour, baked into this same merged proxy (vertex colour,
-    // no new mesh, no new draw), streaming seaward off the masthead. Its twelve verts are the LAST
-    // twelve in the batch; the far mesh stamps their flutter weights into an aFlag attribute and
+    // no new mesh, no new draw), streaming seaward off the masthead. Its verts are the LAST
+    // in the batch; the far mesh stamps their flutter weights into an aFlag attribute and
     // the capital far material breathes exactly those verts on the shared wind clock.
+    // WAVE 17: a taller hoist and a STREAMER TAIL streaming off the fly tip — the last twelve
+    // verts are the tail, freer than the fly itself, so a far capital trails its colour.
     const _ownCol=(r.owner&&G.empires[r.owner])? G.empires[r.owner].color : '#8a6d3b';
     const _penn=(px,py,pz)=>{
       // a cross of two cloth planes on one hoist: downwind cloth turns edge-on to a fixed
       // camera half the chart over, so the far crown flies two faces and reads from any bearing
-      const s=6.0, A=[0,0], B=[0,-1.0], C=[0.9,-0.5], D=[1.85,-0.5]; // hoist top, hoist foot, mid, fly tip
+      const s=6.6, A=[0,0], B=[0,-1.15], C=[0.95,-0.58], D=[1.95,-0.58]; // hoist top, hoist foot (taller), mid, fly tip
+      const T1=[1.95,-0.50], T2=[1.95,-0.66], T3=[3.35,-0.55], T4=[3.35,-0.62]; // the streamer: thin tail off the fly tip
       const pos=[], nor=[];
       const triZ=(a,b,c)=>{ pos.push(a[0]*s,a[1]*s,0, b[0]*s,b[1]*s,0, c[0]*s,c[1]*s,0); nor.push(0,0,1, 0,0,1, 0,0,1); };
       const triX=(a,b,c)=>{ pos.push(0,a[1]*s,a[0]*s, 0,b[1]*s,b[0]*s, 0,c[1]*s,c[0]*s); nor.push(1,0,0, 1,0,0, 1,0,0); };
-      triZ(A,B,C); triZ(A,C,D); triX(A,B,C); triX(A,C,D);
+      triZ(A,B,C); triZ(A,C,D); triZ(T1,T3,T4); triZ(T1,T4,T2); triX(A,B,C); triX(A,C,D); triX(T1,T3,T4); triX(T1,T4,T2);
       const g=new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
       g.setAttribute('normal', new THREE.Float32BufferAttribute(nor,3));
