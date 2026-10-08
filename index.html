@@ -3632,6 +3632,13 @@ const st=blockadeStage(r); if(st) f*=1+(['Harassed','Tight','Strangled','Crisis'
 return f;
 }
 function goodPrice(r,g){ return +(GOODS_PRICE[g]*priceFactor(r,g)).toFixed(1);}
+/* the market speaks in colour: each good has a dyer's tint, and a port's stall awnings wear the
+   tint of whatever sells cheapest on its quays against the going rate (grain is the cheap staple
+   everywhere, so the awnings advertise the deepest local discount instead) */
+const GOOD_TINT={grain:'#d9b13b',timber:'#8a5a2b',naval:'#31455e',iron:'#5d6068',cloth:'#8e4d7a',wine:'#7e2434',sugar:'#e6dcc3',spices:'#c2571d'};
+function cheapestGood(r){ let bg='grain', bf=Infinity, bp=Infinity;
+  for(const g in GOODS_PRICE){ const f=priceFactor(r,g), p=goodPrice(r,g); if(f<bf-1e-9 || (Math.abs(f-bf)<=1e-9 && p<bp)){ bf=f; bp=p; bg=g; } } return bg; }
+function awningTint(r){ return (r&&r.isPort)? (GOOD_TINT[cheapestGood(r)]||'#d9903f') : '#d9903f'; }
 function priceWhy(r,g){
 initSupply(r); const have=r.supply[g]||0, st=blockadeStage(r);
 if(g===r.specialty) return have>90? 'the quays groan with unsold '+GOODS[g]+' — a glut': have>50? GOODS[g]+' plentiful after a fat season': have>20? GOODS[g]+' moving briskly': 'the last of the '+GOODS[g]+' — merchants bid hard';
@@ -4048,6 +4055,63 @@ choices:[{label:'⚔ Hunt them down', fn:()=>{ emp('player').relations['natives'
 {label:'Let them pass', fn:()=>{ toast('The freebooters keep the lanes nervous. For now.');}}]});
 pushEvent('🏴 <b>Freebooters in your home water</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
 }
+/* the second early beat: once a young reign floats ships worth noticing, a rival admiral
+   comes in person to take their measure — gifts, a show of flags, or a quarrel, each priced
+   out loud and paid into the real ledger (trust / grievance / threat / favours), with a real
+   squadron riding in your home water until it sails home. Fires once, after the freebooters. */
+function admiralDebut(){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}});
+if(co.done.admiral) return;
+const rivals=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!emp('player').relations[id].war);
+if(!rivals.length) return;
+rivals.sort((a,b)=>totalShips(b)-totalShips(a));
+const rid=rivals[0], re=emp(rid);
+if(totalShips(rid)<3||totalShips('player')<3) return; // nothing worth measuring yet — ask again tomorrow
+const home=G.regions.find(r=>r.name===(emp('player').capitalName||'Lisbon'));
+if(!home||home.seaZone==null) return;
+const z=seaById[home.seaZone]; if(!z) return;
+const ad=newAdmiral();
+const f={id:newUnitId(),owner:rid,zone:home.seaZone,node:'s'+home.seaZone,
+  pos:{x:z.x+55*WS/3.35,y:z.y-35*WS/3.35},at:null,ships:3,stance:'patrol',
+  name:ad.name.replace(/^Adm\.\s*/,'')+'’s Squadron',admiral:ad,debut:1,leaveDay:G.day+30};
+G.fleets.push(f);
+co.done.admiral=1;
+G.crownQueue.push({icon:'⚓', urgent:true, debutFleet:f.id, title:ad.name+' unfurls off the '+z.name,
+body:'<b>'+ad.name+'</b> brings three '+(SHIP_TECH[re.shipTech]||'men-of-war')+' of the '+re.name+' into your home water — close enough to count your guns, polite enough to call it a courtesy cruise. It is not a cruise: '+(re.ruler? re.ruler.name : 'their court')+' is taking your measure, and every answer is entered in their ledger, where courts keep such things. <b>Your squadrons:</b> '+totalShips('player')+' hulls afloat. <b>Your treasury:</b> '+fmt(emp('player').gold)+'g.',
+choices:[
+{label:'🎁 Gifts & a harbour feast — 50g', fn:()=>{
+  if(emp('player').gold>=50){ emp('player').gold-=50; f.leaveDay=G.day+5;
+    ledger(rid,'trust',8,'harbour gifts, handsomely received'); ledger(rid,'grievance',-6,'harbour gifts, handsomely received'); ledger(rid,'favours',2,'a feast in their admiral’s honour');
+    gazette('⚓ <b>'+ad.name+'</b> of the '+re.name+' dines at '+home.name+' and departs in courtesy. The lanes approve; '+(re.ruler? re.ruler.name : 'their court')+' approves more quietly.');
+    toast('🎁 '+ad.name+' sails home talking of your courtesy.');
+  } else { f.leaveDay=G.day+30;
+    ledger(rid,'threat',3,'your empty treasury was noted off '+home.name);
+    gazette('⚓ <b>'+ad.name+'</b> waits off '+home.name+'. There was no feast — the treasury could not stretch to one. The squadron does not hurry away.');
+    toast('The treasury cannot stretch to 50g — '+ad.name+' notes it, and lingers.');
+  }
+  save();}},
+{label:'⚓ Sail out and match their pennants', fn:()=>{
+  const mine=totalShips('player');
+  if(mine>=f.ships){ f.leaveDay=G.day+4;
+    ledger(rid,'grievance',-4,'your squadron’s bearing off '+home.name); ledger(rid,'threat',-3,'your squadron’s bearing off '+home.name);
+    gazette('⚓ Your squadron dresses ship off '+home.name+' — '+mine+' hulls to their '+f.ships+'. '+ad.name+' dips colours first and bears away. The whole harbour saw it.');
+    toast('⚓ Colours dipped — your squadron was taken seriously.');
+  } else { f.leaveDay=G.day+60;
+    ledger(rid,'threat',6,'they counted your hulls off '+home.name+' and found them few');
+    gazette('⚓ Your squadron sails out — '+mine+' hulls against their '+f.ships+', and the whole harbour can count. '+ad.name+' stays the season, watching your lanes learn their business.');
+    toast('⚓ They counted your hulls, and stayed to watch.');
+  }
+  save();}},
+{label:'🦂 “The water is ours.” Send them home', fn:()=>{
+  f.stance='raid'; f.leaveDay=G.day+75;
+  ledger(rid,'grievance',12,'your answer to '+ad.name+' off '+home.name); ledger(rid,'trust',-6,'your answer to '+ad.name+' off '+home.name); ledger(rid,'threat',5,'your defiance off '+home.name);
+  gazette('⚓ <b>'+ad.name+'</b> receives your answer off '+home.name+' and clears for action — no war declared, but the squadron will worry your lanes until it sails home, and the '+re.name+' court files the insult where such things are kept.');
+  toast('🦂 Defied. Watch your lanes — and your back.');
+  save();}}]});
+gazette('⚓ <b>An admiral’s pennant in home water.</b> '+ad.name+' of the '+re.name+' rides off '+home.name+' with three men-of-war, taking the measure of your Crown. The court awaits your answer.');
+pushEvent('⚓ <b>'+ad.name+' off '+home.name+'</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
+refreshHUD(); save();
+}
 function coldSeason(){
 const co=G.coldopen||(G.coldopen={stage:0,done:{}});
 if(G.turn===1&&!co.done.econ){ co.done.econ=1;
@@ -4078,7 +4142,15 @@ diplomacyDaily();
 realmBreathesDaily();
 // the cold-open crisis keeps a young reign honest: pirates by the fourth dawn, not the first season
 { const co=G.coldopen||(G.coldopen={stage:0,done:{}});
-  if(G.day>=4 && !co.done.pirates){ co.done.pirates=1; spawnFreebooters(); } }
+  if(G.day>=4 && !co.done.pirates){ co.done.pirates=1; spawnFreebooters(); }
+  // the second early beat: a named rival admiral comes to take the young reign's measure
+  if(G.day>=46 && G.day<=175 && co.done.pirates && !co.done.admiral) admiralDebut();
+  // the visiting squadron sails home when its leave day passes; an unanswered card goes with it
+  const gone=G.fleets.filter(f=>f.debut && G.day>(f.leaveDay||1e9));
+  if(gone.length){ G.fleets=G.fleets.filter(f=>!gone.includes(f));
+    gone.forEach(f=>{ for(let j=G.crownQueue.length-1;j>=0;j--) if(G.crownQueue[j].debutFleet===f.id) G.crownQueue.splice(j,1);
+      pushEvent('⚓ <b>'+f.name+'</b> strikes its pennants and sails for home waters.'); }); }
+}
 }
 
 /* ---------- founding colonies ---------- */
@@ -5364,7 +5436,7 @@ try{
           const sx2=px+Math.cos(a2)*plazaR*1.05, sz2=pz+Math.sin(a2)*plazaR*1.05*0.92;
           if(!onLand(sx2,sz2,r)) continue;
           ft.add(KIT.geo.stall, M4(sx2, by, sz2, 0, a2+Math.PI/2, 0, 2.2, 2.2, 2.2));
-          b.add(new THREE.BoxGeometry(1.9,0.16,1.7), M4(sx2, by+2.8, sz2, 0.35, a2, 0.25), '#d9903f'); } } // amber = market
+          b.add(new THREE.BoxGeometry(1.9,0.16,1.7), M4(sx2, by+2.8, sz2, 0.35, a2, 0.25), awningTint(r)); } } // awnings wear the cheapest good's tint — the market, readable from the rigging
     }
     if((r.tier>=2 || r.hasWall) && KIT.geo.cwall && r.greatWork!=='citadel'){ // curtain wall ring hugging the grown footprint, with a real gate gap on the main street
       const rad=P.R*1.0, nB=Math.max(12, Math.round(rad*1.5)), chord=2*rad*Math.sin(Math.PI/nB);
@@ -5416,9 +5488,11 @@ try{
       b.add(new THREE.BoxGeometry(6.4,0.55,2.6), M4(bx+dx*qd, by+0.1, bz+dz*qd, 0, -ang, 0), '#46586e'); // slate quay — harbour code
       dec.add(new THREE.PlaneGeometry(7.2,3.4).rotateX(-Math.PI/2).rotateY(-ang), M4(bx+dx*(qd+0.6), by+0.085, bz+dz*(qd+0.6)), '#8a6f42'); // dock plank apron
       for(let i=-3;i<=3;i++) b.add(new THREE.CylinderGeometry(0.14,0.14,1.6,5), M4(bx+dx*(qd+1.4)-dz*i*1.9, 0.7, bz+dz*(qd+1.4)+dx*i*1.9), '#4a3826'); // pilings riding the waterline
-      if(r.tier>=3){
-        b.add(new THREE.BoxGeometry(0.4,3.6,0.4), M4(bx+dx*(qd-1.2)-dz*1.8, by+1.8, bz+dz*(qd-1.2)+dx*1.8), '#5e4718');
-        b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*(qd-0.3)-dz*1.8, by+3.5, bz+dz*(qd-0.3)+dx*1.8, 0, -ang, 0), '#5e4718');
+      if(r.tier>=2){ // the harbour crane — post, jib, and a crate hanging on the hook: a working skyline, not a shelf
+        b.add(new THREE.BoxGeometry(0.4,3.6,0.4), M4(bx+dx*(qd-1.2)-dz*1.8, by+1.8, bz+dz*(qd-1.2)+dx*1.8), '#453012');
+        b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*(qd-0.3)-dz*1.8, by+3.5, bz+dz*(qd-0.3)+dx*1.8, 0, -ang, 0), '#453012');
+        b.add(new THREE.BoxGeometry(0.09,1.8,0.09), M4(bx+dx*(qd+0.9)-dz*1.8, by+2.6, bz+dz*(qd+0.9)+dx*1.8), '#2e1f0a'); // the fall of rope
+        b.add(new THREE.BoxGeometry(0.95,0.8,0.95), M4(bx+dx*(qd+0.9)-dz*1.8, by+1.35, bz+dz*(qd+0.9)+dx*1.8, 0, hash(r.id*3)*0.8, 0), '#7a5a2c'); // the load, mid-swing forever
       }
       if(r.tier>=2) for(let i=-2;i<=2;i++)
         b.add(new THREE.BoxGeometry(2.3,0.85,1.15), M4(bx+dx*(qd+8)-dz*i*2.7, 0.5, bz+dz*(qd+8)+dx*i*2.7, 0, -ang, 0), '#7d7466');
@@ -5442,7 +5516,7 @@ try{
       if(KIT.ships[0]){ // rowboats — small life riding the same wave function the fleets ride
         const list=[];
         for(let i=0;i<2;i++){
-          const boat=kitShipGroup(0, true, null); boat.scale.multiplyScalar(0.42);
+          const boat=kitShipGroup(0, true, null); boat.scale.multiplyScalar(0.52);
           const bxx=bx+dx*(P.shoreD+1.3)-dz*(5-i*9), bzz=bz+dz*(P.shoreD+1.3)+dx*(5-i*9);
           boat.position.set(bxx, 0.5, bzz); boat.rotation.y=Math.atan2(-dx,-dz)+0.4*i-0.2;
           harbor.add(boat);
@@ -5513,7 +5587,7 @@ try{
       b.add(new THREE.CircleGeometry(4.5, 22).rotateX(-Math.PI/2), M4(bx+1.6, by+0.1, bz+2.4), '#cbb98a');
       for(let i=0;i<4;i++){ const a2=i*1.7+r.id;
         b.add(new THREE.BoxGeometry(1.15,0.95,1.15), M4(bx+1.6+Math.cos(a2)*2.9, by+0.48, bz+2.4+Math.sin(a2)*2.4), '#a3803f');
-        b.add(new THREE.ConeGeometry(1.05,0.7,4), M4(bx+1.6+Math.cos(a2)*2.9, by+1.3, bz+2.4+Math.sin(a2)*2.4, 0, Math.PI/4, 0), ROOFS3D[(i+2)%ROOFS3D.length]); }
+        b.add(new THREE.ConeGeometry(1.05,0.7,4), M4(bx+1.6+Math.cos(a2)*2.9, by+1.3, bz+2.4+Math.sin(a2)*2.4, 0, Math.PI/4, 0), awningTint(r)); }
     }
     if(r.tier>=2 || r.hasWall){ // curtain wall ring WITH towers — reads as fortification, not rubble
       const nB=12, rad=10.6;
@@ -5542,9 +5616,11 @@ try{
       let dx=zx-bx, dz=zz-bz; const len=Math.hypot(dx,dz)||1; dx/=len; dz/=len;
       const ang=Math.atan2(dz,dx);
       b.add(new THREE.BoxGeometry(6.4,0.55,2.6), M4(bx+dx*6.4, by+0.1, bz+dz*6.4, 0, -ang, 0), '#6d5326'); // quay
-      if(r.tier>=3){ // crane
-        b.add(new THREE.BoxGeometry(0.4,3.6,0.4), M4(bx+dx*5.2-dz*1.8, by+1.8, bz+dz*5.2+dx*1.8), '#5e4718');
-        b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*6.1-dz*1.8, by+3.5, bz+dz*6.1+dx*1.8, 0, -ang, 0), '#5e4718');
+      if(r.tier>=2){ // crane — with the same hanging load the kit harbours wear
+        b.add(new THREE.BoxGeometry(0.4,3.6,0.4), M4(bx+dx*5.2-dz*1.8, by+1.8, bz+dz*5.2+dx*1.8), '#453012');
+        b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*6.1-dz*1.8, by+3.5, bz+dz*6.1+dx*1.8, 0, -ang, 0), '#453012');
+        b.add(new THREE.BoxGeometry(0.09,1.8,0.09), M4(bx+dx*7.3-dz*1.8, by+2.6, bz+dz*7.3+dx*1.8), '#2e1f0a');
+        b.add(new THREE.BoxGeometry(0.95,0.8,0.95), M4(bx+dx*7.3-dz*1.8, by+1.35, bz+dz*7.3+dx*1.8), '#7a5a2c');
       }
       const ships = r.tier>=3?4 : r.tier>=2?3 : r.tier>=1?2 : 1; // wider harbours, more hulls — sails read at distance
       for(let i=0;i<ships;i++) shipBatch(b, bx+dx*(11+i*5.0)-dz*(3-i*6), 0.55, bz+dz*(11+i*5.0)+dx*(3-i*6), 1.6, ang+Math.PI/2, '#5a3a1e', '#ffffff', {tier: r.tier>=3?2 : r.tier>=1?1 : 0, furled:true});
@@ -5638,14 +5714,19 @@ try{
       void main(){
         vec2 uv = vec2(vWp.x/${(WORLD_W/10).toFixed(1)} + 0.5, 0.5 - vWp.z/${(WORLD_H/10).toFixed(1)});
         float shore = texture2D(uShore, uv).r;
-        vec3 col = mix(uDeep, uShallow, smoothstep(0.03, 0.62, shore));
+        vec3 col = mix(uDeep, uShallow, smoothstep(0.02, 0.5, shore));
+        // near-shore depth: a pale aqua kiss where the water shallows onto the land
+        // (built from uShallow so the night grade dims it with everything else)
+        col = mix(col, uShallow*1.5 + vec3(0.05,0.09,0.07), smoothstep(0.30, 0.5, shore)*0.42);
         vec3 V = normalize(cameraPosition - vWp);
         float fres = pow(1.0 - max(dot(V, normalize(vN)), 0.0), 3.0);
         col = mix(col, uSky, fres*0.55);
-        float foamBand = smoothstep(0.34, 0.47, shore) * (1.0 - smoothstep(0.52, 0.66, shore));
-        float lap = 0.55 + 0.45*sin(uTime*1.7 + shore*36.0 + vWp.x*0.35 + vWp.z*0.22);
+        // lapping foam: a broad band just seaward of the waterline whose brightness
+        // travels with the swell phase, so the edge breathes instead of sitting still
+        float foamBand = smoothstep(0.15, 0.33, shore) * (1.0 - smoothstep(0.44, 0.56, shore));
+        float lap = 0.45 + 0.55*sin(uTime*1.9 - shore*55.0 + (vWp.x+vWp.z)*0.05);
         float crest = smoothstep(0.58, 0.8, vCrest) * 0.16; // whisper of white on the swell, never faceted slabs
-        col = mix(col, uFoam, clamp(foamBand*lap*0.85 + crest*(1.0-shore), 0.0, 1.0));
+        col = mix(col, uFoam, clamp(foamBand*(0.30+0.70*lap)*0.95 + crest*(1.0-shore), 0.0, 1.0));
         float depth = length(cameraPosition - vWp);
         float f2 = 1.0 - exp(-fogDensity*fogDensity*depth*depth*1.44);
         col = mix(col, fogColor, clamp(f2,0.0,1.0));
@@ -5687,6 +5768,22 @@ try{
     };
     window.__landMat = landMat;
     const landPolys = []; // smoothed continent outlines in 3D coords — countryside scatter lives inside these
+    /* surf ribbon: real foam geometry where water meets land — a 1px LineLoop never read as foam.
+       One merged triangle ribbon for every coast, alpha feathering seaward; the frame loop
+       pulses its material with the lap rhythm (foamMats). Centroid-signed normals keep the
+       ribbon on the water whichever way a traced coastline happens to wind. */
+    const foamPos=[], foamUv=[], foamIdx=[];
+    function pushFoamRibbon(pts2){
+      if(pts2.length<3) return;
+      let cx=0, cz=0; pts2.forEach(p=>{ cx+=p[0]; cz+=p[1]; }); cx/=pts2.length; cz/=pts2.length;
+      const n=pts2.length, base=foamPos.length/3;
+      for(let i=0;i<=n;i++){ const p=pts2[i%n], q=pts2[(i+1)%n], pv=pts2[(i-1+n)%n];
+        let tx=q[0]-pv[0], tz=q[1]-pv[1]; const tl=Math.hypot(tx,tz)||1; tx/=tl; tz/=tl;
+        let nx=-tz, nz=tx; if(nx*(p[0]-cx)+nz*(p[1]-cz)<0){ nx=-nx; nz=-nz; }
+        foamPos.push(p[0], 0.88, p[1], p[0]+nx*2.7, 0.8, p[1]+nz*2.7);
+        foamUv.push(0,0, 1,0);
+        if(i<n){ const a=base+i*2; foamIdx.push(a,a+1,a+2, a+1,a+3,a+2); } }
+    }
     LAND_PATHS.forEach(path=>{
       const smooth = smoothShape(path);
       landPolys.push(smooth.filter((p,i)=>i%6===0).map(p=>[SX(p.x), SZ(p.y)]));
@@ -5701,10 +5798,8 @@ try{
       const shal = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({color:0x49a7bd, transparent:true, opacity:0.30, depthWrite:false}));
       shal.scale.set(1.05,1,1.05); shal.position.set(cx*(1-1.05), 0.52, cz*(1-1.05)); shal.renderOrder=1;
       worldGroup.add(shal);
-      // surf line — a breathing foam rim where land meets water
-      const fm = new THREE.LineBasicMaterial({color:0xeaf7f2, transparent:true, opacity:0.4, depthWrite:false});
-      const foam = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(smooth.map(p=>new THREE.Vector3(SX(p.x), 0.66, SZ(p.y)))), fm);
-      foam.renderOrder=2; foamMats.push(fm); worldGroup.add(foam);
+      // surf line — a breathing foam rim where land meets water (ribbon geometry, built below)
+      pushFoamRibbon(smooth.filter((p,i)=>i%2===0).map(p=>[SX(p.x), SZ(p.y)]));
     });
     G.regions.filter(r=>r.group==='I').forEach(r=>{
       const pts=[]; for(let i=0;i<20;i++){ const a=i/20*Math.PI*2, w=1+(hash(i*3.71+r.id*7)-0.5)*0.26; pts.push([r.x+Math.cos(a)*95*WS*w, r.y+Math.sin(a)*70*WS*w]); }
@@ -5712,6 +5807,7 @@ try{
       const m = new THREE.Mesh(extrudeLand(smooth.filter((p,i)=>i%2===0), 2.2), landMat); worldGroup.add(m);
       const linePts = smooth.map(p=>new THREE.Vector3(SX(p.x), BASE_Y-0.35, SZ(p.y)));
       worldGroup.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(linePts), new THREE.LineBasicMaterial({color:0x6b4c22, transparent:true, opacity:0.7})));
+      pushFoamRibbon(smooth.filter((p,i)=>i%2===0).map(p=>[SX(p.x), SZ(p.y)]));
     });
     // uninhabited islets — pure scenery scattered across the wide water
     ISLETS.forEach(it=>{
@@ -5720,7 +5816,21 @@ try{
       const m = new THREE.Mesh(extrudeLand(smooth.filter((p,i)=>i%2===0), 1.7), landMat); worldGroup.add(m);
       const linePts = smooth.map(p=>new THREE.Vector3(SX(p.x), BASE_Y-0.5, SZ(p.y)));
       worldGroup.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(linePts), new THREE.LineBasicMaterial({color:0x6b4c22, transparent:true, opacity:0.7})));
+      pushFoamRibbon(smooth.filter((p,i)=>i%2===0).map(p=>[SX(p.x), SZ(p.y)]));
     });
+    { // the merged surf ribbon — one draw call where a 1px line per coast used to be
+      const fg=new THREE.BufferGeometry();
+      fg.setAttribute('position', new THREE.Float32BufferAttribute(foamPos,3));
+      fg.setAttribute('uv', new THREE.Float32BufferAttribute(foamUv,2));
+      fg.setIndex(foamIdx);
+      const fc=document.createElement('canvas'); fc.width=64; fc.height=4;
+      const fx2=fc.getContext('2d'); const gr=fx2.createLinearGradient(0,0,64,0);
+      gr.addColorStop(0,'rgba(255,255,255,0.95)'); gr.addColorStop(0.55,'rgba(255,255,255,0.45)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+      fx2.fillStyle=gr; fx2.fillRect(0,0,64,4);
+      const fm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(fc), color:0xeaf7f2, transparent:true, opacity:0.4, depthWrite:false, side:THREE.DoubleSide});
+      const foamMesh=new THREE.Mesh(fg, fm); foamMesh.renderOrder=2; foamMesh.frustumCulled=false;
+      worldGroup.add(foamMesh); foamMats.push(fm);
+    }
     // scattered trees, rolling hills & a mountain range (instanced, static)
     const treePos=[], rockPos=[], hillPos=[], mtnPos=[];
     const MTN_RANGES=['Caucasus','Anatolia','Muscovy','Dalmatia','Rome States','Greece','Hungary','Catalonia','Navarre'];
@@ -5922,7 +6032,7 @@ try{
     }
     return d;
   }
-  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0, KIT.ready?1:0, r.greatWork||''].join('|'); }
+  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0, KIT.ready?1:0, r.greatWork||'', r.isPort? awningTint(r) : ''].join('|'); } // a port's awnings re-dress when its cheapest good flips
   function disposeBuilt(o){ // kit ship hulls share geometry across the world — never dispose those
     o.traverse(n=>{
       let p=n, shared=false;
@@ -6591,7 +6701,7 @@ try{
     // ---- town life on the shared wind clock: flutter, turning beams, bobbing boats, harbour gulls ----
     WIND_U.value = t;
     gwReg.forEach(en=>{ if(en.beam) en.beam.rotation.y = t*0.5 + en.ph; });
-    bobReg.forEach(list=>list.forEach(bb=>{ const vis = dist < 560; // rowboat life is a near-band pleasure
+    bobReg.forEach(list=>list.forEach(bb=>{ const vis = dist < 950; // rowboat life now reads across the whole mid band
       if(bb.o.visible !== vis) bb.o.visible = vis;
       bb.o.position.y = 0.45 + waveH(bb.x, bb.z, t)*0.8; }));
     updateGulls(t);
@@ -6734,27 +6844,30 @@ try{
     smokeSrc=[];
     G.regions.forEach(r=>{
       const n = 2 + r.tier + (isCapitalOf(r)? 2:0); // one notch denser — chimneys alive at golden hour
-      for(let i=0;i<n;i++) for(let s=0;s<3;s++)
-        smokeSrc.push([SX(r.x)+(hash(r.id*13+i*7)-0.5)*7, BASE_Y+6.6+s*1.2+hash(i*3+r.id)*0.8, SZ(r.y)+(hash(r.id*17+i*3)-0.5)*7, hash(r.id*19+i)*6.28]);
+      for(let i=0;i<n;i++) for(let s=0;s<5;s++) // five puffs a chimney: a standing column, not a bobbing dot
+        smokeSrc.push([SX(r.x)+(hash(r.id*13+i*7)-0.5)*7, BASE_Y+6.4+s*1.05+hash(i*3+r.id)*0.8, SZ(r.y)+(hash(r.id*17+i*3)-0.5)*7, hash(r.id*19+i)*6.28, s/4]);
     });
     const g=new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(smokeSrc.length*3), 3));
-    smokePts=new THREE.Points(g, new THREE.PointsMaterial({map:KIT.smokeTex, size:5.4, transparent:true, opacity:0.32, depthWrite:false, sizeAttenuation:true, color:0xf2ede2}));
+    smokePts=new THREE.Points(g, new THREE.PointsMaterial({map:KIT.smokeTex, size:6.2, transparent:true, opacity:0.32, depthWrite:false, sizeAttenuation:true, color:0xf2ede2}));
     smokePts.frustumCulled=false; scene.add(smokePts);
     updateSmoke(0);
   }
   function updateSmoke(t){
     if(!smokePts) return;
-    smokePts.visible = dist < 430 && quality < 2; // zoom-band life: chimneys only earn pixels up close
+    // MID-ZOOM LIFE: the columns now earn their pixels from the whole mid band, not just close-up;
+    // they lean with the shared wind as they rise and thin out toward the far band so the chart still breathes
+    smokePts.visible = dist < 1500 && quality < 3;
     if(!smokePts.visible) return;
+    smokePts.material.opacity = dist>950? 0.15 : dist>620? 0.24 : 0.34;
     const pos=smokePts.geometry.attributes.position;
-    for(let i=0;i<smokeSrc.length;i++){ const s=smokeSrc[i];
-      pos.setXYZ(i, s[0] + Math.sin(t*0.5+s[3])*0.55, s[1] + Math.sin(t*0.35+s[3]*2)*0.35, s[2]); }
+    for(let i=0;i<smokeSrc.length;i++){ const s=smokeSrc[i]; const hf=s[4]||0;
+      pos.setXYZ(i, s[0] + Math.sin(t*0.5+s[3])*0.55 + Math.sin(t*0.34+s[3]*1.7)*1.15*hf, s[1] + Math.sin(t*0.35+s[3]*2)*0.3, s[2] + Math.cos(t*0.4+s[3])*0.3*hf); }
     pos.needsUpdate=true;
   }
 
   /* harbour gulls — ONE instanced mesh, eighteen paper darts circling the harbour mouths */
-  const GULL_N=18;
+  const GULL_N=30;
   let gullIM=null;
   const _gM=new THREE.Matrix4(), _gQ=new THREE.Quaternion(), _gE=new THREE.Euler(), _gV=new THREE.Vector3(), _gS=new THREE.Vector3();
   function initGulls(){
@@ -6779,7 +6892,7 @@ try{
       const fl=0.85+Math.sin(t*9+ph)*0.15;
       _gE.set(0, -a, Math.sin(t*7+ph)*0.35); _gQ.setFromEuler(_gE);
       _gV.set(cx+Math.cos(a)*rad, BASE_Y+6.5+Math.sin(t*0.9+ph)*1.1, cz+Math.sin(a)*rad);
-      _gS.set(1.1, fl, 1.1);
+      _gS.set(1.5, fl, 1.5);
       _gM.compose(_gV, _gQ, _gS); gullIM.setMatrixAt(i, _gM);
     }
     gullIM.instanceMatrix.needsUpdate=true;
