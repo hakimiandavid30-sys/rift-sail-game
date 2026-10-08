@@ -983,7 +983,7 @@ function freshState(){
     advancePaid:0, marchSeen:0,
     // WAVE 15: chartered companies keep their books in state, and every season leaves a one-line
     // note of its biggest beat — the "Previously in the realm…" the returning Crown reads first
-    companies:[], seasonNotes:blankSeasonNotes()
+    companies:[], court:null, seasonNotes:blankSeasonNotes()
   };
 }
 
@@ -1414,6 +1414,7 @@ function migrateSave(s){
   // RECKONING bookkeeping rides along at wv10: old saves simply start with nothing advanced
   ensureCleanCrownMeta(s);
   ensureWave15Meta(s); // WAVE 15: companies + the season-note ride along at wv11 the same way
+  ensureCourtMeta(s); // WAVE 22: great houses, decrees & prosperity ride along at wv11 the same way
   if(s.advancePaid===undefined) s.advancePaid=0;
   if(s.marchSeen===undefined) s.marchSeen=(s.armies||[]).some(a=>a.owner==='player')?1:0;
   return s;
@@ -1455,6 +1456,7 @@ function tradeIncome(id){
     if(a.id>=b.id) return; const key=a.id+'-'+b.id; if(seen.has(key))return; seen.add(key);
     if(lanePays(a,b,id)) sum+= 18 + a.tier*8 + b.tier*8;
   }));
+  if(G && G.court && G.court.decree && G.court.decree[id]==='tithe') sum=Math.round(sum*1.12); // WAVE 22: the Trade Tithe skims this crown's lanes
   return sum;
 }
 /* WAVE 20 — what the painters may draw is now answered in ONE place. A lane exists on the
@@ -1561,6 +1563,17 @@ function regionIncome(r){
   if(r.greatWork==='cathedral') v+=8; // pilgrims' offerings under the twin spires
   if(r.greatWork==='customs' && r.isPort) v+=12; // tolls on the lanes that touch this port
   if(r.greatWork==='light' && r.isPort) v+=8; // pilotage and harbour dues
+  // WAVE 22: prosperity and the crown's decree shape the take — the number printed is the number banked
+  if(typeof G!=='undefined' && G){
+    const prosp=(r.prosp==null? 50 : r.prosp);
+    v = v * (0.82 + prosp*0.0036); // a suffering town renders 82% of its dues; a flourishing one 118%
+    if(r.owner && G.court && G.court.decree){
+      const d=G.court.decree[r.owner];
+      if(d==='levy') v*=1.08; // the War Levy: mailed coin from every hearth
+      if(d==='harbour' && r.isPort && r.tier>=2) v*=1.10; // Harbour Rights: great ports keep the fuller purse
+    }
+    v=Math.round(v);
+  }
   return v;
 }
 </script>
@@ -1980,7 +1993,7 @@ function resolveOrderTap(cx,cy){
   if(mt.armyId!=null){
     const a=G.armies.find(x=>x.id===mt.armyId);
     if(!a) return;
-    if(hit && hit.type==='region' && hit.id!==a.atRegion){ orderMarch(a, rById[hit.id]); }
+    if(hit && hit.type==='region' && hit.id!==a.atRegion){ a.task=null; a.taskRegion=null; a.taskZone=null; orderMarch(a, rById[hit.id]); }
     else { selectRegion(rById[a.atRegion]); toast('March order cancelled.'); }
     return;
   }
@@ -2614,7 +2627,14 @@ function armyArrive(a){
   a.joinTarget=null;
   resolveArmyBattleFX(a, dest);
 }
-function finishArrival(a){ /* stance persists ('hold' honours a pre-set dig-in order) */ }
+function finishArrival(a){
+  if(!a) return;
+  /* stance persists ('hold' honours a pre-set dig-in order) */
+  // WAVE 22: a standing task resolves the moment the host halts
+  if(a.task==='hold' && a.taskRegion===a.atRegion){ a.stance='hold'; a.holdUntil=1e9; }
+  if(a.task==='watch'||a.task==='relieve'){ a.stance='hold'; a.holdUntil=1e9; }
+  if(a.task==='besiege'){ const t=rById[a.taskRegion]; if(t && t.neighbors.includes(a.atRegion) && siegeEligible(t) && a.men>=800 && !a.siegeId) startSiege(a, t); }
+}
 function resolveArmyBattleFX(a, dest){
   const atkBefore=a.men, defBefore=dest.troops, prevOwner=dest.owner;
   const effMen=Math.max(1, Math.round(a.men*armyPowerMult(a)));
@@ -2875,7 +2895,7 @@ function rtAdvanceDays(days){
     // season seam: every 90 days the old economy breathes
     if(Math.floor(G.day)%90===0){ endSeason(); if(G.over) break; }
     // imperial staffs think monthly
-    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); governorMonthly(); detectWarnings(); borderWatch(); successionTestCheck(); aiSuccessionTheatre(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
+    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); governorMonthly(); detectWarnings(); borderWatch(); successionTestCheck(); aiSuccessionTheatre(); courtMonthly(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
     // arrivals (timestamp-exact)
     (G.armies||[]).slice().forEach(a=>{ if(a.at && G.day>=a.arriveDay-1e-9) armyArrive(a); });
     (G.fleets||[]).slice().forEach(f=>{ if(f.at && G.day>=f.at.arriveDay-1e-9) fleetArrive(f); });
@@ -3171,6 +3191,9 @@ function selectRegion(r){
     ['⚔ Garrison',fmt(r.troops)+' men'],
     ...(armiesHere.length?[['🪖 Field armies', armiesHere.length+' ('+fmt(armiesHere.reduce((s,a)=>s+a.men,0))+' men)']]:[]),
     ['🪙 Income','+'+regionIncome(r)+'/season'],
+    ['🏰 Prosperity', prospWord(r.prosp==null?50:r.prosp)+' · '+Math.round(r.prosp==null?50:r.prosp)+(()=>{ const pins=prospInputs(r).filter(x=>x.v!==0).sort((x,y)=>Math.abs(y.v)-Math.abs(x.v)).slice(0,3); return pins.length? ' — '+pins.map(x=>(x.v>=0?'+':'−')+Math.abs(x.v)+' '+x.why).join(' · ') : ''; })()],
+    ...(()=>{ const hh=houseOfRegion(r); if(!hh) return []; const mine=r.owner==='player';
+      return [['⚜ Held by', hh.name+' · Lord '+hh.lord+(mine? ' · loyalty '+hh.loyalty+' ('+loyaltyWord(hh.loyalty)+')' : ' · '+loyaltyWord(hh.loyalty)+' to their crown')+(r.gov? ' · steward Gov. '+r.gov.name : '')]]; })(),
     ...(r.isPort?[['⛵ Trade', isBlockaded(r)?'⛓ BLOCKADED':'flowing']]:[]),
     ...(r.hasWall?[['🧱','Walls']]:[]), ...(r.hasFort?[['♜','Fort']]:[]),
     ...(r.greatWork?[['🏛', (GREAT_WORKS.find(w=>w.id===r.greatWork)||{}).name||'Great Work']]:[]),
@@ -3229,6 +3252,22 @@ function selectRegion(r){
       acts.appendChild(actBtn('🚪 Dismiss '+gv.name.split(' ')[0],'The seals come back to the Crown; you rule '+r.name+' directly again',()=>{ dismissGovernor(r); }));
     } else {
       acts.appendChild(actBtn('🏛 Appoint a Governor…','A named hand to build, muster and trade here from the city\'s own chest — while you rule the capital yourself and think of empires',()=>{ window.__govPick=r.id; selectRegion(r); }));
+    }
+    // WAVE 22: a fief changes hands at the Crown's word — gratitude and pride are both real coin
+    if(!isPlayerCapital(r)){
+      const holder=houseOfRegion(r);
+      if(window.__grantPick===r.id){
+        acts.appendChild(actBtn('⚜ Grant '+r.name+' to…','A fief given by the Crown\'s own hand is remembered: +7 to the house that receives it, −3 to the house that loses it. The capital is never granted — you rule it yourself.',()=>{},'',true));
+        housesOf('player').filter(h2=>!holder||h2.id!==holder.id).forEach(h2=>{
+          acts.appendChild(actBtn('⚜ '+h2.name.replace(/^House /,''),
+            h2.lord+' · holds '+h2.fiefs.length+' fief'+(h2.fiefs.length===1?'':'s')+' · loyalty '+h2.loyalty,
+            ()=>{ grantFief(r, h2); window.__grantPick=null; selectRegion(r); save(); },''));
+        });
+        acts.appendChild(actBtn('↩ Keep it as it stands','No fief changes hands today',()=>{ window.__grantPick=null; selectRegion(r); },''));
+      } else {
+        acts.appendChild(actBtn('⚜ Grant this fief…', holder? ('Held by '+holder.name+' today, under Lord '+holder.lord+'. Give it to another house and the court will whisper of it for a season.') : 'No house holds it — the clerks will settle it on someone at month\'s end unless your hand moves first',
+          ()=>{ window.__grantPick=r.id; selectRegion(r); },''));
+      }
     }
     mine.forEach(a=>{
       acts.appendChild(actBtn('🪖 '+a.name,
@@ -3346,9 +3385,12 @@ function selectArmy(a){
   $('#sheet-sub').textContent=e.name+(a.at? ' · on the march to '+(rById[a.destRegion]? rById[a.destRegion].name : '…')+' · ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days out'
     : ' · at '+(home? home.name : '—')+(a.stance==='hold'? ' · 🛡 holding the road':' · awaiting orders'));
   if(!a.general) a.general=newGeneral(); if(a.vet===undefined) a.vet=0;
+  const hh22=a.houseId? houseById(a.houseId) : null;
   $('#sheet-stats').innerHTML=statRow([
     ['⚔ Men under the banner', fmt(a.men)],
     ['🎖 General', a.general.name+(a.general.traits.length? ' · '+a.general.traits.join(', ') : '')],
+    ...(hh22? [['⚜ Lord\'s house', hh22.name+' · loyalty '+hh22.loyalty+' — the host fights for the house\'s heart']] : []),
+    ...(a.task? [['🎯 Standing task', armyTaskText(a)]] : []),
     ['🏅 Laurels', '◆'.repeat(a.vet||0)||'—'],
     ['🎖 Arms', ARMY_TECH[e.armyTech]],
     ...(a.at? [['🎯 Bound for', rById[a.destRegion]? rById[a.destRegion].name : '—'], ['⏳ Days out', '~'+Math.max(1,Math.ceil(a.arriveDay-G.day))]]
@@ -3392,9 +3434,21 @@ function selectArmy(a){
       });
     }
     if(a.stance!=='hold') acts.appendChild(actBtn('🛡 Hold this Ground', 'Stay and block the road — enemy armies marching through must fight you',
-      ()=>{ a.stance='hold'; a.holdUntil=1e9; toast('🛡 '+a.name+' digs in — the road is blocked.'); pushEvent('🛡 <b>'+a.name+'</b> holds the road.'); selectArmy(a); save(); }));
+      ()=>{ a.stance='hold'; a.holdUntil=1e9; a.task='hold'; a.taskRegion=a.atRegion; a.taskZone=null; toast('🛡 '+a.name+' digs in — the road is blocked.'); pushEvent('🛡 <b>'+a.name+'</b> holds the road.'); selectArmy(a); save(); }));
     else acts.appendChild(actBtn('🎖 Stand Down', 'Give up the blocking position and stand ready for march orders',
-      ()=>{ a.stance='field'; a.holdUntil=null; toast(a.name+' stands ready'); selectArmy(a); save(); }));
+      ()=>{ a.stance='field'; a.holdUntil=null; a.task=null; a.taskRegion=null; a.taskZone=null; toast(a.name+' stands ready'); selectArmy(a); save(); }));
+    // WAVE 22: standing tasks — the host works its orders until the Crown says otherwise
+    if(!a.siegeId){
+      const wz22 = home && home.isPort? seaById[home.seaZone] : nearestSeaZoneTo(home);
+      if(wz22) acts.appendChild(actBtn('🗼 Watch the '+wz22.name, 'March to this water\'s shore and hold it — enemy squadrons on that sea bleed to shore guns, and no army crosses your front unbloodied',
+        ()=>{ if(orderTask(a,'watch',null,wz22.id)){ toast('🗼 '+a.name+' to watch the '+wz22.name); selectArmy(a); save(); } },'sea'));
+      myRegions().filter(r2=>r2.isPort && isBlockaded(r2)).slice(0,2).forEach(r2=>{
+        acts.appendChild(actBtn('➕ Make for '+r2.name+' — Relieve Her', 'March to the blockaded port and hold her shore — '+fmt(a.men)+' men on the quay change any admiral\'s sums',
+          ()=>{ if(orderTask(a,'relieve',r2.id,null)){ toast('➕ '+a.name+' makes for '+r2.name); selectArmy(a); save(); } },'sea'));
+      });
+      if(a.task) acts.appendChild(actBtn('🎯 Standing task: '+armyTaskText(a), 'Tap to stand the host down from its task and take fresh orders instead',
+        ()=>{ a.task=null; a.taskRegion=null; a.taskZone=null; toast(a.name+' stands free of its task'); selectArmy(a); save(); }));
+    }
     if(home) acts.appendChild(actBtn('🏰 Fold into the '+home.name+' garrison', 'The banner comes down; its '+fmt(a.men)+' men join the town watch',
       ()=>{ home.troops+=a.men; G.armies=G.armies.filter(x=>x.id!==a.id); toast(a.name+' folds into the garrison ('+fmt(home.troops)+' men)'); selectRegion(home); save(); }));
   }
@@ -3429,7 +3483,7 @@ function selectJoinPicker(a){
     const where=b.at? 'marching on '+(rById[b.destRegion]? rById[b.destRegion].name:'…')+' (~'+Math.max(1,Math.ceil(b.arriveDay-G.day))+'d out — your road aims at its destination)'
                      : 'standing at '+(rById[b.atRegion]? rById[b.atRegion].name:'—');
     acts.appendChild(actBtn('🪖 '+b.name,
-      fmt(b.men)+' men · '+where+(p? ' · your road there ~'+Math.max(1,Math.round(p.days))+' days' : ''),
+      fmt(b.men)+' men · '+where+' · together '+fmt(a.men+b.men)+' under one banner'+(p? ' · your road there ~'+Math.max(1,Math.round(p.days))+' days' : ''),
       ()=>{ if(orderJoin(a,b)) closeSheet(); },'war', a.at? 'this host is already on the march' : (p? '' : 'no land road joins you — the sea is in the way')));
   });
   acts.appendChild(actBtn('↩ Back to '+a.name, 'Other orders instead', ()=>{ selectArmy(a); }));
@@ -3603,7 +3657,7 @@ function rumorStorm(){
 }
 function tavernRumorDaily(){
   if(!G || G.over || G.day-_rumorDay<3) return; // the mill grinds slow — one tale in three days, never a flood
-  const sources=[rumorFleet, rumorPrice, rumorGovernor, rumorCompany, rumorStorm];
+  const sources=[rumorFleet, rumorPrice, rumorGovernor, rumorCompany, rumorStorm, rumorHouse];
   for(let k=0;k<sources.length;k++){
     let line=null; try{ line=sources[(_rumorIx+k)%sources.length](); }catch(err){ line=null; }
     if(!line) continue;
@@ -3697,6 +3751,7 @@ function startSiege(a, r, quiet){
     supplyAtStart:daysOfSupply(r,'grain'), defChoice:'none', sallied:false };
   G.sieges.push(sg);
   a.siegeId=sg.id;
+  a.task='besiege'; a.taskRegion=r.id; // WAVE 22: the ring is a standing task on chart and sheet alike
   if(a.owner==='player'){
     toast('🎇 '+a.name+' invests '+r.name+' — the ring closes.');
     pushEvent('🎇 <b>Siege of '+r.name+'.</b> '+a.name+' closes the ring — stage 1 of 5: <b>'+SIEGE_STAGES[0]+'</b>. Batteries in ~'+SIEGE_STAGE_LEN[0]+' days.');
@@ -4293,6 +4348,470 @@ function govReportLine(r){
   gv.report={pop:r.pop, troops:r.troops, income:regionIncome(r)};
   return line;
 }
+
+/* ================================================================
+   WAVE 22 — TRUE KINGDOMS: great houses & lords, decrees, feasts &
+   tournaments, town prosperity, and standing host tasks.
+   Truth rules (load-bearing):
+   · Loyalty moves ONLY through houseLoyalty() — every step writes its
+     reason into the house ledger, so loyalty always equals base + Σ.
+   · A house's retinue is computed live from its fiefs' population and
+     garrisons — the men it fields are drawn from those same acres.
+   · Every decree lever rides numbers the sim already uses (regionIncome,
+     tradeIncome, houseRetinueMen) — the printed number is the banked one.
+   · Prosperity is rebuilt monthly from real flows (lanes, markets,
+     blockade, siege, governor, decree) and re-dresses the town through
+     planTown/settleSig — no new asset payload.
+   ================================================================ */
+const DECREES={
+  none:{label:'No Standing Decree', blurb:'the realm breathes as it will; no house is favoured, none taxed'},
+  muster:{label:'Muster Obligation', blurb:'houses field a quarter again their spears when the banners are called (+25% retinues) — the bold ones grumble at the levy of their swords'},
+  tithe:{label:'Trade Tithe', blurb:'the lanes render an eighth more to this crown (+12% trade coin) — the quay-towns sour under the tally-men'},
+  harbour:{label:'Harbour Rights', blurb:'great ports keep a fuller purse (+10% dues at harbours of city size or better) — the little ports resent the great'},
+  levy:{label:'War Levy', blurb:'every hearth pays for the war (+8% town dues realm-wide) — the houses pay in goodwill'},
+};
+const FEAST_COST_BASE=50, TOURNEY_COST=45, BANNERS_COST=60;
+const HOUSE_TRAIT_POOL=['Bold','Steady','Logistician','Beloved'];
+const HOUSE_CULTURE={
+  'Lisbon':{first:['Afonso','Duarte','João','Manuel','Henrique','Beatriz','Leonor','Sancho','Rui','Inês'], sur:['de Sousa','Pereira','da Costa','Ferreira','da Silveira','de Almeida','Teixeira','de Lencastre']},
+  'Venice':{first:['Pietro','Alvise','Marco','Giacomo','Lorenzo','Elena','Caterina','Nicolò','Domenico','Marina'], sur:['Contarini','Dandolo','Morosini','Grimani','Venier','Loredan','Foscari','Barbarigo']},
+  'Holland':{first:['Willem','Johan','Pieter','Hendrik','Anna','Margriet','Cornelis','Sara','Dirk','Els'], sur:['de Vries','van Rijn','de Witt','Bakker','van den Berg','de Jong','Smit','de Boer']},
+  'Algiers':{first:['Yusuf','Omar','Selim','Karim','Tariq','Layla','Hasan','Idris','Zayd','Amira'], sur:['ibn Yusuf','al-Rashid','Zaydan','al-Mansur','ben Omar','Qadir','ibn Tariq','Selim']},
+};
+function w22hash(str){ let h=7; const s=String(str); for(let i=0;i<s.length;i++) h=(h*31 + s.charCodeAt(i))|0; return Math.abs(h); }
+function seasonNo(){ return Math.floor((G? G.day:0)/90); }
+function housesOf(cid){ return (G && G.court && G.court.houses && G.court.houses[cid]) || []; }
+function houseById(hid){ if(!G||!G.court||!G.court.houses) return null; let found=null; Object.keys(G.court.houses).forEach(c=>{ (G.court.houses[c]||[]).forEach(h=>{ if(h.id===hid) found=h; }); }); return found; }
+function houseOfRegion(r){ if(!r||!r.owner) return null; return housesOf(r.owner).find(h=>(h.fiefs||[]).includes(r.id)) || null; }
+function loyaltyWord(v){ return v>=68? 'staunch' : v>=50? 'true' : v>=34? 'cool' : v>=20? 'fraying' : 'rotten'; }
+function decreeOf(cid){ return (G && G.court && G.court.decree && G.court.decree[cid]) || 'none'; }
+function decreeChangeLocked(cid){ if(!G||!G.court) return false; const d=(G.court.decreeDay||{})[cid]; if(d==null) return false; return Math.floor(d/90)===Math.floor(G.day/90); }
+
+function ensureCourtMeta(s){
+  if(!s||!s.regions) return s;
+  if(!s.court||typeof s.court!=='object') s.court=null;
+  if(!s.court) s.court={ houses:{}, decree:{}, decreeDay:{}, feastAt:{}, tourneyAt:{}, bannersAt:{}, warned:{}, feastGuests:[], seq:1, petAt:-1 };
+  const ct=s.court;
+  ct.houses=ct.houses||{}; ct.decree=ct.decree||{}; ct.decreeDay=ct.decreeDay||{};
+  ct.feastAt=ct.feastAt||{}; ct.tourneyAt=ct.tourneyAt||{}; ct.bannersAt=ct.bannersAt||{};
+  ct.warned=ct.warned||{}; ct.feastGuests=ct.feastGuests||[]; ct.seq=ct.seq||1; if(ct.petAt==null) ct.petAt=-1;
+  // armies carry their standing task (WAVE 22) — default-filled, never orphaning an old save
+  (s.armies||[]).forEach(a=>{ if(a.task===undefined) a.task=null; if(a.taskRegion===undefined) a.taskRegion=null; if(a.taskZone===undefined) a.taskZone=null; if(a.houseId===undefined) a.houseId=null; });
+  // towns carry their prosperity (WAVE 22) — 50 is the world's plain middle
+  s.regions.forEach(r=>{ if(r.prosp===undefined||r.prosp==null) r.prosp=50; if(!Array.isArray(r.prospWhy)) r.prospWhy=[]; });
+  // seed great houses for every crown that lacks them, from the crown's actual holdings
+  Object.keys(s.empires||{}).forEach(cid=>{
+    if(cid==='natives') return;
+    ct.decree[cid]=ct.decree[cid]||'none';
+    if(Array.isArray(ct.houses[cid]) && ct.houses[cid].length) return;
+    ct.houses[cid]=[];
+    const capName=s.empires[cid] && s.empires[cid].capitalName;
+    const held=s.regions.filter(r=>r.owner===cid && r.name!==capName).sort((a,b)=> (b.tier-a.tier) || (b.pop-a.pop));
+    if(!held.length) return;
+    const cult=HOUSE_CULTURE[capName]||HOUSE_CULTURE['Lisbon'];
+    const base=w22hash(cid+'-houses');
+    const nH=Math.max(2, Math.min(4, held.length>=5? 4 : 3));
+    const houses=[];
+    for(let j=0;j<nH;j++){
+      const sur=cult.sur[(base+j*3)%cult.sur.length];
+      const first=cult.first[(base+j*2+3)%cult.first.length];
+      const tr1=HOUSE_TRAIT_POOL[(base+j)%4]; let tr2=HOUSE_TRAIT_POOL[(base+j+2)%4];
+      if(tr2===tr1) tr2=HOUSE_TRAIT_POOL[(base+j+3)%4];
+      const loy=52+(w22hash(cid+'-loy'+j)%15);
+      houses.push({ id:'h'+(ct.seq++), crown:cid, name:'House '+sur, lord:first+' '+sur,
+        traits:[tr1, tr2], base:loy, loyalty:loy, renown:w22hash(cid+'-ren'+j)%18,
+        fiefs:[], ledger:[], sulk:false });
+    }
+    // deal the crown's towns to the houses, richest acres to the first names
+    held.forEach((r,i)=>{ houses[i % nH].fiefs.push(r.id); });
+    ct.houses[cid]=houses;
+  });
+  return s;
+}
+
+/* the ONLY door loyalty moves through: every step writes its reason down */
+function houseLoyalty(h, d, why){
+  if(!h||!d) return;
+  h.loyalty=Math.max(0, Math.min(100, (h.loyalty||0)+d));
+  h.ledger=h.ledger||[]; h.ledger.unshift({day:G? G.day:0, d, why});
+  if(h.ledger.length>10) h.ledger.length=10;
+  if(d>0 && G && G.court && G.court.warned && G.court.warned[h.id]!=null && h.loyalty>30){ delete G.court.warned[h.id]; if(h.sulk) h.sulk=false; }
+}
+function grantFief(r, toHouse){
+  if(!r||!toHouse) return false;
+  const from=houseOfRegion(r);
+  if(from===toHouse) return false;
+  if(from){ from.fiefs=(from.fiefs||[]).filter(f=>f!==r.id); houseLoyalty(from, -3, 'saw '+r.name+' given to '+toHouse.name); }
+  toHouse.fiefs=toHouse.fiefs||[]; if(!toHouse.fiefs.includes(r.id)) toHouse.fiefs.push(r.id);
+  houseLoyalty(toHouse, 7, 'granted '+r.name+' by the Crown’s own hand');
+  if(r.owner==='player' && toHouse.crown==='player'){
+    toast('⚜ '+r.name+' is '+toHouse.name+'’s now — the heralds cry it in the square.');
+    gazette('⚜ The Crown grants <b>'+r.name+'</b> to '+toHouse.name+'. Lord '+toHouse.lord+' kneels, and rises taller.');
+  }
+  return true;
+}
+/* monthly: fiefs follow the map's truth; losses are felt, new acres are settled by the clerks */
+function reconcileFiefs(){
+  if(!G||!G.court) return;
+  Object.keys(G.court.houses||{}).forEach(cid=>{
+    const houses=G.court.houses[cid]; if(!houses||!houses.length) return;
+    houses.forEach(h=>{
+      const lost=(h.fiefs||[]).filter(rid=>{ const r=rById[rid]; return !r || r.owner!==cid; });
+      lost.forEach(rid=>{ const r=rById[rid]; const taker=r? r.owner : null;
+        if(taker && taker!=='natives' && atWar(cid, taker)) houseLoyalty(h, -8, 'lost '+(r? r.name : 'a fief')+' to the sword');
+        else if(r) houseLoyalty(h, -4, 'the roll lost '+r.name+' from their keeping');
+      });
+      h.fiefs=(h.fiefs||[]).filter(rid=>{ const r=rById[rid]; return r && r.owner===cid; });
+    });
+    const claimed=new Set(); houses.forEach(h=>(h.fiefs||[]).forEach(f=>claimed.add(f)));
+    G.regions.filter(r=>r.owner===cid && r.name!==(emp(cid)||{}).capitalName && !claimed.has(r.id)).forEach(r=>{
+      const h=houses.slice().sort((x,y)=> (x.fiefs.length-y.fiefs.length) || (y.renown-x.renown))[0];
+      if(h){ h.fiefs.push(r.id); h.ledger=h.ledger||[]; h.ledger.unshift({day:G.day, d:0, why:'the clerks’ roll gives them '+r.name}); if(h.ledger.length>10) h.ledger.length=10; }
+    });
+  });
+}
+/* a house's spears are its acres and its garrisons, priced the same way everywhere it is spoken of */
+function houseRetinueMen(h){
+  let m=0; (h.fiefs||[]).forEach(rid=>{ const r=rById[rid]; if(r) m += r.pop*0.018 + r.troops*0.22; });
+  if(h.crown && decreeOf(h.crown)==='muster') m*=1.25;
+  return Math.round(m);
+}
+
+/* ---------- prosperity: real flows in, a living town out ---------- */
+function prospInputs(r, laneCount){
+  const list=[]; if(!r) return list;
+  const cid=r.owner;
+  list.push(r.tier>=3? {v:12, why:'a great port’s rents'} : r.tier===2? {v:8, why:'a grown city’s rents'} : r.tier===1? {v:2, why:'town rents'} : {v:-5, why:'a hamlet of mud and nets'});
+  if(r.hasMarket) list.push({v:10, why:'market tolls'});
+  if(r.greatWork) list.push({v:8, why:'its great work draws the coast'});
+  if(cid && r.name===(emp(cid)||{}).capitalName) list.push({v:6, why:'the crown seat’s favour'});
+  if(r.isPort){ let n=laneCount;
+    if(n==null){ n=0; laneSet().forEach(l=>{ const a=(l.a!=null&&l.a.id!=null)? l.a.id : l.a, b=(l.b!=null&&l.b.id!=null)? l.b.id : l.b; if(a===r.id||b===r.id) n++; }); }
+    if(n) list.push({v:Math.min(12, n*3), why:n+' lane'+(n>1?'s':'')+' at her quay'}); }
+  if(r.gov){ if(r.gov.purse>=100) list.push({v:5, why:'the governor’s works rise'}); if(r.gov.policy==='wealth') list.push({v:4, why:'a merchant’s course at the helm'}); if(r.gov.policy==='harbor') list.push({v:3, why:'a harbourman’s course at the helm'}); if(r.gov.policy==='war') list.push({v:-4, why:'war footing empties the market square'}); }
+  if(cid){ const d=decreeOf(cid);
+    if(d==='tithe'&&r.isPort) list.push({v:-3, why:'the tithe weighs on the quay'});
+    if(d==='harbour'&&r.isPort) list.push(r.tier>=2? {v:4, why:'Harbour Rights fatten the great ports'} : {v:-4, why:'Harbour Rights slight the little ports'}); }
+  if(siegeAt(r.id)) list.push({v:-18, why:'armies ring her walls'});
+  if(r.isPort && isBlockaded(r)) list.push({v:-22, why:'the blockade starves her'});
+  if(r._pp && r.pop<r._pp*0.88) list.push({v:-9, why:'war and hunger emptied her lanes'});
+  const hh=houseOfRegion(r); if(hh && hh.sulk) list.push({v:-6, why:'their lord’s coldness chills the town'});
+  return list;
+}
+function prospTargetOf(r){ let t=46; prospInputs(r).forEach(x=>t+=x.v); return Math.max(5, Math.min(96, t)); }
+function prospWord(v){ return v>=75? 'flourishing' : v>=58? 'thriving' : v>=42? 'steady' : v>=27? 'strained' : 'suffering'; }
+function prospTickAll(){
+  const LC={};
+  laneSet().forEach(l=>{ const a=(l.a!=null&&l.a.id!=null)? l.a.id : l.a, b=(l.b!=null&&l.b.id!=null)? l.b.id : l.b;
+    if(a!=null) LC[a]=(LC[a]||0)+1; if(b!=null) LC[b]=(LC[b]||0)+1; });
+  G.regions.forEach(r=>{
+    const ins=prospInputs(r, LC[r.id]||0);
+    let t=46; ins.forEach(x=>t+=x.v); t=Math.max(5, Math.min(96, t));
+    const cur=(r.prosp==null? 50 : r.prosp), d=t-cur;
+    r.prosp=cur + Math.sign(d)*Math.min(4, Math.abs(d));
+    r.prospWhy=ins.filter(x=>x.v!==0).sort((x,y)=>Math.abs(y.v)-Math.abs(x.v)).slice(0,3).map(x=>({why:x.why, v:x.v}));
+    r._pp=r.pop;
+  });
+}
+
+/* ---------- decrees, feasts, tournaments, banners ---------- */
+function setDecree(cid, k){
+  if(!DECREES[k]||!G||!G.court) return false;
+  G.court.decree[cid]=k; G.court.decreeDay[cid]=G.day;
+  if(cid==='player'){ toast('📜 Decreed: '+DECREES[k].label); gazette('📜 <b>You decree '+DECREES[k].label+'</b> — '+DECREES[k].blurb+'.'); pushEvent('📜 <b>Decree:</b> '+DECREES[k].label+'.'); }
+  save(); return true;
+}
+function feastCost(){ return FEAST_COST_BASE + 15*housesOf('player').length; }
+function holdFeast(){
+  const ct=G&&G.court, me=emp('player'); if(!ct) return false;
+  if(ct.feastAt.player===seasonNo()){ toast('🍗 The court still digests the last feast — one a season fills the hall.'); return false; }
+  const cost=feastCost();
+  if(me.gold<cost){ toast('🍗 A feast worthy of the houses costs '+cost+'g — the treasury is too lean.'); return false; }
+  me.gold-=cost; ct.feastAt.player=seasonNo();
+  const cap=G.regions.find(r=>r.name===me.capitalName);
+  const houses=housesOf('player');
+  const attended=houses.filter(h=> cap && (h.fiefs||[]).some(f=>{ const fr=rById[f]; return fr && (fr.id===cap.id || cap.neighbors.includes(fr.id)); }));
+  attended.forEach(h=>houseLoyalty(h, 4, 'honoured at the Crown’s feast'));
+  const prev=ct.feastGuests||[];
+  houses.filter(h=>!attended.includes(h) && prev.includes(h.id)).forEach(h=>houseLoyalty(h, -2, 'uncalled to the feast this year'));
+  ct.feastGuests=attended.map(h=>h.id);
+  const goh=attended.slice().sort((a,b)=>b.fiefs.length-a.fiefs.length)[0];
+  if(goh) goh.renown=(goh.renown||0)+3;
+  const moment=goh? pick(['Lord '+goh.lord+' carved the boar himself and gave the first cut to a one-armed veteran of the road','the sugar-work galleon sank mid-toast, and Lord '+goh.lord+' drank to "fair winds" unblinking','Lord '+goh.lord+' sang the old road-song, badly and to the last verse']) : 'the hall ate well, and talked of roads and rents.';
+  gazette('🍗 <b>The Crown feasts the court</b> (−'+cost+'g). '+attended.length+' of '+houses.length+' houses at the board; '+moment);
+  pushEvent('🍗 <b>Feast held.</b> '+(attended.length? attended.map(h=>h.name).join(', ')+' honoured at your board.' : 'No house could reach the capital in time.'));
+  toast('🍗 The feast is sung of in three halls (−'+cost+'g · '+attended.length+' house'+(attended.length===1?'':'s')+' honoured)');
+  if(window.Sound&&Sound.gold) Sound.gold();
+  save(); return true;
+}
+function holdTourney(){
+  const ct=G&&G.court, me=emp('player'); if(!ct) return false;
+  if(ct.tourneyAt.player===seasonNo()){ toast('🏆 The lists are mud once a season — the heralds will not cry another tourney yet.'); return false; }
+  if(me.gold<TOURNEY_COST){ toast('🏆 A tourney worthy of the names costs '+TOURNEY_COST+'g.'); return false; }
+  const entrants=[];
+  housesOf('player').forEach(h=>entrants.push({name:h.lord, house:h}));
+  (G.armies||[]).filter(a=>a.owner==='player'&&a.general&&a.general.name).forEach(a=>entrants.push({name:a.general.name, house:null}));
+  (G.fleets||[]).filter(f=>f.owner==='player'&&f.admiral&&f.admiral.name).forEach(f=>entrants.push({name:f.admiral.name, house:null}));
+  if(entrants.length<2){ toast('🏆 Too few swords in the realm for a tourney that means anything.'); return false; }
+  me.gold-=TOURNEY_COST; ct.tourneyAt.player=seasonNo();
+  const champ=pick(entrants); let runner=pick(entrants); if(runner===champ) runner=entrants.find(e=>e!==champ);
+  if(champ.house){ houseLoyalty(champ.house, 4, 'their lord took the garland in the lists'); champ.house.renown=(champ.house.renown||0)+5; }
+  if(runner && runner.house && runner.house!==champ.house) houseLoyalty(runner.house, -2, 'their lord yielded in the lists');
+  gazette('🏆 <b>The tourney’s garland</b> goes to '+champ.name+(champ.house? ' of '+champ.house.name : '')+' — '+(runner? runner.name+' yields the field, smiling through teeth.' : 'no man stood second.'));
+  pushEvent('🏆 <b>'+champ.name+'</b> takes the garland at your tourney.');
+  toast('🏆 '+champ.name+' takes the garland (−'+TOURNEY_COST+'g)');
+  save(); return true;
+}
+/* the banners call real men off real acres: half spears, half sons, floors kept */
+function summonBanners(cid){
+  const out={raised:0, refused:[], hosts:[]};
+  const ct=G&&G.court; if(!ct||!G) return out;
+  ensureCourtMeta(G);
+  const e=emp(cid); if(!e) return out;
+  if(ct.bannersAt[cid]===seasonNo()){ if(cid==='player') toast('🚩 The banners were called this season — the roads need a season to fill again.'); return out; }
+  if(e.gold<BANNERS_COST){ if(cid==='player') toast('🚩 Raising the banners costs '+BANNERS_COST+'g — heralds, muster-ale and beacon-wood are not free.'); return out; }
+  e.gold-=BANNERS_COST; ct.bannersAt[cid]=seasonNo();
+  housesOf(cid).forEach(h=>{
+    if(h.sulk || h.loyalty<45){ out.refused.push(h.name); return; }
+    const fiefs=(h.fiefs||[]).map(rid=>rById[rid]).filter(Boolean); if(!fiefs.length) return;
+    const ret=houseRetinueMen(h); if(ret<400) return;
+    const levied=[]; let need=ret;
+    fiefs.forEach(r=>{ if(need<=0) return;
+      const fromTroops=Math.max(0, Math.min(r.troops-400, Math.ceil(need/2))); r.troops-=fromTroops;
+      const fromPop=Math.max(0, Math.min(r.pop-1800, need-fromTroops)); r.pop-=fromPop;
+      const got=fromTroops+fromPop; if(got>0) levied.push({region:r.id, men:got, fromTroops, fromPop});
+      need-=got; });
+    const men=ret-need;
+    if(men<400){ levied.forEach(L=>{ const r=rById[L.region]; if(r){ r.troops+=L.fromTroops; r.pop+=L.fromPop; } }); return; }
+    const home=fiefs[0];
+    let host=(G.armies||[]).find(a=>a.houseId===h.id && !a.at);
+    if(host){ host.men+=men; if(!host.general||!host.general.name) host.general={name:h.lord, traits:(h.traits||[]).filter(t=>GEN_TRAITS.includes(t)), wins:0}; }
+    else { host={ id:newUnitId(), owner:cid, men, atRegion:home.id, at:null, path:null, destRegion:null, fromRegion:home.id,
+        stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0, joinTarget:null,
+        name:'Host of '+h.name.replace(/^House /, ''), vet:0,
+        general:{name:h.lord, traits:(h.traits||[]).filter(t=>GEN_TRAITS.includes(t)), wins:0},
+        houseId:h.id, task:null, taskRegion:null, taskZone:null };
+      G.armies.push(host); }
+    out.raised+=men; out.hosts.push(h.name+' +'+fmt(men));
+  });
+  if(cid==='player'){
+    const raisedNow=out.raised;
+    if(raisedNow>0) pushEvent('🚩 <b>The banners answer.</b> '+out.hosts.join(' · '));
+    if(out.refused.length) pushEvent('⚜ <b>Cold spears:</b> '+out.refused.join(', ')+' did not answer the call.');
+    if(raisedNow<=0 && !out.refused.length) toast('🚩 The houses answer with compliments, not spears — give them fiefs worth marching for.');
+    gazette('🚩 The Crown summons the banners at '+e.capitalName+'. '+(raisedNow? fmt(raisedNow)+' spears take the road.' : 'The road stays empty.'));
+  }
+  save(); return out;
+}
+
+/* ---------- standing tasks: hold anywhere, ring any walls, watch any water ---------- */
+function setTask(a, task, regionId, zoneId){ a.task=task; a.taskRegion=(regionId!=null? regionId : null); a.taskZone=(zoneId!=null? zoneId : null); } // ids run from 0: null-checks, never truthiness
+function armyTaskText(a){
+  if(!a) return '';
+  if(a.task==='hold') return 'holding '+(rById[a.taskRegion]? rById[a.taskRegion].name : 'the ground');
+  if(a.task==='besiege') return 'ringing '+(rById[a.taskRegion]? rById[a.taskRegion].name : 'the walls');
+  if(a.task==='watch') return 'watching the '+(seaById[a.taskZone]? seaById[a.taskZone].name : 'coast');
+  if(a.task==='relieve') return 'relieving '+(rById[a.taskRegion]? rById[a.taskRegion].name : 'the port');
+  if(a.siegeId) return 'in the siege lines';
+  return a.stance==='hold'? 'holding the road' : 'awaiting orders';
+}
+function nearestSeaZoneTo(region, straitsFirst){
+  if(!region) return null;
+  let best=null, bd=1e18;
+  G.seas.forEach(z=>{ if(straitsFirst && !/strait|channel|passage/i.test(z.name)) return; const d=Math.hypot(z.x-region.x, z.y-region.y); if(d<bd){ bd=d; best=z; } });
+  if(!best && straitsFirst) return nearestSeaZoneTo(region, false);
+  return best;
+}
+function coastRegionsFor(a, z){
+  // a watch stands on the army's OWN shore nearest the named water when it can (holding foreign
+  // ground is a war act, not a posting); foreign shores of that water are only the last resort
+  const out=[];
+  G.regions.forEach(r=>{
+    const path=findLandPath(a.atRegion, r.id); if(!path) return;
+    out.push({r, days:path.days||path.nodes.length, own:r.owner===a.owner?0:1,
+      shore:r.seaZone===z.id? 0:1, zd:Math.hypot(r.x-z.x, r.y-z.y)});
+  });
+  out.sort((x,y)=> (x.own-y.own) || (x.shore-y.shore) || (x.zd-y.zd) || (x.days-y.days));
+  return out.slice(0,4).map(o=>o.r);
+}
+function orderTask(a, task, regionId, zoneId){
+  if(!a||a.at) return false;
+  const r=regionId!=null? rById[regionId] : null;
+  if(task==='hold'){
+    if(!r) return false;
+    setTask(a,'hold', r.id, null);
+    if(a.atRegion===r.id){ a.stance='hold'; a.holdUntil=1e9; }
+    else if(!orderMarch(a, r)){ setTask(a,null,null,null); return false; }
+    save(); return true;
+  }
+  if(task==='besiege'){
+    if(!r) return false;
+    setTask(a,'besiege', r.id, null);
+    if(r.neighbors.includes(a.atRegion) && siegeEligible(r) && a.men>=800){ if(startSiege(a, r)) return true; }
+    const gate=r.neighbors.map(id=>rById[id]).filter(n=>n && n.id!==a.atRegion && findLandPath(a.atRegion, n.id))[0];
+    if(gate){ orderMarch(a, gate); return true; }
+    return false;
+  }
+  if(task==='watch'){
+    const z=seaById[zoneId]; if(!z) return false;
+    setTask(a,'watch', null, z.id);
+    const cands=coastRegionsFor(a, z);
+    if(!cands.length){ setTask(a,null,null,null); return false; }
+    if(cands[0].id===a.atRegion){ a.stance='hold'; a.holdUntil=1e9; }
+    else orderMarch(a, cands[0]);
+    save(); return true;
+  }
+  if(task==='relieve'){
+    if(!r) return false;
+    setTask(a,'relieve', r.id, null);
+    if(a.atRegion===r.id){ a.stance='hold'; a.holdUntil=1e9; }
+    else if(!orderMarch(a, r)){ setTask(a,null,null,null); return false; }
+    save(); return true;
+  }
+  return false;
+}
+function taskMaintenance(){
+  (G.armies||[]).forEach(a=>{
+    if(a.at) return;
+    if(a.task==='besiege'){ const t=rById[a.taskRegion];
+      if(!t){ setTask(a,null,null,null); return; }
+      if(t.owner===a.owner){ setTask(a,'hold', a.atRegion, null); a.stance='hold'; a.holdUntil=1e9; return; }
+      if(!a.siegeId && t.neighbors.includes(a.atRegion) && siegeEligible(t) && a.men>=800) startSiege(a, t);
+      else if(!a.siegeId){ const gate=t.neighbors.map(id=>rById[id]).filter(n=>n && n.id!==a.atRegion && findLandPath(a.atRegion,n.id))[0]; if(gate && gate.owner!==t.owner) orderMarch(a, gate); }
+    }
+    else if(a.task==='hold' && a.taskRegion && a.atRegion!==a.taskRegion){ orderTask(a,'hold', a.taskRegion, null); }
+    else if((a.task==='watch'||a.task==='relieve') && a.stance!=='hold'){ a.stance='hold'; a.holdUntil=1e9; }
+  });
+}
+/* a watched water bites: enemy hulls on a guarded sea lose a ship to shore guns, now and then */
+function guardAttritionDaily(){
+  if(!G||G.over) return;
+  (G.armies||[]).forEach(a=>{
+    if(a.task!=='watch'||a.at||!a.taskZone) return;
+    (G.fleets||[]).forEach(f=>{
+      if(!f||f.at||f.zone!==a.taskZone||!f.ships||f.ships<=1||f.owner===a.owner) return;
+      if(!atWar(a.owner, f.owner)) return;
+      if(rnd()<0.022){ f.ships--; if(a.owner==='player') gazette('🗼 The watch on the '+((seaById[a.taskZone]||{}).name||'coast')+' takes a hull off '+emp(f.owner).name+' — shore guns and cutters earn their pay.'); }
+    });
+  });
+}
+
+/* ---------- petitions & the cold shoulder ---------- */
+function courtPetitionMaybe(){
+  const ct=G&&G.court; if(!ct) return;
+  if((G.crownQueue||[]).some(q=>q.key && String(q.key).indexOf('petition')===0)) return;
+  const sn=seasonNo(); if(ct.petAt===sn) return;
+  const hs=housesOf('player'); if(!hs.length) return;
+  let h=null, kind=null;
+  const poor=hs.filter(x=>x.loyalty<=46).sort((a,b)=>a.loyalty-b.loyalty)[0];
+  if(poor && rnd()<0.5){ h=poor; kind=(rnd()<0.5? 'purse':'office'); }
+  if(!h){ const proud=hs.filter(x=>x.renown>=25).sort((a,b)=>b.renown-a.renown)[0]; if(proud && rnd()<0.35){ h=proud; kind='fief'; } }
+  if(!h) return;
+  ct.petAt=sn; const key='petition'+h.id+'s'+sn;
+  if(kind==='purse'){
+    govQueue({key, icon:'⚜', title:h.name+' asks a purse',
+      body:'Lord '+h.lord+' begs 60g toward the keeping of '+((rById[h.fiefs[0]]||{}).name||'his hall')+' — the roof leaks and the men-at-arms mutter at short commons.',
+      choices:[{label:'Grant 60g (+5)', fn:()=>{ if(emp('player').gold>=60){ emp('player').gold-=60; houseLoyalty(h,5,'a purse granted at their asking'); toast('The purse is sent — gratitude of the spendable kind.'); } else toast('The treasury is too lean for grace today.'); save(); }},
+               {label:'Refuse (−2)', fn:()=>{ houseLoyalty(h,-2,'their purse-petition refused'); save(); }}]});
+  } else if(kind==='office'){
+    const cand=(G.armies||[]).filter(a=>a.owner==='player'&&!a.at).sort((a,b)=>a.men-b.men)[0];
+    if(!cand) return;
+    govQueue({key, icon:'⚜', title:h.name+' asks an office',
+      body:'Lord '+h.lord+' asks the marshal’s baton — a command to justify the name. '+cand.name+' ('+fmt(cand.men)+' men) marches under a lesser captain today.',
+      choices:[{label:'Give the baton (+4)', fn:()=>{ cand.general={name:h.lord, traits:(h.traits||[]).filter(t=>GEN_TRAITS.includes(t)), wins:0}; cand.houseId=h.id; houseLoyalty(h,4,'their lord given the marshal’s baton'); toast(cand.name+' answers to Lord '+h.lord+' now.'); save(); }},
+               {label:'Refuse (−2)', fn:()=>{ houseLoyalty(h,-2,'their office-petition refused'); save(); }}]});
+  } else {
+    const rich=hs.filter(x=>x.fiefs.length>=3).sort((a,b)=>b.fiefs.length-a.fiefs.length)[0];
+    const give=rich? rById[rich.fiefs[rich.fiefs.length-1]] : null;
+    if(!give) return;
+    govQueue({key, icon:'⚜', title:h.name+' asks a fief',
+      body:'Lord '+h.lord+'’s renown outgrows '+h.name+'’s acres. '+(rich? rich.name+' holds '+rich.fiefs.length+' towns and could spare one — '+give.name+', say.' : 'There is ground to give, if the Crown wills it.'),
+      choices:[{label:'Grant '+give.name+' (+7/−3)', fn:()=>{ grantFief(give, h); save(); }},
+               {label:'Refuse (−2)', fn:()=>{ houseLoyalty(h,-2,'their fief-petition refused'); save(); }}]});
+  }
+}
+/* disloyalty is telegraphed, never sprung: a warning to answer, and only long scorn turns to sulk */
+function courtDefectionWatch(){
+  const ct=G&&G.court; if(!ct) return;
+  housesOf('player').forEach(h=>{
+    if(h.loyalty>30){ if(ct.warned[h.id]!=null) delete ct.warned[h.id]; if(h.sulk){ h.sulk=false; gazette('⚜ House '+h.name+' comes in from the cold — their lord is seen at the Crown’s table again.'); } return; }
+    if(h.loyalty<=18 && ct.warned[h.id]==null){
+      ct.warned[h.id]=G.day;
+      const first=rById[h.fiefs[0]];
+      govQueue({key:'defect'+h.id, icon:'⚜', urgent:true,
+        title:'House '+h.name+' cools toward the Crown',
+        body:'Lord '+h.lord+' keeps a cold table at '+(first? first.name : 'his halls')+'. The taverns already whisper of other healths drunk in his hall. Answer him with grace, or watch his spears stay home when the banners call.',
+        choices:[
+          {label:'Shower gifts (−80g, +10)', fn:()=>{ if(emp('player').gold>=80){ emp('player').gold-=80; houseLoyalty(h,10,'a shower of gifts and a kissed ring'); toast('The gifts are received — coldly, then warmly.'); } else toast('The treasury cannot pave this road.'); save(); }},
+          {label:'Endow them (+7)', fn:()=>{ const cand=G.regions.find(r=>r.owner==='player' && r.name!==emp('player').capitalName && houseOfRegion(r)!==h); if(cand) grantFief(cand,h); else toast('No town stands to give.'); save(); }},
+          {label:'Let him sulk', fn:null}]});
+      pushEvent('⚜ <b>House '+h.name+'</b> cools toward the Crown — the matter waits in your Crown queue.');
+    }
+    if(h.loyalty<=10 && ct.warned[h.id]!=null && G.day-ct.warned[h.id]>=90 && !h.sulk){
+      h.sulk=true;
+      gazette('⚜ <b>House '+h.name+' stands in open sulk.</b> Their spears will not answer the banners, and their towns feel the chill, until the Crown makes amends.');
+      pushEvent('⚜ <b>Open sulk:</b> House '+h.name+' withholds its spears. Gifts, a fief, or a feast may yet thaw them.');
+    }
+  });
+}
+
+/* ---------- the court's clock ---------- */
+function courtMonthly(){
+  if(!G||G.over||!G.court) return;
+  ensureCourtMeta(G);
+  reconcileFiefs();
+  prospTickAll();
+  taskMaintenance();
+  // a town starved under the ring remembers whose fief it was
+  (G.sieges||[]).forEach(sg=>{ if(sg._hHit) return; const r=rById[sg.regionId]; if(!r||!r.owner) return; const h=houseOfRegion(r); if(h){ houseLoyalty(h, -4, 'their town of '+r.name+' starves under the ring'); sg._hHit=1; } });
+  // rival crowns call their banners in war, raised from the same real acres
+  ['aurelia','meridian','sable'].forEach(id=>{ const e=emp(id); if(!e) return;
+    const atw=Object.values(e.relations||{}).some(rel=>rel.war);
+    if(atw && e.gold>=BANNERS_COST+40 && G.court.bannersAt[id]!==seasonNo() && rnd()<0.45) summonBanners(id);
+  });
+  courtPetitionMaybe();
+  courtDefectionWatch();
+}
+function courtSeasonTick(){
+  if(!G||G.over||!G.court) return;
+  ensureCourtMeta(G);
+  Object.keys(G.court.houses||{}).forEach(cid=>{
+    const houses=G.court.houses[cid]; if(!houses||!houses.length) return;
+    const d=decreeOf(cid), e=emp(cid);
+    houses.forEach(h=>{
+      if(d==='levy') houseLoyalty(h, -2, 'the War Levy grinds the houses');
+      if(d==='muster' && (h.traits||[]).includes('Bold')) houseLoyalty(h, -1, 'the Muster sits ill with the bold');
+      if(e && (e.debt||0)>=400) houseLoyalty(h, -1, 'the Crown’s debts are table-talk everywhere');
+      const recentPlus=(h.ledger||[]).some(en=>en.d>0 && G.day-en.day<270);
+      if(!recentPlus && h.loyalty>30 && G.turn>=3) houseLoyalty(h, -1, 'left out of the Crown’s counsels');
+    });
+  });
+  // rival crowns keep their own feasts and change their own course — the Gazette hears of both
+  ['aurelia','meridian','sable'].forEach(id=>{
+    const e=emp(id); if(!e) return; const houses=housesOf(id); if(!houses.length) return;
+    if(e.gold>=90 && rnd()<0.35){
+      e.gold-=50;
+      const cap=G.regions.find(r=>r.name===e.capitalName);
+      houses.forEach(h=>{ if(cap && (h.fiefs||[]).some(f=>f===cap.id || (rById[f] && cap.neighbors.includes(f)))) houseLoyalty(h, 3, 'honoured at their crown’s feast'); });
+      if(rnd()<0.5) gazette('🍗 The '+e.name+' feasts its houses — carvers, sugar-work, and loyalty bought the honest way.');
+    }
+    const atw=Object.values(e.relations||{}).some(rel=>rel.war);
+    if(!decreeChangeLocked(id) && rnd()<0.3){
+      const want= atw? ((G.turn%2)? 'muster':'levy') : ['tithe','harbour','none'][Math.floor(rnd()*3)];
+      if(want!==decreeOf(id)){ G.court.decree[id]=want; G.court.decreeDay[id]=G.day; gazette('📜 The '+e.name+' decrees <b>'+DECREES[want].label+'</b> — '+DECREES[want].blurb+'.'); }
+    }
+  });
+}
+/* the taverns judge every house by its lord's table */
+function rumorHouse(){
+  if(!G||!G.court) return null;
+  const all=[]; Object.keys(G.court.houses||{}).forEach(cid=>housesOf(cid).forEach(h=>all.push({h, cid})));
+  if(!all.length) return null;
+  const it=all[_rumorIx % all.length], h=it.h, e=emp(it.cid);
+  const fiefNames=(h.fiefs||[]).map(f=>{ const r=rById[f]; return r? r.name : null; }).filter(Boolean);
+  if(h.loyalty<34) return 'they say Lord '+h.lord+' of '+h.name+' keeps a cold table — no carver at his board has smiled since spring, and the '+e.name+' should count its friends. '+(fiefNames[0]? fiefNames[0]+' hears it first.' : '');
+  return 'Lord '+h.lord+' of '+h.name+' holds '+(fiefNames.slice(0,2).join(' and ')||'no town worth the naming')+' for the '+e.name+', and the taverns judge the house '+loyaltyWord(h.loyalty)+'.';
+}
 </script>
 <script>
 /* ================= AI ================= */
@@ -4736,7 +5255,9 @@ const GEN_TRAITS=['Bold','Steady','Logistician','Beloved'];
 const ADM_TRAITS=['Bold','Gunnery','Weatherly','Beloved'];
 function newGeneral(){ return {name:GENERAL_NAMES[Math.floor(rnd()*GENERAL_NAMES.length)], traits:[], wins:0};}
 function newAdmiral(){ return {name:ADMIRAL_NAMES[Math.floor(rnd()*ADMIRAL_NAMES.length)], traits:[], wins:0};}
-function armyPowerMult(a){ if(!a) return 1; let m=1+0.06*(a.vet||0); const g=a.general; if(g&&g.traits.includes('Bold')) m*=1.08; return m;}
+function armyPowerMult(a){ if(!a) return 1; let m=1+0.06*(a.vet||0); const g=a.general; if(g&&g.traits.includes('Bold')) m*=1.08;
+  if(a.houseId && typeof G!=='undefined' && G && G.court && typeof houseById==='function'){ const h=houseById(a.houseId); if(h) m*= 0.96 + (h.loyalty||0)*0.0008; } // WAVE 22: a lord's host fights for his house's heart (loyalty 50 = ×1.00, 100 = ×1.04)
+  return m;}
 function fleetPowerMult(f){ if(!f) return 1; let m=1+0.06*(f.vet||0); const ad=f.admiral; if(ad&&ad.traits.includes('Bold')) m*=1.08; if(ad&&ad.traits.includes('Gunnery')) m*=1.05; return m;}
 function armyHonours(a, res){
 if(!a||!res) return;
@@ -5666,6 +6187,7 @@ blockadeDaily();
 diplomacyDaily();
 realmBreathesDaily();
 tavernRumorDaily(); // WAVE 19: the taverns grind their one tale in three days, from true state only
+guardAttritionDaily(); // WAVE 22: a watched coast is no quiet coast for enemy hulls
 // the cold-open crisis keeps a young reign honest: pirates by the fourth dawn, not the first season
 { const co=G.coldopen||(G.coldopen={stage:0,done:{}});
   if(G.day>=4 && !co.done.pirates){ co.done.pirates=1; spawnFreebooters(); }
@@ -5798,7 +6320,7 @@ if(/besiege|invest|lay siege/.test(txt)&&r&&a){
   if(a.at) ordReply('🎇 <b>'+a.name+'</b> is on the march — a siege begins from standing ground beside the walls, not from the road. '+heard);
   else if(siegeAt(r.id)) ordReply('🎇 <b>'+r.name+'</b> is already ringed — the ladder climbs without new orders. '+heard);
   else if(!siegeEligible(r)) ordReply('🎇 <b>'+r.name+'</b> has no walls worth a siege — march and take it in the open. '+heard);
-  else if(!r.neighbors.includes(a.atRegion)) ordReply('🎇 <b>'+a.name+'</b> stands too far off — a siege wants the host in a region beside '+r.name+'. March it next door first. '+heard);
+  else if(!r.neighbors.includes(a.atRegion)){ if(orderTask(a,'besiege',r.id,null)) ordReply('🎇 <b>'+a.name+'</b> marches to take up the ring round <b>'+r.name+'</b> — the ladder starts when the host halts beside her walls. '+heard); else ordReply('🎇 <b>'+a.name+'</b> stands too far off — a siege wants the host in a region beside '+r.name+'. March it next door first. '+heard); }
   else if(startSiege(a, r)) ordReply('🎇 <b>'+a.name+'</b> invests <b>'+r.name+'</b> — the ring closes. Five stages, telegraphed day by day: invested, batteries, breach, starving, then storm or surrender. '+siegeChanceText(a, r)+' Say “storm '+r.name.toLowerCase()+'” when the breach looks kind.');
   else ordReply('🎇 The investment of <b>'+r.name+'</b> cannot be laid — most like you are at peace with its holders, or the host is otherwise bound. '+heard);
   return;
@@ -5842,10 +6364,27 @@ splitArmy(a);
 const young=(G.armies||[]).find(x=>!idsBefore.has(x.id));
 lastOrder={label:'the splitting of '+a.name, undo:()=>{ const u=(G.armies||[]).find(x=>x.id===aid); if(young) G.armies=(G.armies||[]).filter(x=>x.id!==young.id); if(u) u.men=before; }};
 ordReply('✂ <b>'+a.name+'</b> divides — two banners where one stood ('+fmt(before)+' men between them). Say “cancel” to unwrite it.'); return; }
-if(/hold|garrison|dig in|stay/.test(txt)&&!r){ a.stance='hold'; a.holdUntil=1e9; ordReply('🛡 <b>'+a.name+'</b> digs in where it stands — the road is blocked.'); save(); return;}
+// WAVE 22: standing-task orders by name — "Army of Porto, hold the strait"
+if(/watch|guard|hold the strait|hold the channel|hold the passage|hold the coast/.test(txt)){
+if(a.at){ ordReply('🗼 <b>'+a.name+'</b> is on the march — the watch is set when it halts, Majesty. '+heard); return; }
+const z2=z||nearestSeaZoneTo(rById[a.atRegion], true);
+if(!z2){ ordReply('🗼 There is no water near '+a.name+' worth a watch, Majesty. '+heard); return; }
+if(orderTask(a,'watch',null,z2.id)){ ordReply('🗼 <b>'+a.name+'</b> to watch the <b>'+z2.name+'</b> — the host makes for her shore and holds it against all comers. '+heard); save(); }
+else ordReply('🗼 No shore road serves '+a.name+' to the '+z2.name+', Majesty. '+heard); return;}
+if(/relieve|lift the blockade|raise the blockade/.test(txt)&&r&&r.isPort){
+if(a.at){ ordReply('➕ '+a.name+' is on the march — halt it by tap, then speak again. '+heard); return; }
+if(orderTask(a,'relieve',r.id,null)){ ordReply('➕ <b>'+a.name+'</b> makes for <b>'+r.name+'</b> to relieve her — the host will hold her shore. '+heard); save(); }
+else ordReply('➕ '+a.name+' cannot reach '+r.name+' by land, Majesty. '+heard); return;}
+if(/hold|garrison|dig in|keep|stay/.test(txt)&&r){
+if(a.at){ ordReply('🛡 '+a.name+' is on the march — halt it by tap, then speak again. '+heard); return; }
+if(r.id===a.atRegion){ a.task='hold'; a.taskRegion=r.id; a.taskZone=null; a.stance='hold'; a.holdUntil=1e9; ordReply('🛡 <b>'+a.name+'</b> holds <b>'+r.name+'</b> — the banner stays planted until you say otherwise. '+heard); }
+else if(orderTask(a,'hold',r.id,null)) ordReply('🛡 <b>'+a.name+'</b> will march and HOLD <b>'+r.name+'</b> — the banner stays planted until you say otherwise. '+heard);
+else { ordReply('🛡 No road carries '+a.name+' to '+r.name+', Majesty. '+heard); return; }
+save(); return;}
+if(/hold|garrison|dig in|stay/.test(txt)&&!r){ a.stance='hold'; a.holdUntil=1e9; a.task='hold'; a.taskRegion=a.atRegion; a.taskZone=null; ordReply('🛡 <b>'+a.name+'</b> digs in where it stands — the road is blocked.'); save(); return;}
 if(r){ if(a.at){ ordReply('🚶 '+a.name+' is already on the march — halt it by tap, then speak again. '+heard); return;}
 const hostile=r.owner!=='player'&&(!r.owner || atWar('player',r.owner) ||!r.owner);
-if(orderMarch(a,r)){ lastOrder={label:a.name+' marching on '+r.name, undo:()=>{ const u=(G.armies||[]).find(x=>x.id===aid); if(u) restoreUnit(u,snap);}};
+if(orderMarch(a,r)){ a.task=null; a.taskRegion=null; a.taskZone=null; lastOrder={label:a.name+' marching on '+r.name, undo:()=>{ const u=(G.armies||[]).find(x=>x.id===aid); if(u) restoreUnit(u,snap);}};
 ordReply('🚶 <b>'+a.name+'</b> ('+fmt(a.men)+' men'+(a.vet?', '+'◆'.repeat(a.vet):'')+') marches on <b>'+r.name+'</b> — ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days. '+(r.owner&&r.owner!=='player'&&atWar('player',r.owner)? 'Forecast at the gates: '+forecastText(Math.round(a.men*armyPowerMult(a)),'player',r)+'. ': (r.owner&&r.owner!=='player'? 'You are at peace with its holders — the host will camp at the border. ': 'An empty chair: it will be yours on arrival. '))+'Say “cancel” to unwrite it.');}
 else ordReply('🚶 No land road from '+rById[a.atRegion].name+' to '+r.name+'. '+heard); return;}
 }
@@ -5970,6 +6509,7 @@ function endSeason(){
   EMPIRES.map(e=>e.id).forEach(id=>{ const inc=collectIncome(id); if(id==='player') G.lastIncome=inc; });
   growWorld();
   secondAgeSeason();
+  courtSeasonTick(); // WAVE 22: decrees grind, the forgotten cool, rival courts feast and decree in their turn
   ['aurelia','meridian','sable'].forEach(id=>{ if(G.empires[id]) aiTurn(id); });
   // trade supremacy streak
   const trades={}; EMPIRES.forEach(e=>{ if(G.empires[e.id]) trades[e.id]=tradeIncome(e.id); });
@@ -6104,6 +6644,8 @@ $('#btn-realm').onclick=()=>{
       ' · <b>Power '+power+'</b>'+pArrow+
       (emp(e2.id).tradeStreak>=3? ' · leads trade ('+emp(e2.id).tradeStreak+'/5)':'')+
       (emp(e2.id).debt>0? ' · owes '+fmt(emp(e2.id).debt)+'g':'')+'</span></div>';
+    const hs22=housesOf(e2.id);
+    if(hs22.length) h+='<div class="dip-row"><span class="who"></span><span class="rel">⚜ '+(e2.id==='player'? 'Your houses: ' : 'Its houses: ')+hs22.map(x=>x.name.replace(/^House /,'')+' · '+x.lord+' ('+loyaltyWord(x.loyalty)+')').join(' · ')+'</span></div>';
   });
   h+='<div class="rule"></div><h3 style="font-variant:small-caps">War College &amp; Dockyards</h3>';
   h+='<p>Advance your arms. Each tier multiplies battlefield strength.</p>';
@@ -6121,7 +6663,7 @@ $('#btn-realm').onclick=()=>{
     const row=document.createElement('div'); row.className='dip-row';
     const where=a.at? 'marching on '+(rById[a.destRegion]? rById[a.destRegion].name:'…')+' · ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days out'
                      : 'at '+(rById[a.atRegion]? rById[a.atRegion].name:'—')+(a.stance==='hold'? ' · 🛡 holding the road':'');
-    row.innerHTML='<span class="who">🪖 '+a.name+'</span><span class="rel">'+fmt(a.men)+' men · '+where+'</span>';
+    row.innerHTML='<span class="who">🪖 '+a.name+'</span><span class="rel">'+fmt(a.men)+' men · '+where+(a.general? ' · under '+a.general.name : '')+(a.houseId&&houseById(a.houseId)? ' · ⚜ '+houseById(a.houseId).name : '')+(a.task? ' · 🎯 '+armyTaskText(a) : '')+'</span>';
     const fb=document.createElement('button'); fb.className='mini-btn'; fb.textContent='Fly to';
     fb.onclick=()=>{ $('#realm').classList.remove('open'); closeSheet();
       const home=rById[a.atRegion]; const p=a.at? a.at.pos : home; if(p) flyCameraToWorld(p.x, p.y, 150); };
@@ -6145,6 +6687,45 @@ $('#btn-realm').onclick=()=>{
     ob.onclick=()=>{ $('#realm').classList.remove('open'); flyCameraToWorld(r.x, r.y, 200); selectRegion(r); };
     row.appendChild(ob); b.appendChild(row);
   });
+  // ⚜ THE COURT — great houses, decrees, and the court's theatre (WAVE 22)
+  const cth=document.createElement('h3'); cth.textContent='⚜ The Court — Great Houses'; b.appendChild(cth);
+  const courtNote=document.createElement('p'); courtNote.style.fontSize='12px';
+  courtNote.textContent='Every crown is a household of houses. Their lords hold your towns as fiefs, muster retinues from real acres and spears, and remember every kindness and every slight — each step written in their ledger.';
+  b.appendChild(courtNote);
+  const myHouses=housesOf('player');
+  if(!myHouses.length){ const np=document.createElement('p'); np.style.fontSize='12px'; np.textContent='No great houses yet — the clerks are still writing the roll.'; b.appendChild(np); }
+  myHouses.forEach(hh=>{
+    const row=document.createElement('div'); row.className='dip-row';
+    const last=(hh.ledger&&hh.ledger[0])? ' · last: '+(hh.ledger[0].d>0?'+':'')+hh.ledger[0].d+' '+hh.ledger[0].why : '';
+    const fiefNames=(hh.fiefs||[]).map(fid=>{ const fr=rById[fid]; return fr? fr.name : null; }).filter(Boolean);
+    row.innerHTML='<span class="who">⚜ '+hh.name+'</span><span class="rel">Lord '+hh.lord+' ('+(hh.traits||[]).join(', ')+') · <b>loyalty '+hh.loyalty+'</b> ('+loyaltyWord(hh.loyalty)+')'+(hh.sulk? ' · <b>in open sulk</b>' : '')+
+      ' · fiefs: '+(fiefNames.join(', ')||'none')+' · retinue ~'+fmt(houseRetinueMen(hh))+' spears'+(hh.renown? ' · renown '+hh.renown : '')+last+'</span>';
+    b.appendChild(row);
+  });
+  const dh=document.createElement('h3'); dh.textContent='📜 Decrees of the Realm'; b.appendChild(dh);
+  const curDec=decreeOf('player');
+  const dp=document.createElement('p'); dp.style.fontSize='12px';
+  dp.innerHTML='The realm runs under <b>'+DECREES[curDec].label+'</b> — '+DECREES[curDec].blurb+'. The court may change its course once a season; every rival crown decrees by the same book.';
+  b.appendChild(dp);
+  const decRow=document.createElement('div');
+  Object.keys(DECREES).forEach(k=>{
+    const btn=document.createElement('button'); btn.className='mini-btn';
+    const dLocked=decreeChangeLocked('player');
+    btn.textContent=(k===curDec? '✓ ' : '')+DECREES[k].label+(k===curDec? ' (in force)' : (dLocked? ' · the seal is spent this season' : ' · decree it'));
+    if(k!==curDec) btn.onclick=()=>{ if(decreeChangeLocked('player')){ toast('📜 The court changes its course once a season — the seal is spent.'); return; } setDecree('player', k); $('#btn-realm').click(); };
+    decRow.appendChild(btn);
+  });
+  b.appendChild(decRow);
+  const th=document.createElement('h3'); th.textContent='🎉 Court & Banners'; b.appendChild(th);
+  const cRow=document.createElement('div');
+  const mkCBtn=(label, fn)=>{ const btn=document.createElement('button'); btn.className='mini-btn'; btn.textContent=label; btn.onclick=fn; cRow.appendChild(btn); };
+  const feastHeld=G.court && G.court.feastAt && G.court.feastAt.player===seasonNo();
+  const tourneyHeld=G.court && G.court.tourneyAt && G.court.tourneyAt.player===seasonNo();
+  const bannersCalled=G.court && G.court.bannersAt && G.court.bannersAt.player===seasonNo();
+  mkCBtn('🍗 '+(feastHeld? 'Feast held this season' : 'Hold a Feast · '+feastCost()+'g'), ()=>{ holdFeast(); $('#btn-realm').click(); });
+  mkCBtn('🏆 '+(tourneyHeld? 'Tourney held this season' : 'Hold a Tourney · '+TOURNEY_COST+'g'), ()=>{ if(holdTourney()) $('#btn-realm').click(); });
+  mkCBtn('🚩 '+(bannersCalled? 'Banners called this season' : 'Summon the Banners · '+BANNERS_COST+'g'), ()=>{ const s=summonBanners('player'); toast('🚩 '+(s.raised>0? 'The banners answer: '+fmt(s.raised)+' spears take the road.' : 'No house answers the call.')); $('#btn-realm').click(); });
+  b.appendChild(cRow);
   // 🧾 CHARTERED COMPANIES — every seal on the water: whose it is, where it feeds, what it rendered (WAVE 16)
   const chh=document.createElement('h3'); chh.textContent='🧾 Chartered Companies'; b.appendChild(chh);
   const comps=(G.companies||[]);
@@ -6252,7 +6833,7 @@ function save(){ if(window.__clashResolveNow) window.__clashResolveNow(); syncUn
 function load(){ try{ const s=localStorage.getItem('riftsail-save'); return s? JSON.parse(s):null; }catch(e){ return null; } }
 function startNew(pick){
   if(pick) START_PICK=pick;
-  G=freshState(); rebuildIndex(); ensureIds(); selected=null; closeSheet();
+  G=freshState(); rebuildIndex(); ensureIds(); ensureCourtMeta(G); selected=null; closeSheet();
   coachStep = (localStorage.getItem('riftsail-coached')==='1')? 99 : 0;
   VEIL_IDS.forEach(v=>closeVeil(v)); // a new campaign starts with clean glass — no veil survives the restart
   eventPaused=false; tickerLines.length=0; renderTicker();
@@ -6291,6 +6872,7 @@ fitCanvas();
   ensureIds(); syncPositions();
   ensureFeelMeta(G);
   ensureWave15Meta(G);
+  ensureCourtMeta(G); // WAVE 22: houses, decrees & prosperity ride along on every save
   if(!Array.isArray(G.storms)||!G.storms.length) G.storms=initStormCells(G.seas, G.regions);
   fitWorld(); refreshHUD(); refreshClockUI(); renderTicker();
   requestAnimationFrame(draw);
@@ -6867,7 +7449,8 @@ try{
     if(port){ const z=seaById[r.seaZone]; dx=SX(z.x)-bx; dz=SZ(z.y)-bz; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L; }
     const shoreAng=Math.atan2(dz,dx);
     const R=[7.5,11,15,19][r.tier]*(cap?1.12:1);
-    const target=[9,26,44,72][r.tier]+(cap?8:0);
+    const pvLots=r.prosp==null?50:r.prosp; // WAVE 22: a thriving town fills its streets; a suffering one thins toward shells (the plain middle dresses exactly as it always did)
+    const target=Math.max(6, Math.round(([9,26,44,72][r.tier]+(cap?8:0)) * (pvLots>=50? 1+(pvLots-50)*0.0056 : 1-(50-pvLots)*0.010)));
     const lots=[];
     const rings=[{f:0.40,k:'tall',frac:0.30},{f:0.68,k:'house',frac:0.45},{f:0.94,k:'small',frac:0.25}];
     rings.forEach((ring,ri)=>{
@@ -6885,7 +7468,7 @@ try{
       }
     });
     const gardens=[]; // enclosed-block hearts: green, still, and human
-    if(r.tier>=1){ const ng=r.tier>=2?2:1;
+    if(r.tier>=1){ let ng=r.tier>=2?2:1; const pv22=r.prosp==null?50:r.prosp; if(pv22>=70) ng++; if(pv22<28) ng=0; // WAVE 22: gardens bloom or go to weeds with the town's fortune
       for(let i=0;i<ng;i++){ const a=rand()*Math.PI*2, rr2=R*0.55;
         const gx=bx+Math.cos(a)*rr2, gz=bz+Math.sin(a)*rr2*0.92;
         if(onLand(gx,gz,r)) gardens.push({x:gx, z:gz}); } }
@@ -8110,7 +8693,7 @@ try{
     }
     return d;
   }
-  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0, KIT.ready?1:0, r.greatWork||'', r.isPort? awningTint(r) : '', breachAngleAt(r)!=null? 'BR':''].join('|'); } // a port's awnings re-dress when its cheapest good flips; WAVE 13: a breach re-dresses the walls until the ring comes down
+  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0, KIT.ready?1:0, r.greatWork||'', r.isPort? awningTint(r) : '', breachAngleAt(r)!=null? 'BR':'', 'P'+Math.round(((r.prosp==null?50:r.prosp))/14)].join('|'); } // a port's awnings re-dress when its cheapest good flips; WAVE 13: a breach re-dresses the walls until the ring comes down; WAVE 22: prosperity re-dresses the town as it waxes and wanes
   function disposeBuilt(o){ // kit ship hulls share geometry across the world — never dispose those
     o.traverse(n=>{
       let p=n, shared=false;
@@ -8735,7 +9318,7 @@ try{
       if(a.at){
         const dest=rById[a.destRegion];
         el.textContent = '🪖 '+kfmt(a.men)+' → '+dest.name+' · '+Math.max(1,Math.ceil(a.arriveDay-G.day))+'d';
-      } else el.textContent='🪖 '+kfmt(a.men)+(a.siegeId?' 🎇':(a.stance==='hold'?' 🛡':''));
+      } else el.textContent='🪖 '+kfmt(a.men)+(a.siegeId?' 🎇':(a.task==='watch'?' 🗼':(a.task==='relieve'?' ➕':(a.stance==='hold'?' 🛡':''))));
       el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+(p[0]+((slot%2)? 46:-46)*(slot?1:0)).toFixed(1)+'px,'+(p[1]-Math.floor(slot/2)*24).toFixed(1)+'px)';
     });
     // clash chips: the two sides bleeding down in step with the spectacle below
