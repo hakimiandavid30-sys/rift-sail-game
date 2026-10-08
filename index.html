@@ -1055,6 +1055,26 @@ const LAND_PATHS=[ // continent silhouettes traced from Natural Earth 50m coastl
  [[120,60],[300,35],[520,40],[700,70],[770,130],[740,200],[640,250],[420,265],[220,255],[90,220],[45,150]],
 ];
 LAND_PATHS.forEach(p=>p.forEach(q=>{ q[0]*=WS; q[1]*=WS; })); // stretch the silhouettes onto the grandeur chart
+{ // LOOK-TO-9: the Second Age shores were laid down coarse (a dozen points to a continent) — subdivide
+  // ONLY the new-coast splines through a Catmull-Rom pass and roughen the edge with seeded noise, so
+  // Brazil/Guinea/North America stop reading as low-poly slabs. The traced old-world core (hundreds of
+  // surveyed points per path) keeps its line untouched. Deterministic: same shore on every load.
+  function coastRoughen(pts, per, amp, seed){
+    let s=seed|0; const rnd=()=>{ s=(s*16807)%2147483647; return (s&0xffff)/0xffff; };
+    const n=pts.length, out=[];
+    for(let i=0;i<n;i++){
+      const p0=pts[(i-1+n)%n], p1=pts[i], p2=pts[(i+1)%n], p3=pts[(i+2)%n];
+      let nx=-(p2[1]-p1[1]), ny=(p2[0]-p1[0]); const nl=Math.hypot(nx,ny)||1; nx/=nl; ny/=nl;
+      for(let j=0;j<per;j++){ const t=j/per, t2=t*t, t3=t2*t;
+        const cr=(a,b,c,d)=>0.5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t2+(-a+3*b-3*c+d)*t3);
+        const off=Math.sin(t*Math.PI)*amp*(rnd()*2-1); // noise bays bite mid-segment, vertices stay surveyed
+        out.push([cr(p0[0],p1[0],p2[0],p3[0])+nx*off, cr(p0[1],p1[1],p2[1],p3[1])+ny*off]);
+      }
+    }
+    return out;
+  }
+  for(let i=0;i<LAND_PATHS.length;i++) if(LAND_PATHS[i].length<40) LAND_PATHS[i]=coastRoughen(LAND_PATHS[i], 7, 9, 4100+i*131);
+}
 // decorative waves precomputed
 const WAVES=[]; for(let i=0;i<340;i++) WAVES.push([Math.random()*WORLD_W, Math.random()*WORLD_H, (8+Math.random()*22)*WS]);
 
@@ -3749,11 +3769,18 @@ try{
      owner tint lives on walls, banners and domes only. ---- */
   // roof rows are OVERDRIVE multipliers [r,g,b] (>1 allowed): the kit atlas roof swatch is teal-slate,
   // so a polite hex tint only makes mud — the red channel has to shout to land terracotta.
-  const ROOF_PAL={ slate:[2.0,1.1,1.5], terracotta:[5.2,0.62,0.22], wheat:[4.2,0.85,0.25], olive:[3.8,0.7,0.22], rock:[3.4,2.2,1.8], forest:[1.7,1.15,0.3], sand:[5.6,2.1,0.9], palm:[1.3,1.5,0.5] };
-  const ROOF_HEX={ slate:'#5d7186', terracotta:'#b45a32', wheat:'#9a6c34', olive:'#8f6132', rock:'#8d867c', forest:'#66743c', sand:'#dda96e', palm:'#548257' }; // flat display hexes — the procedural fallback paints cones with these
-  const WALL_PAL={ slate:'#e8e2d2', terracotta:'#f2e6cf', wheat:'#efe3c8', olive:'#ece0c4', rock:'#e3ddd0', forest:'#e9dfc6', sand:'#f4e8d2', palm:'#f6efdd' };
+  const ROOF_PAL={ slate:[2.0,1.1,1.5], terracotta:[5.2,0.62,0.22], wheat:[4.2,0.85,0.25], olive:[3.8,0.7,0.22], rock:[3.4,2.2,1.8], forest:[1.7,1.15,0.3], sand:[5.6,2.1,0.9], palm:[1.3,1.5,0.5],
+    tropic:[4.4,2.6,1.05], redtile:[5.6,0.5,0.18], ochre:[3.2,1.9,0.85], timber:[2.4,1.3,0.65] }; // LOOK-TO-9 new-world rows: palapa thatch / Brazil red tile / Guinea dark thatch / colonial shingle
+  const ROOF_HEX={ slate:'#5d7186', terracotta:'#b45a32', wheat:'#9a6c34', olive:'#8f6132', rock:'#8d867c', forest:'#66743c', sand:'#dda96e', palm:'#548257',
+    tropic:'#a8895c', redtile:'#b84a28', ochre:'#96754a', timber:'#6f5136' }; // flat display hexes — the procedural fallback paints cones with these
+  const WALL_PAL={ slate:'#e8e2d2', terracotta:'#f2e6cf', wheat:'#efe3c8', olive:'#ece0c4', rock:'#e3ddd0', forest:'#e9dfc6', sand:'#f4e8d2', palm:'#f6efdd',
+    tropic:'#f8f2df', redtile:'#f4ecd8', ochre:'#dfa860', timber:'#d8c9a8' }; // whitewash west / whitewash south / ochre earth / weathered boards
   function biomeKey(r){
-    if(r.group==='I') return 'palm';
+    if(r.name==='Boston'||r.name==='New York'||r.name==='Virginia') return 'timber'; // the old colonial trio rides group 'I' but stands on the timber coast
+    if(r.group==='I') return r.x<WORLD_W*0.45? 'tropic' : 'palm'; // Caribbean + Atlantic isles wear thatch; the spice reach keeps palm-green
+    if(r.group==='B') return 'redtile';  // Brazil: red tile over whitewash
+    if(r.group==='F') return 'ochre';    // Guinea: ochre earth under dark thatch
+    if(r.group==='A') return 'timber';   // the colonial coast: timber-brown shingles
     if(r.terrain==='forest') return 'forest';
     if(r.terrain==='hills') return 'rock';
     if(r.terrain==='marsh') return 'slate';
@@ -4257,6 +4284,24 @@ try{
       dec.add(new THREE.CircleGeometry(2.6,14).rotateX(-Math.PI/2), M4(g2.x, by+0.06, g2.z), '#5f7d35');
       if(KIT.geo.tree) ft.add(KIT.geo.tree, M4(g2.x+1.1, by, g2.z-0.8, 0, P.rand()*6.28, 0, 2.0, 2.0, 2.0));
     });
+    { // LOOK-TO-9: warm shores grow palms — flattened frond cones on a leaning trunk; no new model needed,
+      // the recolor does the climate and the silhouette does the rest (Caribbean, Brazil, Guinea, spice isles)
+      const bkNow=biomeKey(r);
+      if(bkNow==='tropic'||bkNow==='palm'||bkNow==='redtile'||bkNow==='ochre'){
+        const nPalm=4+r.tier*2, prand=mulberry(r.id*104729+7);
+        const trunkG=new THREE.CylinderGeometry(0.16,0.26,3.4,5); trunkG.translate(0,1.7,0); trunkG.rotateZ(0.10); // lean baked at the base
+        const frondG=new THREE.ConeGeometry(0.5,3.0,4); frondG.scale(1,1,0.30); frondG.translate(0,1.45,0); frondG.rotateX(1.22); // flattened, tipped well down — a crown, not a sparkler
+        for(let i=0;i<nPalm;i++){
+          const a=prand()*Math.PI*2, dd=P.R*(0.55+prand()*0.5);
+          const px2=bx+Math.cos(a)*dd, pz2=bz+Math.sin(a)*dd*0.92;
+          if(!onLand(px2,pz2,r)) continue;
+          const sc=0.85+prand()*0.5, lean=prand()*6.28, sy=sc*(0.9+prand()*0.35);
+          b.add(trunkG, M4(px2, by, pz2, 0, lean, 0, sc, sy, sc), '#7a5c36');
+          const tx2=px2+Math.cos(lean)*0.28*sc, tz2=pz2-Math.sin(lean)*0.28*sc; // the crown sits where the lean left it
+          for(let k=0;k<6;k++) b.add(frondG, M4(tx2, by+3.35*sy, tz2, 0, lean+k*1.047+prand()*0.3, 0, sc, sc, sc), k%2? '#4e7d3a':'#639a46');
+        }
+      }
+    }
     // plaza heart: cobble disc just off the hero cluster, and the town's one main street worn into the ground (plaza → gate, plaza → quay)
     const plazaR=Math.max(3.4, P.R*0.26);
     const px=bx+Math.cos(P.gateAng)*P.R*0.2, pz=bz+Math.sin(P.gateAng)*P.R*0.2*0.92;
@@ -4851,6 +4896,7 @@ try{
       const blocked = isBlockaded(a)||isBlockaded(b);
       const mat = new THREE.MeshBasicMaterial({ color: blocked? 0x8a3a28 : (pays? new THREE.Color(emp(own).color) : 0xe6dcbe),
         transparent:true, opacity: pays? 1.0 : 0.5 });
+      mat.userData.base = pays? 1.0 : 0.5; // LOOK-TO-9: the frame loop fades ribbons to hairlines at world zoom
       laneGroup.add(new THREE.Mesh(geo, mat));
       if(pays && !blocked) laneCurves.push(curve);
     }));
@@ -5141,9 +5187,11 @@ try{
   function updateChips(){
     const used = new Set();
     const major = r => r.tier>=2 || CAPITALS.includes(r.name);
+    const thinLabels = innerWidth<620 && dist>1450; // LOOK-TO-9: at phone world view only capitals speak — the chart breathes; mid-band restores every name (desktops untouched)
     G.regions.forEach(r=>{
       const p = project(SX(r.x), BASE_Y+7.5, SZ(r.y));
-      const showName = p && (dist<150 || (dist<330 && major(r)) || CAPITALS.includes(r.name) || (selected&&selected.type==='region'&&selected.id===r.id));
+      const showName = p && ((selected&&selected.type==='region'&&selected.id===r.id) ||
+        (thinLabels? CAPITALS.includes(r.name) : (dist<150 || (dist<330 && major(r)) || CAPITALS.includes(r.name))));
       const nk = 'n'+r.id;
       if(showName){
         used.add(nk); const el = chip(nk, 'chip name'+(major(r)?' major':''));
@@ -5174,7 +5222,7 @@ try{
       el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+(p[1]+(dist>330?16:0)).toFixed(1)+'px)';
     });
     ['Gibraltar Strait','The Channel'].forEach(nm=>{
-      const z = G.seas.find(s=>s.name===nm); if(!z || dist>340) return;
+      const z = G.seas.find(s=>s.name===nm); if(!z || (dist>340 && !thinLabels)) return; // straits stay named on the phone world chart — they are the roads
       const p = project(SX(z.x), 4, SZ(z.y)); if(!p) return;
       const sk='s'+nm; used.add(sk); const el=chip(sk,'chip name');
       el.textContent='⚓ '+nm; el.style.display='block';
@@ -5336,6 +5384,10 @@ try{
     const showSats = dist < 480; // spreads further on the big chart, so hamlets earn their keep from further out
     const showDec = dist < 560; // zoom-band LOD: ground glyphs fade out before the world view (towns read by silhouette there)
     discs.forEach(d=>{ if(d.owner) d.fill.material.opacity = dist>330? 0.56 : 0.42; }); // the wash deepens as you pull back
+    if(laneGroup){ // LOOK-TO-9: ribbons near, hairlines far — the ticker and arrows carry the story at world zoom
+      const lf=THREE.MathUtils.clamp(1.18-dist*0.0005, 0.30, 1);
+      laneGroup.children.forEach(m=>{ m.material.opacity=(m.material.userData.base||0.5)*lf; });
+    }
     settlements.forEach(v=>{ if(v.sat && v.sat.visible !== showSats) v.sat.visible = showSats;
       if(v.dec && v.dec.visible !== showDec) v.dec.visible = showDec;
       if(v.far){ const fb = dist > 650; // far band: silhouette proxies stand in for the full kit
@@ -5354,23 +5406,24 @@ try{
       if(show){ const w=(typeof WINDS!=='undefined'? WINDS[G.seasonIdx&3] : {x:1,y:0}); const L=Math.hypot(w.x,w.y)||1, ux=w.x/L, uy=w.y/L;
         const anchors=[]; G.seas.forEach(z=>{ anchors.push([z.x,z.y]); z.neighbors.forEach(nid=>{ const n=seaById[nid]; if(n&&z.id<nid) anchors.push([(z.x+n.x)/2,(z.y+n.y)/2]); }); });
         const rotY=-Math.atan2(uy,ux);
-        const ws=THREE.MathUtils.clamp(dist/110, 1, 9); // arrows grow with the chart, or they vanish at world view
+        const ws=THREE.MathUtils.clamp(dist/150, 0.8, 5); // LOOK-TO-9: arrows whisper, never shout — smaller cap, and…
+        if(windArrows[0]) windArrows[0].material.opacity=(0.30+0.10*Math.sin(t*1.7))*THREE.MathUtils.clamp(1.25-dist*0.00045, 0.4, 1); // …one soft shared alpha that thins with distance (the material is shared, so per-arrow alpha never truly varied)
         windArrows.forEach((m,i)=>{ const a=anchors[i%anchors.length]; const ph=((t*0.55)+(i*0.37))%1;
           m.position.set(SX(a[0])+ux*(ph-0.5)*46, BASE_Y+3.2, SZ(a[1])+uy*(ph-0.5)*46);
-          m.rotation.y=rotY; m.scale.set(ws,ws,ws); m.material.opacity=0.28+0.3*Math.sin(ph*Math.PI); });
+          m.rotation.y=rotY; m.scale.set(ws,ws,ws); });
       }
     }
     { // the Second Age sky: the clock is the sun — dawn, noon, gold, dusk, and a lit night
       const hf=((G&&G.hour)||9), nf=(hf<5.2||hf>=19.2)?1:(hf<6.8?0.55:(hf>=17.8&&hf<19.2)?0.4:0);
       const dusk=(hf>=17&&hf<19.5)?1:0;
       const bgHex=nf>0.7? 0x0e1a28 : (dusk? 0x51606e : 0x274b5e);
-      sun.intensity=THREE.MathUtils.lerp(1.95, 0.1, nf);
+      sun.intensity=THREE.MathUtils.lerp(1.95, 0.55, nf); // LOOK-TO-9: at night the moon takes the key light — steel-blue, present, not an absence
       sun.color.setHex(nf>0.7? 0x8fb2e8 : (dusk? 0xff9a4d : 0xffbe78));
-      hemi.intensity=THREE.MathUtils.lerp(0.95, 0.3, nf);
+      hemi.intensity=THREE.MathUtils.lerp(0.95, 0.34, nf);
       fill.intensity=THREE.MathUtils.lerp(0.3, 0.1, nf);
       if(scene.background&&scene.background.setHex) scene.background.setHex(bgHex);
       if(scene.fog&&scene.fog.color) scene.fog.color.setHex(nf>0.7? 0x16222f : (dusk? 0xd98f57 : 0xe3c298));
-      if(scene.environmentIntensity!==undefined) scene.environmentIntensity=THREE.MathUtils.lerp(1, 0.12, nf); // the PMREM sky obeys the hour too
+      if(scene.environmentIntensity!==undefined) scene.environmentIntensity=THREE.MathUtils.lerp(1, 0.18, nf); // the PMREM sky obeys the hour too
       renderer.setClearColor(bgHex);
       // the sea is shader-lit: grade its palette directly
       if(!waterUniforms._base) waterUniforms._base={deep:waterUniforms.uDeep.value.clone(), shallow:waterUniforms.uShallow.value.clone(), sky:waterUniforms.uSky.value.clone()};
@@ -5384,8 +5437,20 @@ try{
         const st2=SEASON_TINTS[G.seasonIdx&3]||SEASON_TINTS[0];
         _seasonTint.setRGB(st2[0]*(1-0.52*nf), st2[1]*(1-0.46*nf), st2[2]*(1-0.12*nf)+0.10*nf); }
       if(lanterns) lanterns.material.opacity=nf*0.95;
-      gwReg.forEach(en=>{ if(en.beam&&en.beam.children[0]) en.beam.children[0].material.opacity=0.1+nf*0.24; });
-      stormVis.forEach((m,i)=>{ const s=(G.storms||[])[i]; if(!s){ m.visible=false; return; } m.visible=true; m.position.set(SX(s.x), BASE_Y+5.5, SZ(s.y)); m.rotation.y=t*0.22+s.seed; m.material.opacity=0.82+nf*0.1; });
+      if(windowLights) windowLights.material.opacity=nf*0.92*(dist>880? 0 : dist>460? (880-dist)/420 : 1); // lamplit panes are a near-band pleasure; the world view keeps its clean chart
+      if(KIT.mats && KIT.mats.town){ KIT.mats.town.emissive.setHex(0xff9a4d); KIT.mats.town.emissiveIntensity=0.15*nf; } // lamplight bounce: house walls hold a whisper of the windows' warmth after dark, gone by dawn
+      if(harborGlow) harborGlow.material.opacity=nf*0.45; // harbours breathe warm after dark
+      gwReg.forEach(en=>{ if(en.beam&&en.beam.children[0]) en.beam.children[0].material.opacity=0.13+nf*0.42; }); // LOOK-TO-9: the Grand Light's sweep owns the night water
+      stormVis.forEach((sv,i)=>{ const s=(G.storms||[])[i]; if(!s){ sv.g.visible=false; return; } sv.g.visible=true;
+        sv.g.position.set(SX(s.x), 0, SZ(s.y));
+        sv.vortex.rotation.y=t*0.25+s.seed*3; sv.foam.rotation.y=-t*0.13+s.seed*2; // the cell turns one way; the white-capped chop worries the other
+        if(nf>0.55 && t>sv.next){ sv.flash=0.14; sv.next=t+1.6+hash(i*131+((t*0.37)|0))*4.5; } // lightning lives inside the cell, never on a schedule the eye can learn
+        if(sv.flash>0) sv.flash=Math.max(0, sv.flash-dt);
+        const fl=sv.flash>0? 1+(sv.flash/0.14)*1.15 : 1;
+        sv.vortex.material.color.setScalar(fl); // a 140ms emissive pulse, no light object spent
+        sv.vortex.material.opacity=0.84+nf*0.08;
+        sv.rain.material.opacity=0.40+nf*0.12+(fl-1)*0.35;
+        sv.foam.material.opacity=0.34+0.22*(0.5+0.5*Math.sin(t*2.1+s.seed*5))+(fl-1)*0.4; });
     }
     // the single shadow caster rides with the camera target, frustum fitted to the view
     sun.position.set(target.x+205, 95, target.z+55); sun.target.position.copy(target); // low amber key rides with the camera
@@ -5412,22 +5477,67 @@ try{
   }
 
   /* ---------- the Second Age sky: harbour lanterns + travelling tempests ---------- */
-  let lanterns=null; const stormVis=[];
+  let lanterns=null, windowLights=null, harborGlow=null; const stormVis=[];
   function buildLanterns(){ const pts=[]; G.regions.filter(r=>r.isPort).forEach(r=>{ pts.push(SX(r.x), BASE_Y+2.4, SZ(r.y)); if(r.greatWork==='light') pts.push(SX(r.x), BASE_Y+9.5, SZ(r.y)); });
     const g=new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(pts),3));
-    lanterns=new THREE.Points(g, new THREE.PointsMaterial({color:0xffc873, size:3.2, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true}));
-    lanterns.frustumCulled=false; scene.add(lanterns); }
-  function stormTexture(){ // a tempest drawn, not borrowed: dark heart, spiral arms, soft ragged edge
-    const c=document.createElement('canvas'); c.width=c.height=160; const g=c.getContext('2d');
-    const gr=g.createRadialGradient(80,80,6,80,80,78); gr.addColorStop(0,'rgba(20,28,36,0.95)'); gr.addColorStop(0.6,'rgba(26,36,46,0.72)'); gr.addColorStop(1,'rgba(26,36,46,0)');
-    g.fillStyle=gr; g.fillRect(0,0,160,160);
-    g.globalCompositeOperation='destination-out'; // carve three spiral channels — the heart stays black
-    for(let k=0;k<3;k++){ g.beginPath(); for(let a=0;a<=6.3;a+=0.12){ const r=26+a*8.4, x=80+Math.cos(a+k*2.1)*r, y=80+Math.sin(a+k*2.1)*r*0.66; if(a===0) g.moveTo(x,y); else g.lineTo(x,y); } g.lineWidth=8; g.strokeStyle='rgba(0,0,0,0.55)'; g.stroke(); }
-    g.globalCompositeOperation='source-over';
-    for(let i=0;i<46;i++){ const a=i*2.4, r=12+(i%9)*7; g.beginPath(); g.arc(80+Math.cos(a)*r, 80+Math.sin(a)*r*0.62, 2.0, 0, 6.3); g.fillStyle='rgba(8,13,18,0.55)'; g.fill(); }
+    lanterns=new THREE.Points(g, new THREE.PointsMaterial({color:0xffc873, size:3.4, map:makeSmokeTex(), transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true})); // round lamplight, never square pixels
+    lanterns.frustumCulled=false; scene.add(lanterns);
+    // LOOK-TO-9 night warmth: lamplit windows in EVERY town — a lit port city at midnight, not a blackout
+    const wp=[]; G.regions.forEach(r=>{ const n=4+r.tier*3+(CAPITALS.includes(r.name)?4:0);
+      for(let i=0;i<n;i++){ const a=hash(r.id*37+i*11)*6.283, d=2.5+hash(r.id*17+i*7)*7.5;
+        wp.push(SX(r.x)+Math.cos(a)*d, BASE_Y+1.1+hash(r.id*23+i*3)*1.9, SZ(r.y)+Math.sin(a)*d*0.9); } });
+    const wg=new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(wp),3));
+    windowLights=new THREE.Points(wg, new THREE.PointsMaterial({color:0xffab54, size:3.0, map:makeSmokeTex(), transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true}));
+    windowLights.frustumCulled=false; scene.add(windowLights);
+    // harbour glow: one soft halo per port (plus the Grand Light's lamp) — additive light, no bloom pass
+    const hp=[]; G.regions.filter(r=>r.isPort).forEach(r=>{ hp.push(SX(r.x), BASE_Y+2.6, SZ(r.y)); if(r.greatWork==='light') hp.push(SX(r.x), BASE_Y+9.8, SZ(r.y)); });
+    const hg=new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(hp),3));
+    harborGlow=new THREE.Points(hg, new THREE.PointsMaterial({color:0xffc27a, size:11, map:makeSmokeTex(), transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true}));
+    harborGlow.frustumCulled=false; scene.add(harborGlow); }
+  function stormVortexTexture(){ // weather, drawn: slate-blue wash, a dark breathing heart, spiral cloud wisps with ragged alpha edges
+    const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d');
+    const wash=g.createRadialGradient(128,128,8,128,128,126);
+    wash.addColorStop(0,'rgba(38,52,70,0.88)'); wash.addColorStop(0.45,'rgba(52,68,88,0.62)'); wash.addColorStop(0.8,'rgba(70,86,106,0.28)'); wash.addColorStop(1,'rgba(70,86,106,0)');
+    g.fillStyle=wash; g.fillRect(0,0,256,256);
+    for(let arm=0;arm<3;arm++){ // three spiral arms: chained soft ellipses winding out of the heart
+      for(let k=0;k<26;k++){ const u=k/26, a=arm*2.09+u*4.6, r=10+u*104;
+        const x=128+Math.cos(a)*r, y=128+Math.sin(a)*r*0.94;
+        g.save(); g.translate(x,y); g.rotate(a+1.35);
+        const wg=g.createRadialGradient(0,0,0,0,0,15-u*6);
+        const al=(0.20-u*0.10)*(0.7+0.3*Math.sin(k*2.7+arm));
+        wg.addColorStop(0,'rgba(228,236,244,'+al.toFixed(3)+')'); wg.addColorStop(1,'rgba(228,236,244,0)');
+        g.fillStyle=wg; g.beginPath(); g.ellipse(0,0,17-u*6,6.5-u*2,0,0,6.3); g.fill(); g.restore(); }
+    }
+    const heart=g.createRadialGradient(128,128,0,128,128,34); // the eye: near-black slate under a soft rim
+    heart.addColorStop(0,'rgba(16,24,34,0.96)'); heart.addColorStop(0.75,'rgba(20,30,42,0.85)'); heart.addColorStop(1,'rgba(20,30,42,0)');
+    g.fillStyle=heart; g.beginPath(); g.arc(128,128,34,0,6.3); g.fill();
     return new THREE.CanvasTexture(c); }
-  function buildStorms(){ const tex=stormTexture(); window.__stormVis=stormVis; const cg=new THREE.CircleGeometry(47, 44); cg.rotateX(-Math.PI/2);
-    for(let i=0;i<5;i++){ const m=new THREE.Mesh(cg, new THREE.MeshBasicMaterial({map:tex, transparent:true, opacity:0.88, depthWrite:false, fog:false})); m.renderOrder=6; scene.add(m); stormVis.push(m); } }
+  function stormRainTexture(){ // the footprint: the sea itself darkens under the cell, blotchy at the rim
+    const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d');
+    const gr=g.createRadialGradient(64,64,4,64,64,62);
+    gr.addColorStop(0,'rgba(22,34,50,0.88)'); gr.addColorStop(0.7,'rgba(26,40,58,0.55)'); gr.addColorStop(1,'rgba(26,40,58,0)');
+    g.fillStyle=gr; g.fillRect(0,0,128,128);
+    for(let i=0;i<26;i++){ const a=i*2.4, r=30+(i%5)*7; g.beginPath(); g.arc(64+Math.cos(a)*r,64+Math.sin(a)*r,3+(i%4),0,6.3); g.fillStyle='rgba(14,22,34,0.35)'; g.fill(); }
+    return new THREE.CanvasTexture(c); }
+  function stormFoamTexture(){ // white-capped chop: a broken ring of speckle where the wind worries the water
+    const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d');
+    let s=77; const rnd=()=>{ s=(s*16807)%2147483647; return (s&0xffffff)/0xffffff; };
+    for(let i=0;i<220;i++){ const a=rnd()*6.283, r=104+rnd()*20;
+      g.beginPath(); g.arc(128+Math.cos(a)*r, 128+Math.sin(a)*r, 0.8+rnd()*2.6, 0, 6.3);
+      g.fillStyle='rgba(238,246,248,'+(0.25+rnd()*0.55).toFixed(2)+')'; g.fill(); }
+    return new THREE.CanvasTexture(c); }
+  function buildStorms(){ const vtex=stormVortexTexture(), rtex=stormRainTexture(), ftex=stormFoamTexture(); window.__stormVis=stormVis;
+    const rainG=new THREE.CircleGeometry(37,40); rainG.rotateX(-Math.PI/2);
+    const foamG=new THREE.CircleGeometry(35,40); foamG.rotateX(-Math.PI/2);
+    const vortG=new THREE.CircleGeometry(34,44); vortG.rotateX(-Math.PI/2);
+    for(let i=0;i<5;i++){
+      const grp=new THREE.Group();
+      const rain=new THREE.Mesh(rainG, new THREE.MeshBasicMaterial({map:rtex, transparent:true, opacity:0.45, depthWrite:false, fog:false})); rain.position.y=0.8; rain.renderOrder=3; grp.add(rain);
+      const foam=new THREE.Mesh(foamG, new THREE.MeshBasicMaterial({map:ftex, transparent:true, opacity:0.45, depthWrite:false, fog:false})); foam.position.y=1.15; foam.renderOrder=4; grp.add(foam);
+      const vortex=new THREE.Mesh(vortG, new THREE.MeshBasicMaterial({map:vtex, transparent:true, opacity:0.88, depthWrite:false, fog:false})); vortex.position.y=BASE_Y+5.2; vortex.renderOrder=6; grp.add(vortex);
+      grp.visible=false; scene.add(grp);
+      stormVis.push({g:grp, vortex, foam, rain, flash:0, next:2+i*1.3});
+    } }
 
   /* wind lanes made visible: pale arrows riding the season's wind over every sea road */
   let windGroup=null; const windArrows=[];
