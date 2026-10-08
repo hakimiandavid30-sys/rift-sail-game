@@ -3060,11 +3060,11 @@ function endSiege(sg, how){
   if(rEnd && ceremony('sgclose:'+sg.id)){
     const atkName=(emp(sg.atkOwner)||{}).name;
     if(how==='stormed' && atkName)
-      gazette('🎇 <b>The siege of '+rEnd.name+' is closed in thunder</b> — the storm takes the walls, and '+atkName+' holds the town. The ladders come down; the camp folds its tents.');
+      gazette('🎇 '+blazonChip(sg.atkOwner)+'<b>The siege of '+rEnd.name+' is closed in thunder</b> — the storm takes the walls, and '+atkName+' holds the town. The ladders come down; the camp folds its tents.');
     else if(how==='raised' && sg.atkOwner==='player')
-      gazette('🎇 <b>The siege of '+rEnd.name+' is raised at your order</b> — the host strikes its tents and marches off. The walls stand unbowed, and so, for now, do their holders.');
+      gazette('🎇 '+blazonChip(sg.defOwner||rEnd.owner)+'<b>The siege of '+rEnd.name+' is raised at your order</b> — the host strikes its tents and marches off. The walls stand unbowed, and so, for now, do their holders.');
     else if(how==='relieved' && sg.atkOwner==='player')
-      gazette('🎇 <b>Your siege of '+rEnd.name+' is broken from outside</b> — relief rides in over the hills and the ring dissolves before it. The camp is a memory by vespers.');
+      gazette('🎇 '+blazonChip(sg.defOwner||rEnd.owner)+'<b>Your siege of '+rEnd.name+' is broken from outside</b> — relief rides in over the hills and the ring dissolves before it. The camp is a memory by vespers.');
   }
 }
 function advanceStage(sg){
@@ -3104,7 +3104,7 @@ function resolveSiegeFinale(sg){
     if(ch<0.32&&rnd()<0.65){ // a prudent captain raises a siege he cannot finish
       endSiege(sg,'raised');
       if(r.owner==='player'){ pushEvent('🕊 <b>'+r.name+': the siege is raised!</b> The besiegers strike their tents and march off.'); toast('🕊 '+r.name+' — the siege is raised!'); }
-      else gazette('🎇 '+emp(sg.atkOwner).name+' raises the siege of <b>'+r.name+'</b> — the walls held.');
+      else gazette('🎇 '+blazonChip(r.owner)+emp(sg.atkOwner).name+' raises the siege of <b>'+r.name+'</b> — the walls held.');
       refreshHUD(); save(); return;
     }
   }
@@ -3172,16 +3172,16 @@ function surrenderTown(sg, honors){
   if(sg.atkOwner==='player'){
     const spoils=prev? 100+r.tier*50 : 40; emp('player').gold+=spoils;
     noteConquest(r);
-    gazette('🎇 <b>'+r.name+' yields!</b> '+(a? a.name : 'Your besiegers')+' receives the keys — '+(honors?'the garrison marches out with honours.':'hunger did what powder could not.')+' Spoils +'+fmt(spoils)+'g.');
+    gazette('🎇 '+blazonChip(sg.atkOwner)+'<b>'+r.name+' yields!</b> '+(a? a.name : 'Your besiegers')+' receives the keys — '+(honors?'the garrison marches out with honours.':'hunger did what powder could not.')+' Spoils +'+fmt(spoils)+'g.');
     toast('🎇 '+r.name+' surrenders to you! +'+fmt(spoils)+'g');
     pushEvent('🎇 <b>'+r.name+' has surrendered</b> — the siege is won, and no street-fighting tax to pay.');
     if(a) dispatch(a.general? a.general.name : a.name, r.name+' opened her gates to us. '+(honors?'We let their garrison march out with drums beating — soldiers respect soldiers.':'Starvation is a slower gun than any we own, and surer.'));
   } else if(prev==='player'){
-    gazette('🎇 <b>'+r.name+' has surrendered</b> to '+emp(sg.atkOwner).name+' — '+(honors?'your garrison marched out with its colours.':'the granaries gave out first.'));
+    gazette('🎇 '+blazonChip(sg.atkOwner)+'<b>'+r.name+' has surrendered</b> to '+emp(sg.atkOwner).name+' — '+(honors?'your garrison marched out with its colours.':'the granaries gave out first.'));
     pushEvent('🎇 <b>'+r.name+' lost</b> — surrendered to the besiegers of '+emp(sg.atkOwner).name+'.');
     simPauseEvent();
   } else {
-    gazette('🎇 '+r.name+' surrenders to '+emp(sg.atkOwner).name+' after a formal siege — the ladder ran its full course.');
+    gazette('🎇 '+blazonChip(sg.atkOwner)+r.name+' surrenders to '+emp(sg.atkOwner).name+' after a formal siege — the ladder ran its full course.');
     if(r.isPort && prev && prev!=='natives') pushEvent('◆ <b>The board shifts:</b> '+emp(sg.atkOwner).name+' starves '+r.name+' out of '+emp(prev).name+' hands.');
   }
   refreshHUD(); save();
@@ -4440,6 +4440,10 @@ coldEvent('firstColony'); selectRegion(r); save(); return true;
 }
 
 /* ---------- heraldry: every crown a shield of its own ---------- */
+function blazonChip(id, sz){ // WAVE 13: the winner's colours, small enough to ride beside a line of print
+  const e=emp(id); if(!e) return '';
+  return '<span style="display:inline-block;vertical-align:-3px;margin-right:5px">'+shieldSVG(e, sz||15)+'</span>';
+}
 function shieldSVG(e, size){
 size=size||44;
 const charges={player:'⚜', aurelia:'🌙', meridian:'⚖', sable:'🦂', natives:'🌊'};
@@ -4764,7 +4768,9 @@ $('#btn-crown').onclick=()=>{
   b.innerHTML=G.crownQueue.length? '' : '<p>No matters await the Crown. The realm hums along without you — as it should.</p>';
   G.crownQueue.forEach((q,i)=>{
     const row=document.createElement('div'); row.className='dip-row';
-    row.innerHTML='<span style="color:var(--brass);display:flex;align-items:flex-start">'+iconSigil((q.icon||'').replace(/️/g,''))+'</span><div style="flex:1"><b>'+q.title+'</b><br><span class="rel">'+q.body+'</span></div>';
+    /* WAVE 13: the authored beats (the Rich Argosy, the late-reign crises) carry the acting crown's blazon in the header */
+    const beatBlz=(q.prizeFleet||CRISIS_TITLES.some(t2=>(q.title||'').includes(t2)))? '<span style="display:inline-block;vertical-align:-4px;margin-right:6px">'+shieldSVG(emp('player'),20)+'</span>' : '';
+    row.innerHTML='<span style="color:var(--brass);display:flex;align-items:flex-start">'+iconSigil((q.icon||'').replace(/️/g,''))+'</span><div style="flex:1">'+beatBlz+'<b>'+q.title+'</b><br><span class="rel">'+q.body+'</span></div>';
     q.choices.forEach(c=>{ const btn=document.createElement('button'); btn.className='mini-btn'; btn.textContent=c.label;
       btn.onclick=()=>{ if(c.fn) c.fn(); G.crownQueue.splice(i,1); $('#crown').classList.remove('open'); refreshHUD(); save();
         if(G.crownQueue.length) $('#btn-crown').click(); };
@@ -5716,8 +5722,13 @@ try{
     }
     if((r.tier>=2 || r.hasWall) && KIT.geo.cwall && r.greatWork!=='citadel'){ // curtain wall ring hugging the grown footprint, with a real gate gap on the main street
       const rad=P.R*1.0, nB=Math.max(12, Math.round(rad*1.5)), chord=2*rad*Math.sin(Math.PI/nB);
+      const bAng13=breachAngleAt(r); // WAVE 13: breach drama — at Walls Breached, two lengths of this ring fall
+      const stubI13=bAng13!=null? twoNearestSegs(nB, bAng13) : null;
       for(let i=0;i<nB;i++){ const a=i/nB*Math.PI*2;
         const dg=Math.abs(((a-P.gateAng+Math.PI*3)%(Math.PI*2))-Math.PI); if(dg<0.24) continue; // the gate gap
+        if(stubI13&&stubI13.has(i)){ // the fallen lengths stand on as tilted, shortened stubs — gap-toothed
+          const tilt=(hash(r.id*23.7+i*5.3)-0.5)*0.62, sag=0.5+hash(r.id*11.9+i*3.7)*0.3;
+          ca.add(KIT.geo.cwall, M4(bx+Math.cos(a)*rad*0.99, by-0.3, bz+Math.sin(a)*rad*0.99, tilt, -a, tilt*1.4, 1.7, 2.0*sag, chord*0.86)); continue; }
         ca.add(KIT.geo.cwall, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, -a, 0, 1.7, 2.0, chord*0.9)); }
       if(KIT.geo.tower){ for(let i=0;i<4;i++){ const a=(i+0.5)/4*Math.PI*2;
           ca.add(KIT.geo.tower, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, a, 0, 2.0, 2.8, 2.0)); }
@@ -5826,7 +5837,7 @@ try{
     // far-band silhouette (world-zoom LOD): roof-mass cone + one hero spire — the political disc names the owner
     const farB=new Batch();
     farB.add(new THREE.ConeGeometry(P.R*0.92, P.R*0.5, 10), M4(bx, by+P.R*0.22, bz), ROOF_HEX[biomeKey(r)]);
-    if(r.tier>=2||r.hasWall) farB.add(new THREE.CylinderGeometry(P.R*1.03, P.R*1.03, 1.4, 14, 1, true, 0.6, Math.PI*1.5), M4(bx, by+0.7, bz), ownerCol); // the wall arc — silhouette piece two, in the owner's stone
+    if(r.tier>=2||r.hasWall) farWallArc(farB, r, bx, by, bz, P); // the wall arc — silhouette piece two, in the owner's stone
     const heroH=Math.max(4.5, P.R*0.55);
     farB.add(new THREE.BoxGeometry(1.6, heroH, 1.6), M4(bx+P.R*0.2, by+heroH/2, bz-P.R*0.18), '#e8dcc0');
     farB.add(new THREE.ConeGeometry(1.95, 2.7, 6), M4(bx+P.R*0.2, by+heroH+1.35, bz-P.R*0.18), '#4a3423'); // the spire cap — piece three: roof-mass, wall arc and hero now read as a TOWN, not a blob
@@ -5866,8 +5877,11 @@ try{
         b.add(new THREE.ConeGeometry(1.05,0.7,4), M4(bx+1.6+Math.cos(a2)*2.9, by+1.3, bz+2.4+Math.sin(a2)*2.4, 0, Math.PI/4, 0), awningTint(r)); }
     }
     if(r.tier>=2 || r.hasWall){ // curtain wall ring WITH towers — reads as fortification, not rubble
-      const nB=12, rad=10.6;
+      const nB=12, rad=10.6, bAng13=breachAngleAt(r); // WAVE 13: the breach takes two lengths here too
+      const stubI13=bAng13!=null? twoNearestSegs(nB, bAng13) : null;
       for(let i=0;i<nB;i++){ const a=i/nB*Math.PI*2;
+        if(stubI13&&stubI13.has(i)){ const tilt=(hash(r.id*29.1+i*4.9)-0.5)*0.7; // a tilted, shortened stump where the wall stood
+          b.add(new THREE.BoxGeometry(4.6,2.3,1.05), M4(bx+Math.cos(a)*rad*0.99, by+0.62, bz+Math.sin(a)*rad*0.99, tilt, -a+Math.PI/2, tilt*1.3, 1, 0.55, 1), '#8d8175'); continue; }
         b.add(new THREE.BoxGeometry(4.6,2.3,1.05), M4(bx+Math.cos(a)*rad, by+1.15, bz+Math.sin(a)*rad, 0, -a+Math.PI/2, 0), '#9a8a70'); }
       for(let i=0;i<4;i++){ const a=(i+0.5)/4*Math.PI*2;
         tower(b, bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 1.15, '#a8977a', '#5e4718', 4.2); }
@@ -5920,7 +5934,7 @@ try{
     // far-band silhouette, same as the kit towns wear — roof-mass, wall arc, capped hero
     const farB=new Batch();
     farB.add(new THREE.ConeGeometry(P.R*0.92, P.R*0.5, 10), M4(bx, by+P.R*0.22, bz), ROOF_HEX[biomeKey(r)]);
-    if(r.tier>=2||r.hasWall) farB.add(new THREE.CylinderGeometry(P.R*1.03, P.R*1.03, 1.4, 14, 1, true, 0.6, Math.PI*1.5), M4(bx, by+0.7, bz), ownerCol);
+    if(r.tier>=2||r.hasWall) farWallArc(farB, r, bx, by, bz, P);
     const heroH=Math.max(4.5, P.R*0.55);
     farB.add(new THREE.BoxGeometry(1.6, heroH, 1.6), M4(bx+P.R*0.2, by+heroH/2, bz-P.R*0.18), '#e8dcc0');
     farB.add(new THREE.ConeGeometry(1.95, 2.7, 6), M4(bx+P.R*0.2, by+heroH+1.35, bz-P.R*0.18), '#4a3423');
@@ -6287,6 +6301,33 @@ try{
     c.fillStyle=g; c.fillRect(0,0,128,128);
     washTex = new THREE.CanvasTexture(cv); return washTex;
   }
+  function breachAngleAt(r){ // WAVE 13: the breach point — computed one way, everywhere it is worn:
+    // from the attacker's road into the ring, exactly where the rubble and scorch already sit.
+    const sg=siegeAt(r.id); if(!sg||sg.stage<2) return null;
+    const bx=SX(r.x), bz=SZ(r.y), fr=rById[sg.fromRegionId];
+    let dx=hash(r.id*3.71)-0.5, dz=hash(r.id*9.13)-0.5;
+    if(fr){ dx=SX(fr.x)-bx; dz=SZ(fr.y)-bz; }
+    return Math.atan2(dz,dx);
+  }
+  function twoNearestSegs(nB, bAng){ // the two ring lengths standing nearest an angle — the breach's victims
+    const dd=[];
+    for(let i=0;i<nB;i++){ const a=i/nB*Math.PI*2;
+      dd.push([Math.abs(((a-bAng+Math.PI*3)%(Math.PI*2))-Math.PI), i]); }
+    dd.sort((x,y)=>x[0]-y[0]); return new Set([dd[0][1], dd[1][1]]);
+  }
+  function farWallArc(farB, r, bx, by, bz, P){ // WAVE 13: even at world zoom the wall arc wears the breach —
+    // a real gap cut at the guns' angle, two stubs leaning at its shoulders, owner's stone throughout.
+    const ownerCol = r.owner? emp(r.owner).color : '#8a6d3b';
+    const T0=0.6, T1=0.6+Math.PI*1.5, ba=breachAngleAt(r);
+    const arc=(a,b2)=>{ if(b2-a<0.1) return;
+      farB.add(new THREE.CylinderGeometry(P.R*1.03, P.R*1.03, 1.4, Math.max(2, Math.round(14*(b2-a)/(T1-T0))), 1, true, a, b2-a), M4(bx, by+0.7, bz), ownerCol); };
+    let cut=false;
+    if(ba!=null){ let tb=Math.PI/2-ba; tb=((tb%(Math.PI*2))+Math.PI*2)%(Math.PI*2); const seg=0.34;
+      if(tb>T0+seg && tb<T1-seg){ arc(T0, tb-seg); arc(tb+seg, T1); cut=true; } }
+    if(!cut) arc(T0, T1); // the breach hides inside the arc's own resting gap — it reads whole from this high
+    if(ba!=null){ [-1,1].forEach(s2=>{ const a2=ba+s2*0.31;
+      farB.add(new THREE.BoxGeometry(2.0, 1.8, 0.55), M4(bx+Math.cos(a2)*P.R*1.02, by+0.72, bz+Math.sin(a2)*P.R*1.02, s2*0.42, -a2, s2*0.25), ownerCol); }); }
+  }
   function discFor(r){
     let d = discs.get(r.id);
     if(!d){
@@ -6308,7 +6349,7 @@ try{
     }
     return d;
   }
-  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0, KIT.ready?1:0, r.greatWork||'', r.isPort? awningTint(r) : ''].join('|'); } // a port's awnings re-dress when its cheapest good flips
+  function settleSig(r){ return [r.owner, r.tier, r.hasWall?1:0, r.hasFort?1:0, r.hasShipyard?1:0, Math.min(r.towns,2), r.troops>=500?1:0, KIT.ready?1:0, r.greatWork||'', r.isPort? awningTint(r) : '', breachAngleAt(r)!=null? 'BR':''].join('|'); } // a port's awnings re-dress when its cheapest good flips; WAVE 13: a breach re-dresses the walls until the ring comes down
   function disposeBuilt(o){ // kit ship hulls share geometry across the world — never dispose those
     o.traverse(n=>{
       let p=n, shared=false;
@@ -7165,6 +7206,10 @@ try{
   const SG_TRENCH=8, SG_RUBBLE=10, SG_SCORCH=5; // WAVE 12 stage-dressing counts, per siege
   let campTentIM=null, campStakeIM=null, campPuffs=[], campKey='__none__', campCenters=[];
   let siegeRamIM=null, siegeTrenchIM=null, siegeRubbleIM=null, siegeScorchIM=null, siegeDust=[], breachPts=[];
+  /* WAVE 13: breach drama + refugee caravans. breachPtById pins each open breach to its wall;
+     the burst shelf fires once when the rung turns; siegeStageSeen remembers last frame's rung
+     so a siege loaded mid-breach never fakes its turning moment. */
+  let breachPtById={}, breachBurst=[], siegeStageSeen={}, breachBurstTotal=0, caravanIM=null;
   const _cmM=new THREE.Matrix4(), _cmQ=new THREE.Quaternion(), _cmE=new THREE.Euler(), _cmV=new THREE.Vector3(), _cmS=new THREE.Vector3(), _cmC=new THREE.Color();
   function ramGeometry(){ // a battering ram under its timber hut: slung log, iron head, pitched roof, four wheels
     try{
@@ -7206,9 +7251,14 @@ try{
       const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:makeSmokeTex(), color:0x6b5d4c, transparent:true, opacity:0, depthWrite:false}));
       sp.visible=false; scene.add(sp); siegeDust.push(sp);
     }
+    for(let i=0;i<12;i++){ // WAVE 13: the burst shelf — dust thrown up once, the moment a breach opens; never a loop
+      const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:makeSmokeTex(), color:0xa08b6d, transparent:true, opacity:0, depthWrite:false}));
+      sp.visible=false; sp.userData.on=false; scene.add(sp); breachBurst.push(sp);
+    }
+    initCaravans();
   }
   function layoutSiegeCamps(list){
-    campCenters=[]; breachPts=[]; let ti=0, si=0, ri=0, tri=0, rui=0, sci=0;
+    campCenters=[]; breachPts=[]; breachPtById={}; let ti=0, si=0, ri=0, tri=0, rui=0, sci=0;
     list.forEach(sg=>{
       const r=rById[sg.regionId]; if(!r) return;
       const bx=SX(r.x), bz=SZ(r.y), fr=rById[sg.fromRegionId];
@@ -7248,6 +7298,7 @@ try{
       if(sg.stage>=2){ // Walls Breached: rubble at the foot, scorch up the face, dust over all
         const bAng=Math.atan2(dz,dx), wx=bx+Math.cos(bAng)*R, wz=bz+Math.sin(bAng)*R;
         breachPts.push({x:wx, z:wz});
+        breachPtById[sg.id]={x:wx, z:wz, dx:Math.cos(bAng), dz:Math.sin(bAng)}; // WAVE 13: the burst stands here too
         for(let k=0;k<SG_RUBBLE;k++){
           const ro=(hash(sg.regionId*23.9+k*5.7)-0.5)*2.6, rd=(hash(sg.regionId*41.3+k*9.1)-0.5)*1.5;
           _cmE.set(hash(sg.regionId*7.1+k)*3.1, hash(sg.regionId*11.3+k)*6.28, hash(sg.regionId*17.9+k)*3.1); _cmQ.setFromEuler(_cmE);
@@ -7298,7 +7349,67 @@ try{
       sp.position.set(b.x + Math.sin(t*0.22+ph*6.28)*0.8 + p*1.6, BASE_Y+2.4+p*4.2, b.z + Math.cos(t*0.18+ph*4.4)*0.7);
       const sc=5.5+p*6.5; sp.scale.set(sc,sc*0.8,1);
       sp.material.opacity=0.16*(1-p)*Math.min(1, p*4+0.25); });
+    breachBurst.forEach(sp=>{ const u=sp.userData; // WAVE 13: the burst — rises, spreads, thins, gone (~2.6s)
+      if(!u || !u.on){ sp.visible=false; return; }
+      const p=(t-u.t0)/2.6;
+      if(p>=1 || p<0){ u.on=false; sp.visible=false; sp.material.opacity=0; return; }
+      sp.visible=true;
+      sp.position.set(u.x + u.dx*(1.2+p*3.4) + Math.sin(u.ph*7+p*4)*0.5, BASE_Y+2.1+p*3.6+u.ph*0.6, u.z + u.dz*(1.2+p*3.4) + Math.cos(u.ph*5+p*3)*0.5);
+      const sc=3.5+p*9.5+u.ph*1.6; sp.scale.set(sc, sc*0.78, 1);
+      sp.material.opacity=0.55*(1-p)*Math.min(1, p*7+0.1); });
+    /* WAVE 13: fire the one-time dust burst on the observed turn of the rung — a siege first
+       SEEN already breached (a fresh save, a fresh scroll) keeps its silence; only the turning
+       moment throws dust. Three puffs from the shelf, then quiet. */
+    list.forEach(sg=>{ const prev=siegeStageSeen[sg.id];
+      if(prev!=null && prev<2 && sg.stage>=2){ const bp=breachPtById[sg.id];
+        if(bp){ let fired=0;
+          for(const sp of breachBurst){ if(fired>=3) break; if(sp.userData.on) continue;
+            sp.userData={on:true, t0:t, x:bp.x, z:bp.z, dx:bp.dx, dz:bp.dz, ph:fired*0.87+hash(sg.id*1.3)*0.4}; fired++; }
+          if(fired) breachBurstTotal++; } }
+      siegeStageSeen[sg.id]=sg.stage; });
+    for(const id in siegeStageSeen){ if(!list.some(s=>String(s.id)===id)) delete siegeStageSeen[id]; }
+    updateCaravans(list, t, near);
     window.__campSieges=campCenters.length; window.__campKey=key;
+    window.__breachBursts=breachBurstTotal;
+  }
+  function initCaravans(){
+    /* WAVE 13: refugee caravans — one instanced shelf of tiny boxes (souls, and every third a
+       cart) walking the roads from a ringed town to the same-owner neighbours its people flee
+       to. The sim moves folk in daily lumps from 'Batteries Raised' on; this draws the average
+       of that flow as a living column — a visualisation, not a second ledger. */
+    caravanIM=new THREE.InstancedMesh(new THREE.BoxGeometry(0.55,0.42,0.8), new THREE.MeshLambertMaterial({color:0xffffff}), 48*7);
+    caravanIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage); caravanIM.frustumCulled=false; caravanIM.count=0;
+    _cmC.set('#5a4a34'); caravanIM.setColorAt(0,_cmC); // wake the instance-colour buffer before the first real write
+    scene.add(caravanIM);
+  }
+  function updateCaravans(list, t, near){
+    if(!caravanIM) initCaravans();
+    let stage1=0, streams=0, dots=0;
+    list.forEach(sg=>{ if(sg.stage<1) return;
+      const r=rById[sg.regionId]; if(!r||!r.owner) return;
+      const havens=r.neighbors.map(id=>rById[id]).filter(nb=>nb&&nb.owner===r.owner);
+      if(!havens.length) return; stage1++;
+      const x0=SX(r.x), z0=SZ(r.y);
+      havens.forEach((nb,hi)=>{ if(streams>=48) return; streams++;
+        const x1=SX(nb.x), z1=SZ(nb.y);
+        let dx=x1-x0, dz=z1-z0; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
+        const head=Math.atan2(dx,dz), seed=hash(sg.id*7.7+hi*3.13)*6.28;
+        for(let j=0;j<7;j++){
+          const fr=((j/7) + t*0.028 + hash(sg.id*3.1+j*1.7)*0.05)%1;
+          const f=0.05+0.9*fr, cart=(j%3===2);
+          _cmE.set(0, head, 0); _cmQ.setFromEuler(_cmE);
+          _cmV.set(x0+dx*L*f, BASE_Y+0.42+Math.sin(t*3+j*1.3+seed)*0.05, z0+dz*L*f);
+          _cmS.set(cart?2.1:1.5, cart?1.7:1.3, cart?2.0:1.5); _cmM.compose(_cmV,_cmQ,_cmS); // phone-legible: a person must read as a person at mid zoom
+          caravanIM.setMatrixAt(dots,_cmM);
+          _cmC.set(cart? '#6e5136' : (j%2? '#d9c9a3':'#7a3b2e')); caravanIM.setColorAt(dots,_cmC); // linen and rust cloaks — a crowd must read against the brown road
+          dots++;
+        }
+      });
+    });
+    caravanIM.count=dots; caravanIM.instanceMatrix.needsUpdate=true;
+    if(caravanIM.instanceColor) caravanIM.instanceColor.needsUpdate=true;
+    caravanIM.visible = near && dots>0; // the same distance gate the camps keep — the chart view stays clean
+    window.__caravans={stage1, streams, dots};
   }
 
   /* harbour gulls — ONE instanced mesh, eighteen paper darts circling the harbour mouths */
