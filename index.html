@@ -5435,6 +5435,14 @@ try{
 
   const CAPITALS = EMPIRES.map(e=>e.capital);
   function isCapitalOf(r){ return CAPITALS.includes(r.name) && r.owner && EMPIRES.find(e=>e.capital===r.name && e.id===r.owner); }
+  function capitalStyleOf(r){ // WAVE 14: a crown seat wears its OWN skyline. The ledger (G.empires) knows the seat
+    // — mantles swap at new game (startDefs), so trust it over the static table; the silhouette keys off the
+    // TOWN's native crown, so Venice reads Venetian whoever's banner flies.
+    if(!r || !CAPITALS.includes(r.name) || !r.owner) return null;
+    const seated = isCapitalOf(r) || (G.empires[r.owner] && G.empires[r.owner].capitalName===r.name);
+    if(!seated) return null;
+    const d=EMPIRES.find(e=>e.capital===r.name); return d? d.id : null;
+  }
 
   const ROOFS3D=['#8a4a34','#9c3d2e','#74572c','#46586e','#6e3b52','#87652c','#5d6e3a'];
 
@@ -5618,11 +5626,122 @@ try{
     g.fillStyle='#8e2f32'; g.beginPath(); g.arc(64,64,6,0,6.284); g.fill();
     _clockTex=new THREE.CanvasTexture(c); return _clockTex;
   }
+  /* ---------- WAVE 14: four crowns, four skylines ----------
+     Every crown's seat gets an unmistakable silhouette from the same kit shelf —
+     no CC0 dome or palace exists (the research said kit-bash), so each seat is
+     assembled from tower pieces + a handful of prims and wears its crown colour
+     only the way towns already do: walls, banners, domes. Builds into the same
+     batches as everything else — one draw family, hero well under 4,000 tris. */
+  function buildCapitalIdentity(r, P, C){
+    const bx=P.bx, bz=P.bz, by=BASE_Y, R=P.R;
+    const ax=bx+0.5, az=bz+0.8; // the crown lot, where the dressed dome has always stood
+    const gx=Math.cos(P.gateAng), gz=Math.sin(P.gateAng), qx=P.dx, qz=P.dz;
+    if(r.greatWork==='cathedral' || r.greatWork==='admiralty') return null; // the great work carries the skyline
+    const id=capitalStyleOf(r); if(!id) return null;
+    if(id==='aurelia'){ // VENICE — twin white towers under dark spires, and the brick campanile tallest of all
+      if(KIT.geo.tower){
+        C.caWhite.add(KIT.geo.tower, M4(bx+4.1, by, bz-3.8, 0, 0.2, 0, 2.4, 5.4, 2.4), '#fbf6e6');
+        C.caWhite.add(KIT.geo.tower, M4(bx-5.6, by, bz+3.1, 0, -0.3, 0, 2.0, 4.4, 2.0), '#fbf6e6');
+      }
+      C.b.add(new THREE.BoxGeometry(7.2,3.4,3.4), M4(ax,by+1.7,az), '#f3ead2'); // the nave between them
+      C.b.add(new THREE.ConeGeometry(3.1,3.4,4), M4(ax,by+5.1,az,0,Math.PI/4,0), '#5e4718');
+      C.b.add(new THREE.ConeGeometry(0.85,3.8,6), M4(bx+4.1, by+8.9, bz-3.8), '#3d2c1c'); // dark spires — the mark from the sea
+      C.b.add(new THREE.ConeGeometry(0.75,3.1,6), M4(bx-5.6, by+7.2, bz+3.1), '#3d2c1c');
+      const px2=ax+gx*2.2, pz2=az+gz*2.2;
+      C.b.add(new THREE.BoxGeometry(2.1,9.6,2.1), M4(px2, by+4.8, pz2), '#a5563d'); // the campanile: brick, square, unhurried
+      C.b.add(new THREE.BoxGeometry(2.5,1.5,2.5), M4(px2, by+10.3, pz2), '#f3ead2'); // open belfry
+      C.b.add(new THREE.ConeGeometry(1.9,2.4,4), M4(px2, by+12.3, pz2, 0, Math.PI/4, 0), '#5e4718');
+      C.b.add(new THREE.SphereGeometry(0.34,8,6), M4(px2, by+13.9, pz2), '#ffe9a8');
+      return null;
+    }
+    if(id==='meridian'){ // HOLLAND — stepped-gable counting-houses and the tall customs crane
+      const base=biomeKey(r)==='timber'? '#7d5a36':'#8a6a44', roofC=ROOF_HEX[biomeKey(r)];
+      [[-2.9,1.6,3.5],[0.9,-1.4,4.2],[4.4,2.0,3.1]].forEach(hp=>{
+        const hx=ax+hp[0], hz=az+hp[1], hh=hp[2], ry=hash(r.id*7.3+hx)*0.5;
+        C.b.add(new THREE.BoxGeometry(2.3, hh, 2.0), M4(hx, by+hh/2, hz, 0, ry, 0), base);
+        C.b.add(new THREE.BoxGeometry(1.8, 0.75, 1.7), M4(hx, by+hh+0.37, hz, 0, ry, 0), base); // the gable climbs in steps
+        C.b.add(new THREE.BoxGeometry(1.25, 0.7, 1.25), M4(hx, by+hh+1.1, hz, 0, ry, 0), base);
+        C.b.add(new THREE.BoxGeometry(0.72, 0.65, 0.72), M4(hx, by+hh+1.75, hz, 0, ry, 0), base);
+        C.b.add(new THREE.ConeGeometry(1.5, 1.1, 4), M4(hx, by+hh+2.62, hz, 0, Math.PI/4+ry, 0), roofC);
+      });
+      const cx2=bx+qx*(R*0.52), cz2=bz+qz*(R*0.52); // the customs crane — twice the harbour's, over the quay road
+      C.b.add(new THREE.BoxGeometry(0.55, 7.2, 0.55), M4(cx2, by+3.6, cz2), '#453012');
+      C.b.add(new THREE.BoxGeometry(6.0, 0.4, 0.4), M4(cx2+qx*2.2, by+6.9, cz2+qz*2.2, 0, -P.shoreAng, 0), '#453012');
+      C.b.add(new THREE.BoxGeometry(0.1, 2.6, 0.1), M4(cx2+qx*4.4, by+5.5, cz2+qz*4.4), '#2e1f0a'); // the fall of rope
+      C.b.add(new THREE.BoxGeometry(1.05, 0.9, 1.05), M4(cx2+qx*4.4, by+3.9, cz2+qz*4.4), '#7a5a2c'); // a bale of somebody's ledger, mid-swing
+      return null;
+    }
+    if(id==='sable'){ // ALGIERS — a squat fortress keep over bare corsair yards
+      if(KIT.geo.tower) C.ca.add(KIT.geo.tower, M4(ax, by, az, 0, 0.4, 0, 3.4, 6.4, 3.4)); // the keep (rides the owner-stone wall batch)
+      C.b.add(new THREE.BoxGeometry(3.6, 0.7, 3.6), M4(ax, by+8.75, az, 0, 0.4, 0), '#6f6555'); // its parapet slab
+      [-1,1].forEach(sg=>{ const mx=bx+qx*(R*0.5)+gz*sg*4.6, mz=bz+qz*(R*0.5)-gx*sg*4.6; // two bare masts in the yards
+        C.b.add(new THREE.CylinderGeometry(0.16, 0.24, 6.2, 5), M4(mx, by+3.1, mz), '#4a3319');
+        C.b.add(new THREE.BoxGeometry(3.6, 0.16, 0.16), M4(mx, by+4.9, mz, 0, -P.shoreAng, sg*0.12), '#4a3319');
+        C.b.add(new THREE.BoxGeometry(3.0, 0.14, 0.14), M4(mx, by+3.6, mz, 0, -P.shoreAng, sg*0.12), '#4a3319'); });
+      return null;
+    }
+    // the CRIMSON CROWN — domed admiralty over a true drum, and the grand-light tower toward home water
+    C.b.add(new THREE.BoxGeometry(5.6,1.15,5.6), M4(ax, by+0.58, az), '#e6dbc0'); // plinth
+    C.b.add(new THREE.CylinderGeometry(1.85,2.2,5.3,14), M4(ax, by+3.8, az), '#efe6cc'); // the drum, always (was <240 dressing — now the seat's body)
+    C.b.add(new THREE.SphereGeometry(2.1,10,8), M4(ax, by+8.6, az), '#e9c96e');
+    C.b.add(new THREE.CylinderGeometry(0.4,0.66,4.4,6), M4(ax, by+10.8, az), '#c9a24b');
+    C.b.add(new THREE.CylinderGeometry(0.14,0.3,1.7,6), M4(ax, by+13.6, az), '#c9a24b');
+    C.b.add(new THREE.SphereGeometry(0.36,8,6), M4(ax, by+14.6, az), '#ffe9a8');
+    const cd=new THREE.Mesh(new THREE.CircleGeometry(1.05,24), new THREE.MeshBasicMaterial({map:clockFaceTexture()})); // the working clockface over the gate
+    cd.position.set(ax+gx*2.06, by+4.7, az+gz*2.06);
+    cd.lookAt(cd.position.x+gx, by+4.7, cd.position.z+gz);
+    cd.visible=false; C.objs.push(cd); // near-band furniture only — the frame loop wakes it under 240
+    if(r.greatWork!=='light'){ // unless the crown has raised the Grand Light itself, the seat keeps a light of its own
+      const lx=bx+qx*(R*0.62), lz=bz+qz*(R*0.62);
+      if(KIT.geo.tower) C.ca.add(KIT.geo.tower, M4(lx, by, lz, 0, 0.9, 0, 1.9, 4.6, 1.9), '#efe6cc');
+      C.b.add(new THREE.SphereGeometry(0.55, 8, 6), M4(lx, by+6.6, lz), '#ffd97a');
+    }
+    return [cd];
+  }
+
+  /* ---------- WAVE 14: the far town is a cluster of roofs, not a cone ---------- */
+  function farProxy(farB, r, bx, by, bz, P, capId){
+    const bkey=biomeKey(r), roof=ROOF_HEX[bkey], wall=WALL_PAL[bkey]||'#e8dcc0';
+    const tf=[0.72,0.85,1.0,1.12,1.25][r.tier]||1;
+    const spots=[[-0.30,0.16,1.30,0.3],[0.14,-0.28,1.08,-0.5],[0.36,0.24,0.92,0.9],[-0.08,0.44,0.82,-0.2],[0.30,-0.02,0.70,0.55]];
+    spots.forEach(sp=>{
+      const h=(2.0+sp[2]*1.6)*tf, w=2.5*sp[2]*tf, hx=bx+sp[0]*P.R, hz=bz+sp[1]*P.R;
+      farB.add(new THREE.BoxGeometry(w,h,w*0.88), M4(hx, by+h/2, hz, 0, sp[3], 0), wall);
+      farB.add(new THREE.ConeGeometry(w*0.74, h*0.55, 4), M4(hx, by+h+h*0.28, hz, 0, Math.PI/4+sp[3], 0), roof);
+    });
+    if(r.tier>=2||r.hasWall) farWallArc(farB, r, bx, by, bz, P); // silhouette piece two: the wall arc, breach and all (wave 13)
+    if(r.tier>=2) farB.add(new THREE.BoxGeometry(2.3,4.4,2.3), M4(bx-P.R*0.52, by+2.2, bz-P.R*0.40, 0, 0.4, 0), '#d9c8a4'); // a keep cube for grown towns
+    if(!capId) return;
+    const H=Math.max(5.2, P.R*0.6), cx=bx+P.R*0.2, cz=bz-P.R*0.18; // each capital's echo rides the cluster
+    if(capId==='aurelia'){ // twin spires + the brick campanile, tallest of all
+      farB.add(new THREE.BoxGeometry(1.05, H+2.6, 1.05), M4(cx, by+(H+2.6)/2, cz), '#fbf6e6');
+      farB.add(new THREE.ConeGeometry(0.85, 2.2, 5), M4(cx, by+H+3.5, cz), '#3d2c1c');
+      farB.add(new THREE.BoxGeometry(0.85, H+0.9, 0.85), M4(bx-P.R*0.30, by+(H+0.9)/2, bz+P.R*0.10), '#fbf6e6');
+      farB.add(new THREE.ConeGeometry(0.7, 1.8, 5), M4(bx-P.R*0.30, by+H+1.7, bz+P.R*0.10), '#3d2c1c');
+      farB.add(new THREE.BoxGeometry(1.3, H+3.6, 1.3), M4(bx+P.R*0.02, by+(H+3.6)/2, bz+P.R*0.05), '#a5563d');
+    } else if(capId==='meridian'){ // stepped gables + the customs mast
+      [-0.25,0.05,0.32].forEach((fx,i)=>{ const hh=H*(0.62-0.08*i), hz2=bz+(i-1)*P.R*0.16;
+        farB.add(new THREE.BoxGeometry(1.9, hh, 1.7), M4(bx+fx*P.R, by+hh/2, hz2, 0, 0.3*i, 0), '#8a6a44');
+        farB.add(new THREE.BoxGeometry(1.3, hh*0.3, 1.2), M4(bx+fx*P.R, by+hh+hh*0.15, hz2, 0, 0.3*i, 0), '#8a6a44'); });
+      farB.add(new THREE.BoxGeometry(0.34, H+2.2, 0.34), M4(cx, by+(H+2.2)/2, cz), '#453012');
+      farB.add(new THREE.BoxGeometry(2.6, 0.3, 0.3), M4(cx+P.R*0.08, by+H+1.9, cz, 0, 0.5, 0), '#453012');
+    } else if(capId==='sable'){ // the keep, squared-off
+      farB.add(new THREE.BoxGeometry(3.1, H+1.4, 3.1), M4(cx, by+(H+1.4)/2, cz, 0, 0.35, 0), '#8d8272');
+      farB.add(new THREE.BoxGeometry(3.5, 0.8, 3.5), M4(cx, by+H+1.8, cz, 0, 0.35, 0), '#6f6555');
+    } else { // the crimson crown: drum, gold dome, light mast
+      farB.add(new THREE.CylinderGeometry(1.55,1.85,H*0.55,10), M4(bx, by+H*0.28, bz), '#efe6cc');
+      farB.add(new THREE.SphereGeometry(1.8,9,7), M4(bx, by+H*0.55+1.2, bz), '#e9c96e');
+      farB.add(new THREE.BoxGeometry(0.8, H+1.2, 0.8), M4(bx+P.R*0.2, by+(H+1.2)/2, bz-P.R*0.18), '#efe6cc');
+      farB.add(new THREE.SphereGeometry(0.5,7,6), M4(bx+P.R*0.2, by+H+1.7, bz-P.R*0.18), '#ffd97a');
+    }
+  }
+
   function buildKitSettlement(r){
     const P=planTown(r), bx=P.bx, bz=P.bz, by=BASE_Y;
     const e = r.owner? emp(r.owner) : null;
     const ownerCol = e? e.color : '#8a6d3b';
     const capital = P.cap;
+    const capId = capitalStyleOf(r); // WAVE 14: which crown's skyline this seat wears (null = dressed hero as ever)
     bobReg.delete(r.id); gwReg.delete(r.id); // re-registered below if this town has them
     const ft=new TB(KIT.mats.town);
     const wallMat = KIT.mats.castle.clone(); wallMat.__own=true;
@@ -5741,7 +5860,7 @@ try{
         const dg=Math.abs(((a-P.gateAng+Math.PI*3)%(Math.PI*2))-Math.PI); if(dg<0.3) continue; // the gate gap
         ca.add(KIT.geo.cwall, M4(bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 0, -a, 0, 1.6, 1.0, chord*0.9)); }
     }
-    if((r.tier>=3 || capital) && r.greatWork!=='cathedral'){ // cathedral skyline — capitals always read as capitals
+    if((r.tier>=3 || capital) && !capId && r.greatWork!=='cathedral'){ // cathedral skyline — capitals always read as capitals (crown seats wear their own skyline below)
       if(KIT.geo.tower){
         caWhite.add(KIT.geo.tower, M4(bx+4.1, by, bz-3.8, 0, 0.2, 0, 2.4, 4.6, 2.4), '#fbf6e6');
         caWhite.add(KIT.geo.tower, M4(bx-5.6, by, bz+3.1, 0, -0.3, 0, 2.0, 3.8, 2.0), '#fbf6e6');
@@ -5750,7 +5869,9 @@ try{
       b.add(new THREE.ConeGeometry(3.1,3.4,4), M4(bx+0.5,by+5.1,bz+0.8,0,Math.PI/4,0), '#5e4718'); // cathedral roof over the nave
     }
     let heroDress=null;
-    if(capital && r.greatWork!=='admiralty'){ // golden dome over the crown seat — and up close the toy cone is gone:
+    if(capId && r.greatWork!=='admiralty' && r.greatWork!=='cathedral'){ // WAVE 14: the crown's own skyline
+      heroDress=buildCapitalIdentity(r, P, {ft, ca, caWhite, b, dec, objs, ownerCol});
+    } else if(capital && r.greatWork!=='admiralty'){ // golden dome over the crown seat — and up close the toy cone is gone:
       b.add(new THREE.SphereGeometry(2.1,10,8), M4(bx+0.5, by+8.6, bz+0.8), '#e9c96e');
       b.add(new THREE.CylinderGeometry(0.4,0.66,4.4,6), M4(bx+0.5, by+10.8, bz+0.8), '#c9a24b');
       if(!r.greatWork){ // at conversational distance the dome gains its dressed body — plinth, a true drum, a finial cap and a working clockface over the gate
@@ -5834,14 +5955,9 @@ try{
     if(decMesh){ decMesh.material=DECALMAT; decMesh.renderOrder=3; objs.push(decMesh); }
     if(harbor) objs.push(harbor);
     if(satMesh) objs.push(satMesh);
-    // far-band silhouette (world-zoom LOD): roof-mass cone + one hero spire — the political disc names the owner
+    // far-band silhouette (world-zoom LOD): a clustered roofline, not a cone — capitals echo their skyline
     const farB=new Batch();
-    farB.add(new THREE.ConeGeometry(P.R*0.92, P.R*0.5, 10), M4(bx, by+P.R*0.22, bz), ROOF_HEX[biomeKey(r)]);
-    if(r.tier>=2||r.hasWall) farWallArc(farB, r, bx, by, bz, P); // the wall arc — silhouette piece two, in the owner's stone
-    const heroH=Math.max(4.5, P.R*0.55);
-    farB.add(new THREE.BoxGeometry(1.6, heroH, 1.6), M4(bx+P.R*0.2, by+heroH/2, bz-P.R*0.18), '#e8dcc0');
-    farB.add(new THREE.ConeGeometry(1.95, 2.7, 6), M4(bx+P.R*0.2, by+heroH+1.35, bz-P.R*0.18), '#4a3423'); // the spire cap — piece three: roof-mass, wall arc and hero now read as a TOWN, not a blob
-    if(capital) farB.add(new THREE.SphereGeometry(1.7,8,6), M4(bx, by+heroH+1.1, bz), '#e9c96e');
+    farProxy(farB, r, bx, by, bz, P, capId);
     const farMesh=farB.mesh(); farMesh.visible=false; objs.push(farMesh);
     if(winGeos.length){ const wg=window.__mergeGeometries(winGeos, false); winMesh=new THREE.Mesh(wg, winLampMat()); winMesh.renderOrder=2; objs.push(winMesh); }
     return {objs, sat: satMesh, dec: decMesh, far: farMesh, near: [ftm, cam, cwm, bm, winMesh].filter(Boolean), heroD: heroDress, _hd:null};
@@ -5855,6 +5971,7 @@ try{
     const ownerCol = r.owner? emp(r.owner).color : '#8a6d3b';
     const walls=['#cbb27a','#bfa065','#d6c088','#c2a878','#e3d3ac','#b98d5f'];
     const capital = !!isCapitalOf(r);
+    const capId = capitalStyleOf(r); // WAVE 14: which crown's skyline this seat wears (null = dressed hero as ever)
     // main cluster follows the same Townscaper-lite plan the kit towns use — one town, two painters
     const P=planTown(r);
     P.lots.forEach((lot,i)=>{
@@ -5886,13 +6003,50 @@ try{
       for(let i=0;i<4;i++){ const a=(i+0.5)/4*Math.PI*2;
         tower(b, bx+Math.cos(a)*rad, by, bz+Math.sin(a)*rad, 1.15, '#a8977a', '#5e4718', 4.2); }
     }
-    if(r.tier>=3 || capital){ // cathedral skyline — capitals always read as capitals
+    if((r.tier>=3 || capital) && !capId){ // cathedral skyline — capitals always read as capitals (crown seats wear their own below)
       tower(b, bx+4.1, by, bz-3.8, 1.5, '#e8dcc0', '#5e4718', 6.2);
       tower(b, bx-5.6, by, bz+3.1, 1.25, '#e8dcc0', '#5e4718', 5.2);
       b.add(new THREE.BoxGeometry(7.2,3.4,3.4), M4(bx+0.5,by+1.7,bz+0.8), '#d9c8a4');
       b.add(new THREE.ConeGeometry(2.6,3.6,4), M4(bx+0.5,by+5.1,bz+0.8,0,Math.PI/4,0), '#5e4718');
     }
-    if(capital){ // the crown seat wears a dressed drum, dome and finial — no toy cone on a ball, near or far
+    if(capId){ // WAVE 14: the crown's own skyline, painted in prims — the same reading the kit towns get
+      const ax=bx+0.5, az=bz+0.8;
+      if(capId==='aurelia'){ // twin spires + brick campanile
+        tower(b, bx+4.1, by, bz-3.8, 1.5, '#e8dcc0', '#3d2c1c', 6.4);
+        tower(b, bx-5.6, by, bz+3.1, 1.25, '#e8dcc0', '#3d2c1c', 5.4);
+        b.add(new THREE.BoxGeometry(7.2,3.4,3.4), M4(ax,by+1.7,az), '#e8dcc0');
+        b.add(new THREE.ConeGeometry(2.6,3.6,4), M4(ax,by+5.1,az,0,Math.PI/4,0), '#5e4718');
+        b.add(new THREE.BoxGeometry(2.1,9.6,2.1), M4(ax+1.2, by+4.8, az+1.0), '#a5563d');
+        b.add(new THREE.ConeGeometry(1.9,2.4,4), M4(ax+1.2, by+10.8, az+1.0, 0, Math.PI/4, 0), '#5e4718');
+      } else if(capId==='meridian'){ // stepped gables + customs crane
+        [[-2.9,1.6,3.5],[0.9,-1.4,4.2],[4.4,2.0,3.1]].forEach(hp=>{
+          const hx=ax+hp[0], hz=az+hp[1], hh=hp[2];
+          b.add(new THREE.BoxGeometry(2.3, hh, 2.0), M4(hx, by+hh/2, hz, 0, hash(r.id*7.3+hx)*0.5, 0), '#8a6a44');
+          b.add(new THREE.BoxGeometry(1.8, 0.75, 1.7), M4(hx, by+hh+0.37, hz, 0, hash(r.id*7.3+hx)*0.5, 0), '#8a6a44');
+          b.add(new THREE.BoxGeometry(1.25, 0.7, 1.25), M4(hx, by+hh+1.1, hz, 0, hash(r.id*7.3+hx)*0.5, 0), '#8a6a44');
+          b.add(new THREE.BoxGeometry(0.72, 0.65, 0.72), M4(hx, by+hh+1.75, hz, 0, hash(r.id*7.3+hx)*0.5, 0), '#8a6a44');
+        });
+        const cx2=bx+P.dx*(P.R*0.52), cz2=bz+P.dz*(P.R*0.52);
+        b.add(new THREE.BoxGeometry(0.55, 7.2, 0.55), M4(cx2, by+3.6, cz2), '#453012');
+        b.add(new THREE.BoxGeometry(6.0, 0.4, 0.4), M4(cx2+P.dx*2.2, by+6.9, cz2+P.dz*2.2, 0, -P.shoreAng, 0), '#453012');
+        b.add(new THREE.BoxGeometry(1.05, 0.9, 1.05), M4(cx2+P.dx*4.4, by+3.9, cz2+P.dz*4.4), '#7a5a2c');
+      } else if(capId==='sable'){ // fortress keep + corsair yards
+        tower(b, ax, by, az, 2.2, '#8d8272', '#4c4438', 3.6);
+        [-1,1].forEach(sg=>{ const mx=bx+P.dx*(P.R*0.5)-P.dz*sg*4.6, mz=bz+P.dz*(P.R*0.5)+P.dx*sg*4.6;
+          b.add(new THREE.CylinderGeometry(0.16, 0.24, 6.2, 5), M4(mx, by+3.1, mz), '#4a3319');
+          b.add(new THREE.BoxGeometry(3.6, 0.16, 0.16), M4(mx, by+4.9, mz, 0, -P.shoreAng, sg*0.12), '#4a3319'); });
+      } else { // the crimson crown: dressed drum + dome, and a light toward home water
+        b.add(new THREE.BoxGeometry(5.6,1.15,5.6), M4(ax, by+0.58, az), '#e6dbc0');
+        b.add(new THREE.CylinderGeometry(1.6,1.95,3.8,12), M4(ax, by+3.0, az), '#e8dcc0');
+        const procDome=new THREE.SphereGeometry(2.06,12,8); procDome.scale(1,0.86,1);
+        b.add(procDome, M4(ax, by+4.95, az), '#e9c96e');
+        b.add(new THREE.CylinderGeometry(0.15,0.32,2.6,6), M4(ax, by+7.3, az), '#c9a24b');
+        b.add(new THREE.SphereGeometry(0.36,8,6), M4(ax, by+8.85, az), '#ffe9a8');
+        const lx=bx+P.dx*(P.R*0.6), lz=bz+P.dz*(P.R*0.6);
+        b.add(new THREE.CylinderGeometry(0.75,1.0,4.8,7), M4(lx, by+2.4, lz), '#efe6cc');
+        b.add(new THREE.SphereGeometry(0.55,8,6), M4(lx, by+5.1, lz), '#ffd97a');
+      }
+    } else if(capital){ // the crown seat wears a dressed drum, dome and finial — no toy cone on a ball, near or far
       b.add(new THREE.BoxGeometry(5.6,1.15,5.6), M4(bx+0.5, by+0.58, bz+0.8), '#e6dbc0');
       b.add(new THREE.CylinderGeometry(1.6,1.95,3.8,12), M4(bx+0.5, by+3.0, bz+0.8), '#e8dcc0');
       const procDome=new THREE.SphereGeometry(2.06,12,8); procDome.scale(1,0.86,1);
@@ -5931,14 +6085,9 @@ try{
     const satMesh = sb.pos.length? sb.mesh() : null;
     const mainMesh=b.mesh();
     const objs=[mainMesh]; if(rig) objs.push(rig); if(satMesh) objs.push(satMesh);
-    // far-band silhouette, same as the kit towns wear — roof-mass, wall arc, capped hero
+    // far-band silhouette, same as the kit towns wear — a clustered roofline, capitals echoing their skyline
     const farB=new Batch();
-    farB.add(new THREE.ConeGeometry(P.R*0.92, P.R*0.5, 10), M4(bx, by+P.R*0.22, bz), ROOF_HEX[biomeKey(r)]);
-    if(r.tier>=2||r.hasWall) farWallArc(farB, r, bx, by, bz, P);
-    const heroH=Math.max(4.5, P.R*0.55);
-    farB.add(new THREE.BoxGeometry(1.6, heroH, 1.6), M4(bx+P.R*0.2, by+heroH/2, bz-P.R*0.18), '#e8dcc0');
-    farB.add(new THREE.ConeGeometry(1.95, 2.7, 6), M4(bx+P.R*0.2, by+heroH+1.35, bz-P.R*0.18), '#4a3423');
-    if(capital) farB.add(new THREE.SphereGeometry(1.7,8,6), M4(bx, by+heroH+1.1, bz), '#e9c96e');
+    farProxy(farB, r, bx, by, bz, P, capId);
     const farMesh=farB.mesh(); farMesh.visible=false; objs.push(farMesh);
     return {objs, sat: satMesh, far: farMesh, near: [mainMesh].filter(Boolean)};
   }
@@ -6007,16 +6156,21 @@ try{
         vec3 col = mix(uDeep, uShallow, smoothstep(0.02, 0.5, shore));
         // near-shore depth: a pale aqua kiss where the water shallows onto the land
         // (built from uShallow so the night grade dims it with everything else)
-        col = mix(col, uShallow*1.5 + vec3(0.05,0.09,0.07), smoothstep(0.30, 0.5, shore)*0.42);
+        col = mix(col, uShallow*1.5 + vec3(0.05,0.09,0.07), smoothstep(0.22, 0.5, shore)*0.50); // WAVE 14: the aqua kiss reaches a touch further out
         vec3 V = normalize(cameraPosition - vWp);
         float fres = pow(1.0 - max(dot(V, normalize(vN)), 0.0), 3.0);
         col = mix(col, uSky, fres*0.55);
         // lapping foam: a broad band just seaward of the waterline whose brightness
         // travels with the swell phase, so the edge breathes instead of sitting still
-        float foamBand = smoothstep(0.15, 0.33, shore) * (1.0 - smoothstep(0.44, 0.56, shore));
+        float foamBand = smoothstep(0.10, 0.30, shore) * (1.0 - smoothstep(0.40, 0.60, shore)); // WAVE 14: wider seaward skirt
         float lap = 0.45 + 0.55*sin(uTime*1.9 - shore*55.0 + (vWp.x+vWp.z)*0.05);
         float crest = smoothstep(0.58, 0.8, vCrest) * 0.16; // whisper of white on the swell, never faceted slabs
-        col = mix(col, uFoam, clamp(foamBand*(0.30+0.70*lap)*0.95 + crest*(1.0-shore), 0.0, 1.0));
+        col = mix(col, uFoam, clamp(foamBand*(0.34+0.72*lap) + crest*(1.0-shore), 0.0, 1.0));
+        // WAVE 14 far-band edge: at world zoom the camera rides high and the water flattens —
+        // a faint fresnel-driven pale rim just off the waterline keeps every coast drawn on
+        // the chart without gilding it (peaks at the shore, gone by mid-water).
+        float farRim = smoothstep(0.06, 0.22, shore) * (1.0 - smoothstep(0.24, 0.42, shore));
+        col = mix(col, uFoam, farRim * fres * 0.38);
         float depth = length(cameraPosition - vWp);
         float f2 = 1.0 - exp(-fogDensity*fogDensity*depth*depth*1.44);
         col = mix(col, fogColor, clamp(f2,0.0,1.0));
@@ -6070,7 +6224,7 @@ try{
       for(let i=0;i<=n;i++){ const p=pts2[i%n], q=pts2[(i+1)%n], pv=pts2[(i-1+n)%n];
         let tx=q[0]-pv[0], tz=q[1]-pv[1]; const tl=Math.hypot(tx,tz)||1; tx/=tl; tz/=tl;
         let nx=-tz, nz=tx; if(nx*(p[0]-cx)+nz*(p[1]-cz)<0){ nx=-nx; nz=-nz; }
-        foamPos.push(p[0], 0.88, p[1], p[0]+nx*2.7, 0.8, p[1]+nz*2.7);
+        foamPos.push(p[0], 0.88, p[1], p[0]+nx*4.0, 0.8, p[1]+nz*4.0); // WAVE 14: 2.7 → 4.0 — the surf writes wider so coasts keep their edge from orbit
         foamUv.push(0,0, 1,0);
         if(i<n){ const a=base+i*2; foamIdx.push(a,a+1,a+2, a+1,a+3,a+2); } }
     }
@@ -6117,7 +6271,7 @@ try{
       const fx2=fc.getContext('2d'); const gr=fx2.createLinearGradient(0,0,64,0);
       gr.addColorStop(0,'rgba(255,255,255,0.95)'); gr.addColorStop(0.55,'rgba(255,255,255,0.45)'); gr.addColorStop(1,'rgba(255,255,255,0)');
       fx2.fillStyle=gr; fx2.fillRect(0,0,64,4);
-      const fm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(fc), color:0xeaf7f2, transparent:true, opacity:0.4, depthWrite:false, side:THREE.DoubleSide});
+      const fm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(fc), color:0xeaf7f2, transparent:true, opacity:0.55, depthWrite:false, side:THREE.DoubleSide});
       const foamMesh=new THREE.Mesh(fg, fm); foamMesh.renderOrder=2; foamMesh.frustumCulled=false;
       worldGroup.add(foamMesh); foamMats.push(fm);
     }
@@ -6862,7 +7016,7 @@ try{
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
     // water swell (shader-side now; the foam rim pulses with the same lap rhythm)
     waterUniforms.uTime.value = t;
-    const foamO = 0.3 + 0.16*(0.5+0.5*Math.sin(t*1.6));
+    const foamO = 0.38 + 0.18*(0.5+0.5*Math.sin(t*1.6)); // WAVE 14: the lap breathes a little louder now
     foamMats.forEach(m=>{ m.opacity = foamO; });
     // fleets LIVE at their true positions — sailing ships glide, anchored ones bob
     G.fleets.forEach((f,i)=>{
