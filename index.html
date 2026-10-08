@@ -2150,16 +2150,16 @@ function resolveArmyBattleApply(a, dest, res, atkBefore, defBefore, prevOwner){
     if(a.owner==='player'){
       const spoils=prevOwner? 120+dest.tier*60 : 40;
       emp('player').gold+=spoils;
-      gazette('⚔ <b>'+dest.name+' has fallen!</b> '+a.name+' takes the '+['hamlet','town','city','great port'][dest.tier]+' — '+fmt(res.aLoss)+' of yours and '+fmt(res.dLoss)+' defenders fell. Spoils of '+fmt(spoils)+'g pour into your treasury.');
+      gazette('⚔ '+blazonChip(a.owner)+'<b>'+dest.name+' has fallen!</b> '+a.name+' takes the '+['hamlet','town','city','great port'][dest.tier]+' — '+fmt(res.aLoss)+' of yours and '+fmt(res.dLoss)+' defenders fell. Spoils of '+fmt(spoils)+'g pour into your treasury.');
       toast('🏴 '+dest.name+' is yours! +'+fmt(spoils)+'g spoils');
-      pushEvent('🏴 <b>'+dest.name+' taken!</b> '+a.name+' prevails — spoils +'+fmt(spoils)+'g.');
+      pushEvent('🏴 '+blazonChip(a.owner)+'<b>'+dest.name+' taken!</b> '+a.name+' prevails — spoils +'+fmt(spoils)+'g.');
       showBattle(a.name, atkBefore, dest.name, defBefore, res, true, 'Spoils: +'+fmt(spoils)+'g · '+dest.name+' flies your colours. '+(G.armies.some(x=>x.id===a.id)? a.name+' marches on with '+fmt(a.men)+' men.' : 'The host settles in as its garrison.')+story);
       coachAdvance(1); simPauseEvent();
     } else {
-      if(prevOwner==='player'){ gazette('⚔ <b>'+emp(a.owner).name+' has taken '+dest.name+'!</b> '+fmt(res.dLoss)+' of your garrison fell holding it.'); pushEvent('⚔ <b>'+dest.name+' lost!</b> '+emp(a.owner).name+' storms the town.'); simPauseEvent(); }
-      else { gazette('⚔ '+emp(a.owner).name+' takes '+dest.name+(prevOwner? ' from '+emp(prevOwner).name : '')+'.');
+      if(prevOwner==='player'){ gazette('⚔ '+blazonChip(a.owner)+'<b>'+emp(a.owner).name+' has taken '+dest.name+'!</b> '+fmt(res.dLoss)+' of your garrison fell holding it.'); pushEvent('⚔ '+blazonChip(a.owner)+'<b>'+dest.name+' lost!</b> '+emp(a.owner).name+' storms the town.'); simPauseEvent(); }
+      else { gazette('⚔ '+blazonChip(a.owner)+emp(a.owner).name+' takes '+dest.name+(prevOwner? ' from '+emp(prevOwner).name : '')+'.');
         // the rival crowns' wars are news too — surface the ones that move the board
-        if(prevOwner && prevOwner!=='natives' && dest.isPort) pushEvent('◆ <b>The board shifts:</b> '+emp(a.owner).name+' takes '+dest.name+' from '+emp(prevOwner).name+'.'); }
+        if(prevOwner && prevOwner!=='natives' && dest.isPort) pushEvent('◆ '+blazonChip(a.owner)+'<b>The board shifts:</b> '+emp(a.owner).name+' takes '+dest.name+' from '+emp(prevOwner).name+'.'); }
     }
     if(window.animsPush) anims.push(null); // 2D wash handled via flashUntil (cheap, renderer-agnostic)
     dest.flashUntil=performance.now()+1200;
@@ -2366,7 +2366,7 @@ function rtAdvanceDays(days){
     // season seam: every 90 days the old economy breathes
     if(Math.floor(G.day)%90===0){ endSeason(); if(G.over) break; }
     // imperial staffs think monthly
-    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); governorMonthly(); detectWarnings(); borderWatch(); successionTestCheck(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
+    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); governorMonthly(); detectWarnings(); borderWatch(); successionTestCheck(); aiSuccessionTheatre(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
     // arrivals (timestamp-exact)
     (G.armies||[]).slice().forEach(a=>{ if(a.at && G.day>=a.arriveDay-1e-9) armyArrive(a); });
     (G.fleets||[]).slice().forEach(f=>{ if(f.at && G.day>=f.at.arriveDay-1e-9) fleetArrive(f); });
@@ -3207,15 +3207,15 @@ function surrenderTown(sg, honors){
     noteConquest(r);
     gazette('🎇 '+blazonChip(sg.atkOwner)+'<b>'+r.name+' yields!</b> '+(a? a.name : 'Your besiegers')+' receives the keys — '+(honors?'the garrison marches out with honours.':'hunger did what powder could not.')+' Spoils +'+fmt(spoils)+'g.');
     toast('🎇 '+r.name+' surrenders to you! +'+fmt(spoils)+'g');
-    pushEvent('🎇 <b>'+r.name+' has surrendered</b> — the siege is won, and no street-fighting tax to pay.');
+    pushEvent('🎇 '+blazonChip(sg.atkOwner)+'<b>'+r.name+' has surrendered</b> — the siege is won, and no street-fighting tax to pay.');
     if(a) dispatch(a.general? a.general.name : a.name, r.name+' opened her gates to us. '+(honors?'We let their garrison march out with drums beating — soldiers respect soldiers.':'Starvation is a slower gun than any we own, and surer.'));
   } else if(prev==='player'){
     gazette('🎇 '+blazonChip(sg.atkOwner)+'<b>'+r.name+' has surrendered</b> to '+emp(sg.atkOwner).name+' — '+(honors?'your garrison marched out with its colours.':'the granaries gave out first.'));
-    pushEvent('🎇 <b>'+r.name+' lost</b> — surrendered to the besiegers of '+emp(sg.atkOwner).name+'.');
+    pushEvent('🎇 '+blazonChip(sg.atkOwner)+'<b>'+r.name+' lost</b> — surrendered to the besiegers of '+emp(sg.atkOwner).name+'.');
     simPauseEvent();
   } else {
     gazette('🎇 '+blazonChip(sg.atkOwner)+r.name+' surrenders to '+emp(sg.atkOwner).name+' after a formal siege — the ladder ran its full course.');
-    if(r.isPort && prev && prev!=='natives') pushEvent('◆ <b>The board shifts:</b> '+emp(sg.atkOwner).name+' starves '+r.name+' out of '+emp(prev).name+' hands.');
+    if(r.isPort && prev && prev!=='natives') pushEvent('◆ '+blazonChip(sg.atkOwner)+'<b>The board shifts:</b> '+emp(sg.atkOwner).name+' starves '+r.name+' out of '+emp(prev).name+' hands.');
   }
   refreshHUD(); save();
 }
@@ -4407,6 +4407,143 @@ function successionTestCheck(){
   }
   noteSeasonBeat('the succession test was answered face to face, and the testing crown looked away first');
   save();
+}
+/* WAVE 18 — SUCCESSION THEATRE ABROAD. Your council's question was never going to stay
+   your council's alone: a rival crown with a realm worth bequeathing settles its own
+   succession in seals and masses, and the court nursing the longest list against it
+   masses real spears — or real canvas — to test the new order, exactly as yours was
+   tested. The tested crown's own staff rides to face it or does not; positions and
+   musters are the real ones, the ledgers move in the pair's own relation records, and
+   this house chronicles the play with blazons. One stage at a time, one cycle per
+   crown pair per five years — courts have long memories and short patience. */
+function aiTheatreState(){ const F=G.flags||(G.flags={}); if(!F.aiTheatre||typeof F.aiTheatre!=='object') F.aiTheatre={active:null,last:{}}; if(!F.aiTheatre.last||typeof F.aiTheatre.last!=='object') F.aiTheatre.last={}; return F.aiTheatre; }
+function theatrePairKey(a,b){ return a<b? a+'|'+b : b+'|'+a; }
+function theatreLedger(from, to, key, delta, reason){ // the pair's own books — the same relation records both crowns consult everywhere else
+  const ab=G.empires[from]&&G.empires[from].relations[to], ba=G.empires[to]&&G.empires[to].relations[from];
+  if(ab){ ab[key]=(ab[key]||0)+delta; if(reason){ ab.reasons=ab.reasons||[]; ab.reasons.unshift(reason); ab.reasons.length=Math.min(ab.reasons.length,4); } }
+  if(ba&&(key==='trust'||key==='grievance'||key==='favours')) ba[key]=(ba[key]||0)+delta;
+}
+function armTheatreProbe(crown, tester){
+  const T=aiTheatreState();
+  const mine=G.regions.filter(r=>r.owner===tester), theirs=G.regions.filter(r=>r.owner===crown);
+  if(!mine.length||!theirs.length) return false;
+  const border=mine.filter(r=>r.neighbors.some(nid=>rById[nid]&&rById[nid].owner===crown));
+  let army=(G.armies||[]).filter(a=>a.owner===tester&&!a.at&&!a.siegeId&&a.stance!=='hold'&&a.men>=1500).sort((a,b)=>b.men-a.men)[0];
+  if(!army&&border.length){
+    const fat=border.filter(r=>r.troops>=2500).sort((a,b)=>b.troops-a.troops)[0]||mine.filter(r=>r.troops>=2500).sort((a,b)=>b.troops-a.troops)[0];
+    if(fat) army=formArmySilent(fat, 2000);
+  }
+  if(army&&border.length){
+    const dest=border.slice().sort((a,b)=>b.troops-a.troops)[0];
+    const stands = army.atRegion===dest.id || orderMarch(army, dest);
+    if(stands){ army.stance='hold'; army.holdUntil=1e9;
+      T.active={crown, tester, kind:'land', region:dest.id, armyId:army.id, armedTurn:G.turn, deadlineTurn:G.turn+3};
+      gazette('🎇 '+blazonChip(crown)+'<b>The '+emp(crown).name+' succession is settled abroad.</b> With seals and masses, '+emp(crown).name+' has named who stands after its throne — and '+emp(tester).name+', nursing the longest list against that court, means to test the new order the old way: a host masses at '+dest.name+', spears up, saying nothing. Every counting-house on the chart is watching the marches.');
+      noteSeasonBeat('abroad, the '+emp(crown).name+' settled its succession — and the '+emp(tester).name+' host is massing to test it');
+      pushEvent('🎇 <b>Succession abroad:</b> '+emp(tester).name+' masses to test the new '+emp(crown).name+' order.');
+      save(); return true; }
+    return false; // no road to the marches this month — the staff abroad tries again, or does not
+  }
+  // no shared border, or no host worth the name: the test comes by water, to their home roads
+  const fleet=(G.fleets||[]).filter(f=>f.owner===tester&&f.ships>0).sort((a,b)=>b.ships-a.ships)[0];
+  const capR=G.regions.find(r=>r.name===emp(crown).capitalName);
+  if(fleet&&capR&&capR.seaZone!=null&&seaById[capR.seaZone]){
+    if((fleet.zone===capR.seaZone&&!fleet.at)||orderSailZone(fleet, seaById[capR.seaZone])){
+      T.active={crown, tester, kind:'sea', zone:capR.seaZone, fleetId:fleet.id, armedTurn:G.turn, deadlineTurn:G.turn+3};
+      gazette('🎇 '+blazonChip(crown)+'<b>The '+emp(crown).name+' succession is settled abroad.</b> With seals and masses, '+emp(crown).name+' has named who stands after its throne — and '+emp(tester).name+', nursing the longest list against that court, sends canvas into the '+emp(crown).name+' home roads to test the new order by water. Every counting-house on the chart is watching the horizon.');
+      noteSeasonBeat('abroad, the '+emp(crown).name+' settled its succession — and '+emp(tester).name+' canvas rides to test it');
+      pushEvent('🎇 <b>Succession abroad:</b> '+emp(tester).name+' sails to test the new '+emp(crown).name+' order.');
+      save(); return true; }
+  }
+  return false; // too weak to test anyone — the silence abroad is its own answer
+}
+function theatreLandAnswer(rec, face){ // the tested crown's staff does what any staff does with spears on its marches
+  const a=(G.armies||[]).filter(x=>x.owner===rec.crown&&!x.at&&!x.siegeId&&x.stance!=='hold'&&x.men>=600).sort((x,y)=>y.men-x.men)[0];
+  if(!a||face.has(a.atRegion)) return;
+  const grounds=G.regions.filter(r=>r.owner===rec.crown&&face.has(r.id));
+  if(!grounds.length) return;
+  const home=rById[a.atRegion]; grounds.sort((x,y)=>Math.hypot(x.x-(home?home.x:0), x.y-(home?home.y:0))-Math.hypot(y.x-(home?home.x:0), y.y-(home?home.y:0)));
+  orderMarch(a, grounds[0]); // a real road, real days — the answer arrives when it arrives, or not at all
+}
+function theatreSeaAnswer(rec){
+  const homeR=G.regions.find(r=>r.name===emp(rec.tester).capitalName), homeZ=homeR? homeR.seaZone : null;
+  if(homeZ==null||!seaById[homeZ]) return;
+  const f=(G.fleets||[]).filter(x=>x.owner===rec.crown&&x.ships>0&&!x.at).sort((a,b)=>b.ships-a.ships)[0];
+  if(!f||f.zone===homeZ) return;
+  orderSailZone(f, seaById[homeZ]);
+}
+function closeTheatre(rec, probe, answered){
+  const T=aiTheatreState(); T.active=null; // spent before it sings — one closing line per play, never two
+  const crown=rec.crown, tester=rec.tester, CN=emp(crown).name, TN=emp(tester).name;
+  if(probe){ // whichever way the play resolved, the testing host goes home under real orders
+    if(rec.kind==='sea'){
+      const homeR=G.regions.find(r=>r.name===emp(tester).capitalName), homeZ=homeR? homeR.seaZone : null;
+      if(homeZ!=null&&seaById[homeZ]&&(probe.zone!==homeZ||probe.at)) orderSailZone(probe, seaById[homeZ]);
+    } else {
+      const home=G.regions.find(r=>r.name===emp(tester).capitalName&&r.owner===tester)||G.regions.filter(r=>r.owner===tester).sort((a,b)=>b.troops-a.troops)[0];
+      let sent=false;
+      if(home&&probe.atRegion!==home.id) sent=orderMarch(probe, home);
+      if(!sent){ probe.stance='field'; probe.holdUntil=null; }
+    }
+  }
+  if(answered){
+    theatreLedger(tester, crown, 'trust', 4, 'the '+CN+' answered our succession test face to face — a Crown that shows up is a Crown that lasts');
+    theatreLedger(crown, tester, 'grievance', -2, 'their succession test was fair and fairly met; the marches hold no grudge for it');
+    if(rec.kind==='sea') gazette('⚓ '+blazonChip(crown)+'<b>The test is answered abroad.</b> More '+CN+' canvas rides in the '+TN+' home roads than their probe ever showed — the ensigns dip, the squadron weighs for home water, and the counting-houses in both capitals write it down: that Crown shows up.');
+    else gazette('🛡 '+blazonChip(crown)+'<b>The test is answered abroad.</b> Spear for spear on the '+(rById[rec.region]? rById[rec.region].name : 'border')+' marches, the '+CN+' showed up for its new order — and it was the '+TN+' who looked away first. The testing host strikes its tents and marches home; the story runs the lanes in both capitals.');
+    noteSeasonBeat('abroad, the '+CN+' answered the '+TN+' succession test face to face');
+  } else {
+    theatreLedger(tester, crown, 'threat', 5, 'we massed to test the '+CN+' succession and found no answer waiting — a soft border, a softer throne');
+    theatreLedger(crown, tester, 'grievance', 3, 'the '+TN+' massed spears to try our new reign, and we had nothing to show them');
+    if(rec.kind==='sea') gazette('🌫 '+blazonChip(tester)+'<b>The test went unanswered abroad.</b> '+TN+' canvas rode the '+CN+' home roads a full season, saying nothing — and nothing came out to meet it. The squadron weighs home in good order, and the story that runs the lanes is not flattering: the new order abroad looks soft, and every court is quietly re-pricing it.');
+    else gazette('🌫 '+blazonChip(tester)+'<b>The test went unanswered abroad.</b> The '+TN+' host stood at the '+CN+' marches a full season, spears up, saying nothing — and nothing came. The tents fold in good order, and the story that runs the lanes is not flattering: the new order abroad looks soft, and every court is quietly re-pricing it.');
+    noteSeasonBeat('abroad, the '+TN+' succession test of the '+CN+' went unanswered, and the lanes noticed');
+  }
+  save();
+}
+function aiTheatreCheck(rec){
+  const T=aiTheatreState();
+  const crown=rec.crown, tester=rec.tester;
+  if(!emp(crown)||!emp(tester)){ T.active=null; return; }
+  if(atWar(crown,tester)||allied(crown,tester)||!G.regions.some(r=>r.owner===crown)||!G.regions.some(r=>r.owner===tester)){ T.active=null; save(); return; } // earnest war, new friendship, or a crown gone from the chart — the war writes its own news
+  let probe=null, answered=false;
+  if(rec.kind==='sea'){
+    probe=(G.fleets||[]).find(f=>f.id===rec.fleetId)||(G.fleets||[]).filter(f=>f.owner===tester&&!f.at&&f.zone===rec.zone).sort((a,b)=>b.ships-a.ships)[0];
+    if(!probe||!(probe.ships>0)){ T.active=null; save(); return; } // their ensigns are gone — nothing left to answer, and no line invented about it
+    const homeR=G.regions.find(r=>r.name===emp(tester).capitalName), homeZ=homeR? homeR.seaZone : null;
+    if(homeZ==null||!seaById[homeZ]){ T.active=null; save(); return; }
+    const theirs=(G.fleets||[]).filter(f=>f.owner===crown&&!f.at&&f.zone===homeZ).reduce((s,f)=>s+(f.ships||0),0);
+    answered=theirs>probe.ships; // superior means superior — a tie is only a conversation
+    if(!answered&&G.turn<=rec.deadlineTurn) theatreSeaAnswer(rec);
+  } else {
+    probe=(G.armies||[]).find(a=>a.id===rec.armyId)||(G.armies||[]).filter(a=>a.owner===tester&&!a.at&&!a.siegeId&&a.atRegion===rec.region).sort((a,b)=>b.men-a.men)[0];
+    if(!probe){ T.active=null; save(); return; } // the host is gone — broken, folded into another banner, or marched away
+    if(probe.at) return; // still on the road to its post — the test stands when it stands
+    const post=rById[rec.region]; if(!post){ T.active=null; save(); return; }
+    const face=new Set(post.neighbors||[]);
+    const theirs=(G.armies||[]).filter(a=>a.owner===crown&&!a.at&&!a.siegeId&&face.has(a.atRegion)).reduce((s,a)=>s+(a.men||0),0);
+    answered=theirs>=probe.men; // spear for spear — as many as they brought, and steadier
+    if(!answered&&G.turn<=rec.deadlineTurn) theatreLandAnswer(rec, face);
+  }
+  if(answered){ closeTheatre(rec, probe, true); return; }
+  if(G.turn>rec.deadlineTurn) closeTheatre(rec, probe, false);
+}
+function aiSuccessionTheatre(){
+  const T=aiTheatreState();
+  if(T.active){ aiTheatreCheck(T.active); return; } // a standing play abroad resolves before a new one is staged
+  if(!G||G.over||G.turn<29) return; // the eighth year by the clerks' count — the same clock as your own council
+  if(G.flags&&G.flags.successionTest) return; // your own marches are being tested — the chroniclers have ink enough for one test at a time
+  const AI=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&G.regions.some(r=>r.owner===id));
+  for(const crown of AI){
+    if(!(G.regions.filter(r=>r.owner===crown).length>=10||totalMen(crown)>=20000)) continue; // a realm with something to bequeath
+    const testers=AI.filter(id=>id!==crown&&!allied(crown,id)&&!atWar(crown,id));
+    if(!testers.length) continue;
+    testers.sort((a,b)=>(((emp(b).relations[crown]||{}).grievance||0)-((emp(a).relations[crown]||{}).grievance||0))||(crownPower(b)-crownPower(a)));
+    const tester=testers[0]; if(!tester) continue;
+    const key=theatrePairKey(crown,tester);
+    if(T.last[key]!=null&&G.turn-T.last[key]<20) continue; // five quiet years between tests of the same pair
+    if(armTheatreProbe(crown, tester)){ T.last[key]=G.turn; return; } // one staging per staff month, and the pair rests five years after
+  }
 }
 function successionBeat(){
   const F=G.flags||(G.flags={});
@@ -5625,6 +5762,58 @@ try{
     for(let k=0;k<2;k++) for(let i=0;i<12;i++) w[n-24+k*12+i]=wv[i];
     g.setAttribute('aFlag', new THREE.BufferAttribute(w,1));
     farMesh.material=farFlagMat();
+  }
+  /* WAVE 18: from orbit a capital is a knot of roofs sixty pixels wide, and cloth alone
+     cannot name its crown. So every SEATED crown — yours and the rivals' alike — lifts a
+     soft pillar of its own colour over its seat: one merged additive mesh, one draw,
+     rebuilt only when a seat changes hands, and breathing on the camera's distance —
+     nothing at conversational range, a rumour at the far band's edge, full voice from
+     orbit. Ordinary towns get no light; there are exactly as many pillars as thrones. */
+  let _capGlowMesh=null, _capGlowSig=null, _capGlowMat=null;
+  function capGlowMat(){
+    if(_capGlowMat) return _capGlowMat;
+    _capGlowMat=new THREE.ShaderMaterial({
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide, vertexColors:true,
+      uniforms:{ uGlow:{value:0} },
+      vertexShader:'varying vec2 vUv; varying vec3 vCol; varying vec3 vNor; varying vec3 vView;\n'+
+        'void main(){ vUv=uv; vCol=color;\n'+
+        '  vec4 mv=modelViewMatrix*vec4(position,1.0);\n'+
+        '  vNor=normalMatrix*normal; vView=-mv.xyz;\n'+
+        '  gl_Position=projectionMatrix*mv; }',
+      fragmentShader:'uniform float uGlow; varying vec2 vUv; varying vec3 vCol; varying vec3 vNor; varying vec3 vView;\n'+
+        'void main(){\n'+
+        '  float face=abs(dot(normalize(vNor), normalize(vView)));\n'+ // bright face-on, whisper at the silhouette
+        '  float a=uGlow*0.62*pow(max(0.0,1.0-vUv.y),1.35)*pow(face,1.1);\n'+
+        '  gl_FragColor=vec4(vCol, a); }'
+    });
+    return _capGlowMat;
+  }
+  function refreshCapGlow(){ // signature-guarded: conquest re-lights the pillar, nothing else ever rebuilds it
+    if(!G||!G.regions) return;
+    const seats=G.regions.filter(r=>capitalStyleOf(r));
+    const sig=seats.map(r=>r.id+':'+r.owner).join('|');
+    if(sig===_capGlowSig) return;
+    _capGlowSig=sig;
+    if(_capGlowMesh){ scene.remove(_capGlowMesh); if(_capGlowMesh.geometry) _capGlowMesh.geometry.dispose(); _capGlowMesh=null; }
+    if(!seats.length) return;
+    const gb=new TB(null);
+    const _lift=new THREE.Color('#ffffff');
+    seats.forEach(r=>{
+      const P=planTown(r);
+      const col=new THREE.Color((G.empires[r.owner]||{}).color||'#e9c96e').lerp(_lift, 0.22).multiplyScalar(1.45); // only a breath of candlelight lift — the hue must keep its name from orbit
+      const H=150, R0=Math.max(9, P.R*0.85);
+      gb.add(new THREE.CylinderGeometry(R0*0.42, R0, H, 12, 1, true), M4(SX(r.x), BASE_Y+H/2, SZ(r.y)), col);
+    });
+    _capGlowMesh=gb.mesh(capGlowMat());
+    _capGlowMesh.castShadow=false; _capGlowMesh.receiveShadow=false;
+    _capGlowMesh.renderOrder=7; _capGlowMesh.frustumCulled=false;
+    scene.add(_capGlowMesh);
+  }
+  function tickCapGlow(){ // the far band owns the pillars; mid distance hands identity back to stone and cloth
+    if(!_capGlowMesh) return;
+    const g=THREE.MathUtils.smoothstep(dist, 640, 1050);
+    if(_capGlowMat && _capGlowMat.uniforms.uGlow.value!==g) _capGlowMat.uniforms.uGlow.value=g;
+    if(_capGlowMesh.visible!==(g>0.003)) _capGlowMesh.visible=g>0.003;
   }
   const DECALMAT = new THREE.MeshBasicMaterial({vertexColors:true, transparent:true, opacity:0.92, depthWrite:false}); // ground decals never z-fight the land
   const gwReg = new Map();  // region id -> animated great-work bits (turning beam pivots)
@@ -7037,6 +7226,7 @@ try{
         settlements.set(r.id, {objs: built.objs, sat: built.sat, dec: built.dec, far: built.far, near: built.near, heroD: built.heroD||null, _hd:null, sig});
       }
     });
+    refreshCapGlow(); // WAVE 18: crown pillars ride the same diff cadence — a taken seat re-lights within the second
   }
   function laneSignature(){
     return G.regions.filter(r=>r.isPort).map(p=>p.id+(p.owner||'-')+(isBlockaded(p)?'B':'')).join(',') +
@@ -7604,6 +7794,7 @@ try{
       if(v.far){ const fb = dist > 650; // far band: silhouette proxies stand in for the full kit
         if(v.far.visible !== fb) v.far.visible = fb;
         if(fb !== v._fb){ v._fb = fb; if(v.near) v.near.forEach(m=>{ m.visible = !fb; }); } } });
+    tickCapGlow(); // WAVE 18: the crown pillars answer to the same distance that wakes the far proxies
     // periodic state diffing (ownership, tiers, lanes, fleets)
     diffT+=dt;
     if(diffT>0.35){ diffT=0; refreshSettlements(); refreshLanes(); refreshFleets(); }
@@ -7785,7 +7976,8 @@ try{
   R3.resize = () => { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); };
   initKits(); // CC0 kits stream in behind the first frame; the world upgrades itself when they land
   setInterval(()=>{ const ri=renderer.info.render; // QA/readout hook — last completed frame, fps-independent
-    window.__renderInfo={calls:ri.calls, tris:ri.triangles, geoms:renderer.info.memory.geometries, textures:renderer.info.memory.textures, quality, emaMs:Math.round(emaMs*10)/10, dist:Math.round(dist)}; }, 1000);
+    window.__renderInfo={calls:ri.calls, tris:ri.triangles, geoms:renderer.info.memory.geometries, textures:renderer.info.memory.textures, quality, emaMs:Math.round(emaMs*10)/10, dist:Math.round(dist),
+      capGlow: _capGlowMesh? { seats: _capGlowSig? _capGlowSig.split('|').length : 0, glow: _capGlowMat? Math.round(_capGlowMat.uniforms.uGlow.value*100)/100 : 0, visible: _capGlowMesh.visible } : null }; }, 1000);
   /* ---------- kit swap-in: once the CC0 models land, towns/fleets/nature rebuild from them ---------- */
   /* ---------- merchantmen on the 3D chart: neutral hulls, sailing from the first morning ---------- */
   let merchantGroup=null;
