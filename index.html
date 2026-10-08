@@ -959,7 +959,10 @@ function freshState(){
     // the CLEAN CROWN: power ledger, border-watch memory, and the shore-book of first flags
     powerHist:[], borderWarn:{}, shoreFirst:{A:null,B:null,F:null},
     // the RECKONING: dues advanced daily against the season's settle, and whether the first march has flown
-    advancePaid:0, marchSeen:0
+    advancePaid:0, marchSeen:0,
+    // WAVE 15: chartered companies keep their books in state, and every season leaves a one-line
+    // note of its biggest beat — the "Previously in the realm…" the returning Crown reads first
+    companies:[], seasonNotes:blankSeasonNotes()
   };
 }
 
@@ -1237,6 +1240,20 @@ function ensureFeelMeta(s){
   if(typeof s.adv.lastTurn!=='number') s.adv.lastTurn=-99;
   if(!s.ceremonies) s.ceremonies={};
 }
+// WAVE 15: a season's memory is kept in five plain figures — the hardest fighting (land losses
+// and the hulls under them), a town that changed hands, an authored beat the Crown answered,
+// and the storm's toll. Blank at every season seam; the Gazette's opening line reads it before
+// it is wiped. Family-safe: any old save simply wakes with an empty note.
+function blankSeasonNotes(){ return {battle:0, battleTxt:null, seaShips:0, town:null, beat:null, storms:0}; }
+function ensureWave15Meta(s){
+  if(!s) return;
+  if(!Array.isArray(s.companies)) s.companies=[];
+  // a save older than this ledger has no honest "previously" yet: notes stay absent until the
+  // first real event opens the book, so the first season after the upgrade stays silent rather
+  // than claiming a quiet it never watched
+  if(!('seasonNotes' in s)) s.seasonNotes=null;
+  if(s.seasonNotes!==null&&(typeof s.seasonNotes!=='object'||Array.isArray(s.seasonNotes))) s.seasonNotes=blankSeasonNotes();
+}
 
 // pre-grandeur saves were laid out on the old 2400×1600 chart — stretch them onto the new world
 function migrateSave(s){
@@ -1324,6 +1341,7 @@ function migrateSave(s){
   }
   // RECKONING bookkeeping rides along at wv10: old saves simply start with nothing advanced
   ensureCleanCrownMeta(s);
+  ensureWave15Meta(s); // WAVE 15: companies + the season-note ride along at wv11 the same way
   if(s.advancePaid===undefined) s.advancePaid=0;
   if(s.marchSeen===undefined) s.marchSeen=(s.armies||[]).some(a=>a.owner==='player')?1:0;
   return s;
@@ -2105,12 +2123,14 @@ function resolveArmyBattleApply(a, dest, res, atkBefore, defBefore, prevOwner){
   const story=' '+afterAction('land', {win:res.win, fort:dest.hasFort, wall:dest.hasWall, terrain:dest.terrain, a0:atkBefore, d0:defBefore,
     close:Math.abs(atkBefore-defBefore)<(atkBefore+defBefore)*0.2});
   dest.troops=Math.max(0, dest.troops-res.dLoss);
+  noteSeasonBattle(a.name, dest.name, res.aLoss+res.dLoss); // WAVE 15: the season keeps its hardest fighting
   const involvedPlayer = a.owner==='player' || prevOwner==='player';
   if(res.win){
     // taking ground costs a garrison, not the whole host: a big army leaves a watch behind and MARCHES ON
     const garrisonTake = survivors>=1400? Math.max(400, Math.round(survivors/3)) : survivors;
     const newGarrison=Math.max(300, garrisonTake);
     dest.owner=a.owner; dest.troops=newGarrison;
+    noteSeasonTown(dest, prevOwner, a.owner); // WAVE 15: a flag changed over this town
     if(survivors-garrisonTake>=1000){ a.men=survivors-garrisonTake; a.atRegion=dest.id; a.destRegion=null; }
     else G.armies=G.armies.filter(x=>x.id!==a.id);
     if(prevOwner && prevOwner!==a.owner) checkCapitalLoss(prevOwner);
@@ -2174,6 +2194,7 @@ function navalBattle(a, d, port){
   const involvedPlayer = a.owner==='player' || d.owner==='player';
   const applyNaval=()=>{
     a.ships-=aLoss; d.ships-=dLoss;
+    noteSeasonSea(port.name, aLoss+dLoss); // WAVE 15: the sea keeps its own toll of hulls
     if(involvedPlayer){
       const mine = a.owner==='player'? a : d;
       const foe = mine===a? d : a;
@@ -3158,6 +3179,7 @@ function surrenderTown(sg, honors){
   const survivors=a? Math.max(0,a.men):0;
   const garrisonTake=survivors>=1400? Math.max(400, Math.round(survivors/3)) : survivors;
   r.owner=sg.atkOwner; r.troops=Math.max(300, Math.max(garrisonTake, Math.round(garBefore*0.2)));
+  noteSeasonTown(r, prev, sg.atkOwner); // WAVE 15: the town gave up its keys
   r.flashUntil=performance.now()+1400;
   if(prev&&prev!=='natives'&&garBefore>0){
     const home=G.regions.filter(x=>x.owner===prev).sort((x,y)=>Math.hypot(x.x-r.x,x.y-r.y)-Math.hypot(y.x-r.x,y.y-r.y))[0];
@@ -3639,7 +3661,7 @@ if(f.owner==='player'){ markFlag('storm'); advisorTry('storm');
   if(f._stormLog!==G.turn&&(!sheltered)){ f._stormLog=G.turn; dispatch(captainName(f), pick([
     'We rode out the tempest with two reefs in everything and the pumps manned all night. A storm does not ask permission, Majesty — escorts and sea-room are the only answers.',
     'The sea took our topmast and near took the ship. I have written the carpenter’s name in the log twice: once for the saving of her, once as a warning.'])); } }
-if(!sheltered && rnd()<0.09 && f.ships>1){ f.ships--; if(f.owner==='player') pushEvent('🌩 <b>'+f.name+'</b> rides out a tempest — a hull is lost to the storm.');}
+if(!sheltered && rnd()<0.09 && f.ships>1){ f.ships--; noteSeasonStorm(f); if(f.owner==='player') pushEvent('🌩 <b>'+f.name+'</b> rides out a tempest — a hull is lost to the storm.');}
 if(emp(f.owner).shipTech>=2 && f.owner!=='player' && rnd()<0.3){ /* old salts sheer away */}
 });
 }
@@ -3711,6 +3733,8 @@ if(!r||r.owner!=='player'){ G.contracts=G.contracts.filter(x=>x.id!==c.id); retu
 if(c.escorted && emp('player').gold>=15) emp('player').gold-=15;
 const gain=contractSeason(c); if(gain>0) gazette('📜 The '+r.name+' convoy lands: +'+fmt(gain)+'g of freight money.');
 });
+// chartered companies render their season (WAVE 15): open quays pay, blockaded ones starve
+(G.companies||[]).forEach(c=>{ companySeason(c); });
 // sea stances pay (or cost goodwill)
 Object.keys(G.seaStances||{}).forEach(zid=>{
 const z=seaById[zid]; if(!z) return; const st=G.seaStances[zid];
@@ -4093,6 +4117,7 @@ body:'Two lean sails flying no crown are worrying the lanes off '+(emp('player')
 choices:[{label:'⚔ Hunt them down', fn:()=>{ emp('player').relations['natives'].war=true; emp('natives').relations['player'].war=true; toast('War on the freebooters — sail your squadron at them.'); save();}},
 {label:'Let them pass', fn:()=>{ toast('The freebooters keep the lanes nervous. For now.');}}]});
 pushEvent('🏴 <b>Freebooters in your home water</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
+noteSeasonBeat('freebooters came to your home water before your reign had a name, and the Crown had to answer'); // WAVE 15
 }
 /* the second early beat: once a young reign floats ships worth noticing, a rival admiral
    comes in person to take their measure — gifts, a show of flags, or a quarrel, each priced
@@ -4115,6 +4140,7 @@ const f={id:newUnitId(),owner:rid,zone:home.seaZone,node:'s'+home.seaZone,
   name:ad.name.replace(/^Adm\.\s*/,'')+'’s Squadron',admiral:ad,debut:1,leaveDay:G.day+30};
 G.fleets.push(f);
 co.done.admiral=1;
+noteSeasonBeat(ad.name+' of the '+re.name+' came in person to take your measure'); // WAVE 15
 G.crownQueue.push({icon:'⚓', urgent:true, debutFleet:f.id, title:ad.name+' unfurls off the '+z.name,
 body:'<b>'+ad.name+'</b> brings three '+(SHIP_TECH[re.shipTech]||'men-of-war')+' of the '+re.name+' into your home water — close enough to count your guns, polite enough to call it a courtesy cruise. It is not a cruise: '+(re.ruler? re.ruler.name : 'their court')+' is taking your measure, and every answer is entered in their ledger, where courts keep such things. <b>Your squadrons:</b> '+totalShips('player')+' hulls afloat. <b>Your treasury:</b> '+fmt(emp('player').gold)+'g.',
 choices:[
@@ -4168,6 +4194,7 @@ if(totalShips(rid)<2) return; // no crown rich enough in hulls to send a treasur
 const re=emp(rid), war=!!emp('player').relations[rid].war;
 const z=seaById[mine.zone]; if(!z) return;
 co.done.prize=1;
+noteSeasonBeat(war? 'an enemy treasure galleon came limping within reach of your squadron' : 'a rich argosy came limping within reach of your squadron'); // WAVE 15
 const cargo=150+Math.round(rnd()*120);
 const fp=fPos(mine);
 const f={id:newUnitId(),owner:rid,zone:mine.zone,node:'s'+mine.zone,pos:{x:fp.x+38*WS/3.35, y:fp.y-26*WS/3.35},at:null,ships:1,stance:'patrol',
@@ -4230,6 +4257,7 @@ const rivals=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!allied(id
 const fits=[]; if(governed.length>=2) fits.push('gov'); if(rivals.length) fits.push('emb'); fits.push('court');
 const face=fits.find(f=>f!==co.crisisFace)||fits[0];
 co.done.crisis=1; co.crisisDay=G.day; co.crisisFace=face; co.crisisCount=(co.crisisCount||0)+1;
+noteSeasonBeat('the late reckoning came due, and the Crown’s answer is still talked of'); // WAVE 15
 if(face==='gov') crisisGovernors(governed); else if(face==='emb') crisisEmbargo(rivals); else crisisCourt();
 }
 /* rival courts write their own news (WAVE 11): sieges opened beyond your writ and the
@@ -4352,6 +4380,193 @@ gazette('👑 <b>The chamberlains petition.</b> The Court Demands a Progress —
 pushEvent('👑 <b>The Court Demands a Progress</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
 refreshHUD(); save();
 }
+/* ================= WAVE 15: THE REALM REMEMBERS =================
+   The season keeps five plain figures (hardest fighting by land, hulls lost by sea, a town
+   that changed hands, an authored beat, the storm's toll) and the Gazette opens on the
+   best of them. And two more beats come to the Crown's desk on the same proven rails:
+   a chartered company in mid-reign, and one harvest year, lean or golden, in years 2–5. */
+function sn(){ return G.seasonNotes||(G.seasonNotes=blankSeasonNotes()); }
+function noteSeasonBattle(armyName, destName, losses){
+  if(!G||!(losses>0)) return;
+  const n=sn();
+  if(losses>(n.battle||0)){ n.battle=losses; n.battleTxt=armyName+' met the garrison of '+destName+' — '+fmt(losses)+' men fell'; }
+}
+function noteSeasonSea(portName, ships){
+  if(!G||!(ships>0)) return;
+  const n=sn();
+  n.seaShips=(n.seaShips||0)+ships;
+  if(ships>=(n.seaBest||0)){ n.seaBest=ships; n.seaTxt='squadrons bled off '+portName+' — '+fmt(ships)+' hulls struck between them'; }
+}
+function noteSeasonTown(r, fromId, toId){
+  if(!G||!r||fromId===toId) return;
+  const n=sn();
+  n.town={name:r.name, from:!fromId? 'a free shore' : ((emp(fromId)||{}).name||'its old flag'), to:(emp(toId)||{}).name||'a new banner'};
+}
+function noteSeasonStorm(f){ if(G&&G.seasonNotes) G.seasonNotes.storms=(G.seasonNotes.storms||0)+1; }
+function noteSeasonBeat(txt){ if(G&&G.seasonNotes) G.seasonNotes.beat=txt; }
+/* read the tally, never invent: every clause below exists only because an event wrote it */
+function seasonRecapLineFrom(n){
+  const cands=[];
+  if(n.town) cands.push({s:1200, txt:'<b>'+n.town.name+'</b> changed hands — '+n.town.from+' lost it to '+n.town.to+'.'});
+  if(n.beat) cands.push({s:950, txt:n.beat+'.'});
+  if(n.battleTxt&&(n.battle||0)>=400) cands.push({s:n.battle, txt:'the season’s hardest fighting: '+n.battleTxt+'.'});
+  if(n.seaTxt&&(n.seaBest||0)>=2) cands.push({s:(n.seaBest||0)*160, txt:n.seaTxt+'.'});
+  if((n.storms||0)>=2) cands.push({s:n.storms*180, txt:'the tempests took '+n.storms+' hulls across the chart.'});
+  if(!cands.length) return '📖 <b>Previously in the realm…</b> a quiet season — no flag came down, no harbour changed hands, and the lanes ran on time.';
+  cands.sort((a,b)=>b.s-a.s);
+  return '📖 <b>Previously in the realm…</b> '+cands[0].txt;
+}
+/* ---------- chartered companies: paper that pays only while real quays stand open ---------- */
+function companyPay(seaId, owner, marque){
+  const z=seaById[seaId]; if(!z) return {pay:0,n:0,shut:0};
+  const mine=(z.ports||[]).map(id=>rById[id]).filter(p=>p&&p.owner===owner);
+  if(!mine.length) return {pay:0,n:0,shut:0};
+  const shut=mine.filter(p=>isBlockaded(p)).length;
+  const pay=Math.round((14+mine.reduce((s,p)=>s+p.tier*6,0))*(1-shut/mine.length)*(marque? 0.85 : 1));
+  return {pay,n:mine.length,shut};
+}
+function companySeason(c){
+  const z=seaById[c.seaId]; if(!z) return 0;
+  const f=companyPay(c.seaId, c.owner, c.marque);
+  if(!f.n){ if(c.owner==='player') gazette('🧾 The <b>'+c.name+'</b> renders nothing — no quay on the '+z.name+' flies its owner’s flag. The charter is ink on dry paper.'); return 0; }
+  if(f.pay<=0){ if(c.owner==='player') gazette('🧾 The <b>'+c.name+'</b> is starved this season — every quay it holds on the '+z.name+' sits shut by blockade. Break the siege of its harbours or watch the seal fade.'); return 0; }
+  emp(c.owner).gold+=f.pay; c.lastPay=f.pay;
+  if(c.owner==='player') gazette('🧾 The <b>'+c.name+'</b> renders its season: <b>+'+fmt(f.pay)+'g</b> from the '+z.name+(f.shut? ' ('+f.shut+' of its '+f.n+' quays shut by blockade)' : '')+'.');
+  return f.pay;
+}
+/* the fourth beat: mid-reign, a counting-house petitions for the Crown's seal on one water.
+   Charter it and the paper pays through the real lanes — blockades starve it like any hull.
+   Refuse it and the paper does not die: a rival court signs it, collects it, and writes to
+   tell you so. Priced in print before the choice; paid after, through the real ledger. */
+function companyBeat(){
+  const co=G.coldopen||(G.coldopen={stage:0,done:{}});
+  if(co.done.company) return;
+  const zones=G.seas.map(z=>({z, mine:(z.ports||[]).map(id=>rById[id]).filter(p=>p&&p.owner==='player')})).filter(o=>o.mine.length>=2);
+  if(!zones.length) return; // the premise is sea-trade: two quays of yours on one water
+  zones.sort((a,b)=>b.mine.length-a.mine.length);
+  const z=zones[0].z, mine=zones[0].mine;
+  const rich=mine.slice().sort((a,b)=>b.tier-a.tier||b.pop-a.pop)[0];
+  const good=rich.specialty, goodName=GOODS[good]||good;
+  const name='The '+z.name+' '+(goodName.charAt(0).toUpperCase()+goodName.slice(1))+' Company';
+  const CHARTER=150, MARQUE=90;
+  const me=emp('player');
+  const foreign={}; (z.ports||[]).forEach(id=>{ const p=rById[id]; if(p&&p.owner&&p.owner!=='player'&&p.owner!=='natives'&&G.empires[p.owner]) foreign[p.owner]=(foreign[p.owner]||0)+1; });
+  const chief=Object.keys(foreign).sort((a,b)=>foreign[b]-foreign[a])[0];
+  const unreal=chief? 'the '+emp(chief).name+' is' : 'foreign factors are';
+  co.done.company=1;
+  noteSeasonBeat('a chartered company for the '+z.name+' was weighed at court, seal in the balance'); // WAVE 15
+  G.crownQueue.push({icon:'🧾', urgent:false, title:'A charter is sought on the '+z.name,
+  body:'The counting-houses of '+mine.map(p=>'<b>'+p.name+'</b>').join(' and ')+' petition for a royal charter: <b>'+name+'</b>, to carry '+goodName+' on the '+z.name+' under your seal, fed by your '+mine.length+' quays there. <b>Seal the charter ('+fmt(CHARTER)+'g'+(me.gold<CHARTER? ', the shortfall on Crown notes':'')+'):</b> ~'+fmt(companyPay(z.id,'player',false).pay)+'g a season while your quays stand open'+(chief? ', and '+unreal+' deep in that water — their trade leans on your lanes: <b>dependence +7, trust +3</b> with the '+emp(chief).name : '')+'. <b>Letters of marque ('+fmt(MARQUE)+'g):</b> cheaper paper, armed “merchantmen” — ~'+fmt(companyPay(z.id,'player',true).pay)+'g a season, and only <b>grievance +3, threat +2</b>'+(chief? ' with the '+emp(chief).name : '')+', once — letters make it law, mostly. <b>Refuse:</b> the charter does not die with your no — a rival counting-house signs it within the month, collects on its own water, and tells you about it. Starve note: blockades shut a company’s quays exactly as they shut yours. <b>Your treasury:</b> '+fmt(me.gold)+'g'+((me.debt||0)>0? ', debt '+fmt(me.debt)+'g':'')+'.',
+  choices:[
+  {label:'🧾 Seal the charter — '+fmt(CHARTER)+'g', fn:()=>{
+    const short=Math.max(0, CHARTER-me.gold); me.gold=Math.max(0, me.gold-CHARTER); if(short) me.debt=(me.debt||0)+short;
+    G.companies.push({id:1+(G.companies||[]).reduce((m,c)=>Math.max(m,c.id||0),0), seaId:z.id, good, owner:'player', marque:false, name, since:G.turn});
+    if(chief){ ledger(chief,'dependence',7,'their factors crowd the '+z.name+' under your chartered seal'); ledger(chief,'trust',3,'your charter keeps the '+z.name+' lanes orderly'); }
+    const now=companyPay(z.id,'player',false);
+    gazette('🧾 <b>'+name+' is chartered.</b> Your seal goes on the paper and your factors take the '+z.name+' in hand'+(short? ' — '+fmt(short)+'g of it on Crown notes, and the bankers bow and remember':'')+'. While your quays stand open there, the company renders its season: ~'+fmt(now.pay)+'g.');
+    toast('🧾 '+name+' flies your seal — ~'+fmt(now.pay)+'g a season while the quays stand open.');
+    save(); }},
+  {label:'🏴 Seal it with letters of marque — '+fmt(MARQUE)+'g', fn:()=>{
+    const short=Math.max(0, MARQUE-me.gold); me.gold=Math.max(0, me.gold-MARQUE); if(short) me.debt=(me.debt||0)+short;
+    G.companies.push({id:1+(G.companies||[]).reduce((m,c)=>Math.max(m,c.id||0),0), seaId:z.id, good, owner:'player', marque:true, name, since:G.turn});
+    if(chief){ ledger(chief,'grievance',3,'your “merchantmen” on the '+z.name+' sail suspiciously heavy for traders'); ledger(chief,'threat',2,'armed hulls under charter on the '+z.name); }
+    const now=companyPay(z.id,'player',true);
+    gazette('🧾 <b>'+name+' sails under letters of marque.</b> Cheaper paper, heavier guns: your “merchantmen” render ~'+fmt(now.pay)+'g a season from the '+z.name+(short? ', '+fmt(short)+'g of the seal-money borrowed':'')+(chief? ', and the '+emp(chief).name+' files a grievance exactly as printed — no more, no less. Letters make it law. Mostly.':'.'));
+    toast('🏴 Letters of marque sealed — ~'+fmt(now.pay)+'g a season, and the courts may grumble at the printed price.');
+    save(); }},
+  {label:'✋ Refuse the seal', fn:()=>{
+    const rivals=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!allied(id,'player'));
+    const rid=rivals.slice().sort((a,b)=>(totalShips(b)+G.regions.filter(r=>r.owner===b).length)-(totalShips(a)+G.regions.filter(r=>r.owner===a).length))[0];
+    if(rid&&G.empires[rid]){
+      const theirZones=G.seas.map(zz=>({zz, n:(zz.ports||[]).filter(id=>rById[id]&&rById[id].owner===rid).length})).filter(o=>o.n>0).sort((a,b)=>b.n-a.n);
+      const tz=(theirZones.find(o=>o.zz.id===z.id)||theirZones[0]||{zz:z}).zz;
+      const tports=(tz.ports||[]).map(id=>rById[id]).filter(p=>p&&p.owner===rid).sort((a,b)=>b.tier-a.tier);
+      const tgood=(tports[0]&&tports[0].specialty)||good;
+      const tname='The '+tz.name+' '+((GOODS[tgood]||tgood).charAt(0).toUpperCase()+(GOODS[tgood]||tgood).slice(1))+' Company';
+      G.companies.push({id:1+(G.companies||[]).reduce((m,c)=>Math.max(m,c.id||0),0), seaId:tz.id, good:tgood, owner:rid, marque:false, name:tname, since:G.turn});
+      if(tz.id===z.id) ledger(rid,'dependence',4,'their chartered company trades through your harbours on the '+z.name);
+      const re=emp(rid);
+      gazette('🧾 <b>The charter sails under another flag.</b> The counting-houses of the '+re.name+' seal <b>'+tname+'</b> within the month, and it begins rendering its seasons on the '+tz.name+' — into <i>their</i> treasury. '+(re.ruler? re.ruler.name : 'Their ruler')+' writes in a hand too pleased with itself: “Your factors weighed the paper a moment too long. Ours did not.”');
+      pushEvent('🧾 <b>'+tname+'</b> is chartered by the '+re.name+' — the seal you refused now collects against you.');
+    } else {
+      gazette('🧾 <b>The charter dies unsigned.</b> No rival counting-house dares that water without a crown behind the paper. The factors of the '+z.name+' fold their petition and go home poorer for the asking.');
+    }
+    toast('✋ Refused. Watch the Gazette — paper like that rarely stays unsigned.');
+    save(); }}]});
+  gazette('🧾 <b>A charter is sought on the '+z.name+'.</b> The counting-houses want your seal on a '+goodName+' company, priced in print. The court awaits your answer.');
+  pushEvent('🧾 <b>A chartered company petitions</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
+  refreshHUD(); save();
+}
+/* the fifth beat: one harvest year in years 2–5 — golden or lean by the summer the realm
+   actually had — and the Crown decides what plenty, or hunger, is for. Every figure is read
+   off the real bins, real souls and the real ledger before a single choice is offered. */
+function harvestBeat(){
+  const co=G.coldopen||(G.coldopen={stage:0,done:{}});
+  if(co.done.harvest) return;
+  const regions=myRegions(); if(!regions.length) return;
+  const ports=myPorts();
+  const golden=rnd()<0.5;
+  const me=emp('player');
+  const cap=G.regions.find(r=>r.name===(me.capitalName||'Lisbon')&&r.owner==='player')||ports[0]||regions[0];
+  const capDays=cap? daysOfSupply(cap,'grain') : 0;
+  const rivals=['aurelia','meridian','sable'].filter(id=>G.empires[id]);
+  const hungry=rivals.slice().sort((a,b)=>totalShips(b)-totalShips(a))[0];
+  const sellGain=ports.reduce((s,r)=>{ initSupply(r); return s+Math.round(Math.max(0,(r.supply.grain||0)-40)*goodPrice(r,'grain')*0.3); },0);
+  co.done.harvest=1;
+  noteSeasonBeat(golden? 'the harvest came in golden, and every granary door stood open' : 'a lean year came knocking at the granaries'); // WAVE 15
+  if(golden){
+    G.crownQueue.push({icon:'🌾', urgent:false, title:'The Golden Harvest',
+    body:'The reapers have outdone the clerks’ arithmetic — the barns of your realm overflow, and '+cap.name+' counts <b>'+capDays+' days of grain</b> with the new sheaves barely threshed. Plenty is a policy, Majesty; it only asks what it is <i>for</i>. <b>Feast:</b> the realm eats ~20 measures from each port’s bins and gains <b>+6% souls</b>; every court takes <b>trust +2, grievance −2</b> — a crown that feeds its people is hard to hate. <b>Granaries:</b> every port is topped to <b>75 days</b> of grain and souls grow +3% on full bellies. <b>Sell abroad:</b> the surplus over 40 measures a port goes into foreign hulls for <b>+'+fmt(sellGain)+'g</b>'+(hungry? ', and the '+emp(hungry).name+' eats from your hand — <b>dependence +5, trust +3</b>' : '')+'. <b>Your treasury:</b> '+fmt(me.gold)+'g.',
+    choices:[
+    {label:'🍞 Feast the realm', fn:()=>{
+      ports.forEach(r=>{ initSupply(r); r.supply.grain=Math.max(0,(r.supply.grain||0)-20); });
+      regions.forEach(r=>{ r.pop=Math.max(1, Math.round(r.pop*1.06)); });
+      rivals.forEach(id=>{ ledger(id,'trust',2,'news of your open tables reached their court'); ledger(id,'grievance',-2,'a crown that feasts its people is hard to hate'); });
+      gazette('🌾 <b>The realm feasts.</b> Twenty measures leave every port’s bins and come back as weddings, christenings and full muster-rolls — your towns swell by a soul in seventeen, and even the foreign courts drink your health. The bins are lighter. So is every heart in the realm.');
+      toast('🍞 The realm feasts — souls up, bins down, courts disarmed.');
+      save(); }},
+    {label:'🏛 Fill every granary to 75 days', fn:()=>{
+      ports.forEach(r=>{ initSupply(r); const want=Math.round(75*dailyUse(r)); if((r.supply.grain||0)<want) r.supply.grain=want; });
+      regions.forEach(r=>{ r.pop=Math.max(1, Math.round(r.pop*1.03)); });
+      gazette('🌾 <b>The granaries groan full.</b> Every port of yours is stacked to seventy-five days of grain, and the bakers’ guilds are told to stop arguing with the millers. Full shelves, fuller bellies — next year’s hunger will have to knock somewhere else.');
+      toast('🏛 Granaries full — 75 days deep in every port.');
+      save(); }},
+    {label:'⛵ Sell the surplus abroad (+'+fmt(sellGain)+'g)', fn:()=>{
+      let got=0; ports.forEach(r=>{ initSupply(r); const spare=Math.max(0,(r.supply.grain||0)-40); if(spare>0){ got+=Math.round(spare*goodPrice(r,'grain')*0.3); r.supply.grain-=spare; } });
+      me.gold+=got;
+      if(hungry){ ledger(hungry,'dependence',5,'their tables are set from your harvest'); ledger(hungry,'trust',3,'your grain came when their market was bare'); }
+      gazette('🌾 <b>The surplus sails.</b> Foreign hulls take your grain over the harbour bars and bring back <b>'+fmt(got)+'g</b>'+(hungry? ' — and the '+emp(hungry).name+' sits down to bread baked from your fields. Dependence like that is written in a ledger that outlives the loaf.' : '.'));
+      toast('⛵ Surplus sold: +'+fmt(got)+'g, and foreign tables remember.');
+      save(); }}]});
+    gazette('🌾 <b>A golden harvest.</b> The barns overflow and the Crown must decide what plenty is for. See <b>⚑ Crown</b> above.');
+  } else {
+    G.crownQueue.push({icon:'🌾', urgent:false, title:'The Lean Year',
+    body:'The summer was thin and the clerks will not dress it: '+cap.name+' counts <b>'+capDays+' days of grain</b>, and the bakers are already arguing with the millers in every town you hold. Hunger is also a policy, Majesty. <b>Open the Crown’s stores:</b> 25 measures from every port’s bins, and the towns hold — no souls lost. <b>Buy abroad ('+fmt(70)+'g'+(me.gold<70? ', shortfall on notes':'')+'):</b> every port stacked to <b>60 days</b> by foreign hull'+(hungry? '; their merchants bank your coin gladly — <b>trust +3, favours −2</b> with the '+emp(hungry).name+', a kindness called in' : '')+'. <b>Tighten belts:</b> no coin spent, but every town loses <b>5% of its souls</b> to the roads and the watching courts take <b>grievance +3</b> — hungry towns write hungry letters. <b>Your treasury:</b> '+fmt(me.gold)+'g.',
+    choices:[
+    {label:'🏛 Open the Crown’s stores (bins −25/port)', fn:()=>{
+      ports.forEach(r=>{ initSupply(r); r.supply.grain=Math.max(0,(r.supply.grain||0)-25); });
+      gazette('🌾 <b>The Crown’s stores stand open.</b> Twenty-five measures roll out of every port’s bins and the queues shorten by vespers. The clerks count what is left and look thoughtful — but the towns hold, and no soul takes the road.');
+      toast('🏛 Stores opened — the towns hold on the Crown’s own grain.');
+      save(); }},
+    {label:'⛵ Buy foreign grain — 70g', fn:()=>{
+      const short=Math.max(0, 70-me.gold); me.gold=Math.max(0, me.gold-70); if(short) me.debt=(me.debt||0)+short;
+      ports.forEach(r=>{ initSupply(r); const want=Math.round(60*dailyUse(r)); if((r.supply.grain||0)<want) r.supply.grain=want; });
+      if(hungry){ ledger(hungry,'trust',3,'your factors paid good coin in a thin market'); ledger(hungry,'favours',-2,'a kindness called in: their grain in your bins'); }
+      gazette('🌾 <b>Foreign grain rides in.</b> Seventy gold'+(short? ' (and '+fmt(short)+'g of notes)' : '')+' puts sixty days of bread in every port you hold. The harbourmasters grumble at foreign hulls; the bakers do not grumble at all.');
+      toast('⛵ Shelves filled by foreign hulls — 60 days deep.');
+      save(); }},
+    {label:'🥄 Let the towns tighten their belts', fn:()=>{
+      regions.forEach(r=>{ r.pop=Math.max(400, Math.round(r.pop*0.95)); });
+      ports.forEach(r=>{ initSupply(r); r.supply.grain=Math.max(0,(r.supply.grain||0)-10); });
+      rivals.forEach(id=>ledger(id,'grievance',3,'your hungry towns write hungry letters abroad'));
+      gazette('🌾 <b>The belts tighten.</b> No coin leaves the treasury, and the realm pays in the older currency: a soul in twenty takes the road out of your towns, and the courts abroad read the hungry letters and mark the Crown down for them.');
+      toast('🥄 Belts tightened — the treasury keeps its coin, the realm pays in souls.');
+      save(); }}]});
+    gazette('🌾 <b>A lean year.</b> The bins are thin and the Crown must decide what hunger costs. See <b>⚑ Crown</b> above.');
+  }
+  pushEvent('🌾 <b>'+(golden? 'A golden harvest' : 'A lean year')+'</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
+  refreshHUD(); save();
+}
 function coldSeason(){
 const co=G.coldopen||(G.coldopen={stage:0,done:{}});
 if(G.turn===1&&!co.done.econ){ co.done.econ=1;
@@ -4388,6 +4603,10 @@ realmBreathesDaily();
   if(G.day>=46 && G.day<=175 && co.done.pirates && !co.done.admiral) admiralDebut();
   // the third early beat: a crippled treasure hull within reach of your squadron (seasons 3–4)
   if(!co.done.prize && G.day>=186 && G.day<=370 && co.done.pirates) prizeBeat();
+  // WAVE 15: mid-reign, the counting-houses come calling for a charter (premise: two quays on one water)
+  if(!co.done.company && G.turn>=5) companyBeat();
+  // WAVE 15: one harvest year in years 2–5 will present its bill, golden or lean
+  if(!co.done.harvest && G.turn>=5 && G.turn<=20) harvestBeat();
   // the late-reign reckoning: once, when the reign carries weight — year 3, or sooner for the fat
   if(!co.done.crisis && (G.turn>=9 || myRegions().length>=10 || totalMen('player')>=22000)) lateCrisis();
   // and years later it comes back in another face — a long peace is a loan, not a gift (WAVE 11)
@@ -4672,6 +4891,7 @@ function snapshotPower(){
 function endSeason(){
   if(G.over) return;
   const _goldBefore=emp('player').gold;
+  const _prevNotes=G.seasonNotes||null; G.seasonNotes=blankSeasonNotes(); // WAVE 15: the seam reads the note as it wipes it
   closeSheet();
   G.gazette=[];
   // player upkeep already in collect below; order: incomes, growth, AI
@@ -4699,6 +4919,7 @@ function endSeason(){
   // your governors render their accounts — one line each, read over breakfast
   const govLines=myRegions().filter(r=>r.gov).map(govReportLine).filter(Boolean);
   if(govLines.length) G.gazette.splice(1,0,'🏛 <b>Governors’ reports</b>',...govLines);
+  if(_prevNotes) G.gazette.unshift(seasonRecapLineFrom(_prevNotes)); // WAVE 15: the Gazette opens on the season just ended
   G.gazette.push(cliffhangerLine()); // the Gazette NEVER closes on a settled note
   detectWarnings();
   if(coachStep===1) coachStep=2;
@@ -4973,6 +5194,7 @@ fitCanvas();
   else { G=freshState(); rebuildIndex(); }
   ensureIds(); syncPositions();
   ensureFeelMeta(G);
+  ensureWave15Meta(G);
   if(!Array.isArray(G.storms)||!G.storms.length) G.storms=initStormCells(G.seas, G.regions);
   fitWorld(); refreshHUD(); refreshClockUI(); renderTicker();
   requestAnimationFrame(draw);
@@ -5734,6 +5956,14 @@ try{
       farB.add(new THREE.BoxGeometry(0.8, H+1.2, 0.8), M4(bx+P.R*0.2, by+(H+1.2)/2, bz-P.R*0.18), '#efe6cc');
       farB.add(new THREE.SphereGeometry(0.5,7,6), M4(bx+P.R*0.2, by+H+1.7, bz-P.R*0.18), '#ffd97a');
     }
+    // WAVE 15: the far capital wears its HOLDER's colour on its very crown — a finial/mast-cap
+    // baked into this same merged proxy (vertex colour, no new mesh, no new draw), so a capital
+    // reads empire-by-colour from across the chart, and re-dresses when the flag above it changes
+    const _ownCol=(r.owner&&G.empires[r.owner])? G.empires[r.owner].color : '#8a6d3b';
+    if(capId==='aurelia') farB.add(new THREE.SphereGeometry(0.72,8,6), M4(cx, by+H+4.8, cz), _ownCol);
+    else if(capId==='meridian') farB.add(new THREE.SphereGeometry(0.66,8,6), M4(cx, by+H+2.5, cz), _ownCol);
+    else if(capId==='sable') farB.add(new THREE.BoxGeometry(1.05,1.05,1.05), M4(cx, by+H+2.7, cz), _ownCol);
+    else farB.add(new THREE.SphereGeometry(0.68,8,6), M4(bx+P.R*0.2, by+H+2.3, bz-P.R*0.18), _ownCol);
   }
 
   function buildKitSettlement(r){
