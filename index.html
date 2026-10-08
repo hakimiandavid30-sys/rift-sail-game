@@ -4112,6 +4112,171 @@ gazette('⚓ <b>An admiral’s pennant in home water.</b> '+ad.name+' of the '+r
 pushEvent('⚓ <b>'+ad.name+' off '+home.name+'</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
 refreshHUD(); save();
 }
+/* the third early beat: a crippled foreign hull — a rival's richest bottom, treasure in her
+   hold — comes limping within reach of your own squadron, seasons 3–4 of the reign. Seize,
+   escort, or let pass; every answer is priced in exact numbers before you choose, and paid
+   afterwards through the real ledger, the Gazette and the ticker. Once per reign. */
+function prizeBeat(){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}});
+if(co.done.prize) return;
+const mine=G.fleets.filter(f=>f.owner==='player'&&f.ships>0).sort((a,b)=>b.ships-a.ships)[0];
+if(!mine||mine.zone==null) return; // no squadron of yours afloat to matter — ask again tomorrow
+const rivals=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!allied(id,'player'));
+if(!rivals.length) return;
+rivals.sort((a,b)=>totalShips(b)-totalShips(a));
+const rid=rivals[0];
+if(totalShips(rid)<2) return; // no crown rich enough in hulls to send a treasure ship past you
+const re=emp(rid), war=!!emp('player').relations[rid].war;
+const z=seaById[mine.zone]; if(!z) return;
+co.done.prize=1;
+const cargo=150+Math.round(rnd()*120);
+const fp=fPos(mine);
+const f={id:newUnitId(),owner:rid,zone:mine.zone,node:'s'+mine.zone,pos:{x:fp.x+38*WS/3.35, y:fp.y-26*WS/3.35},at:null,ships:1,stance:'patrol',
+  name:war? 'Treasure Galleon' : 'The Rich Argosy', prize:1, leaveDay:G.day+21};
+G.fleets.push(f); // a real hull on real water — she sails home unanswered in three weeks
+const sqn=mine.name.replace(/^Your\s+/i,''); // the home fleet sails as "Your Squadron" — never twice
+const clearSail=()=>{ G.fleets=G.fleets.filter(x=>x!==f); };
+G.crownQueue.push({icon:'⛵', urgent:true, prizeFleet:f.id, title:(war?'A crippled treasure galleon':'A rich argosy limping')+' off the '+z.name,
+body:'<b>'+(war? 'A treasure galleon of the '+re.name : 'An argosy of the '+re.name+(re.ruler? ' — '+re.ruler.name+'’s richest bottom' : ''))+'</b> crawls across the '+z.name+' under jury rig, rudder half-shot away, <b>'+fmt(cargo)+'g</b> of plate and spice in her hold. Your <b>'+sqn+'</b> ('+mine.ships+' hulls) could run her down before she makes a friendly roadstead. '+(war? 'She flies an enemy’s colours and the sea is wide — but even in war, courts count hulls and grudges, and so does '+re.name+'.' : 'There is no war between your crowns: taking her would be piracy on better stationery, and '+(re.ruler? re.ruler.name : 'their court')+' keeps a ledger for exactly such stationery.')+'<br><b>Seizure:</b> +'+fmt(cargo)+'g now, and the '+re.name+' ledger takes grievance +'+(war?4:14)+', threat +'+(war?3:8)+(war? '.':', trust −6.')+' <b>Escort:</b> trust +10, favours +3, grievance −5, and 25g of thanks. <b>Restraint:</b> trust +3, threat −3, grievance −2. <b>Your treasury:</b> '+fmt(emp('player').gold)+'g.',
+choices:[
+{label:'⚔ Take her ('+fmt(cargo)+'g of prize)', fn:()=>{ clearSail(); emp('player').gold+=cargo;
+  ledger(rid,'grievance',war?4:14,'your seizure of the '+(war?'treasure galleon':'rich argosy')+' off the '+z.name);
+  ledger(rid,'threat',war?3:8,'your seizure of the '+(war?'treasure galleon':'rich argosy')+' off the '+z.name);
+  if(!war) ledger(rid,'trust',-6,'your seizure of the rich argosy off the '+z.name);
+  gazette('🏴 <b>A prize in the '+z.name+'.</b> Your '+sqn+' runs down the crippled '+(war?'treasure galleon':'argosy')+' and brings her in under guard: <b>'+fmt(cargo)+'g</b> of plate and spice into the treasury. '+(re.ruler? re.ruler.name : 'Their court')+' will have words for this — the ledger kind, written down and kept.');
+  dispatch(captainName(mine), pick(['She struck without a shot worth the name, Majesty — rudder gone, hold full. '+fmt(cargo)+'g of plate under our own hatches now, and my conscience filed under the place where such things belong.',
+    'We boarded her at first light, boats away before her watch could pipe to quarters. A rich, slow, beautiful prize. The men are already spending her in their heads, twice over.']));
+  toast('🏴 Prize taken: +'+fmt(cargo)+'g');
+  save();}},
+{label:'🕊 Escort her home (+trust, +favours)', fn:()=>{ clearSail();
+  ledger(rid,'trust',10,'your escort of their crippled '+(war?'treasure galleon':'argosy')); ledger(rid,'favours',3,'your escort of their crippled '+(war?'treasure galleon':'argosy'));
+  ledger(rid,'grievance',-5,'your courtesy off the '+z.name);
+  emp('player').gold+=25;
+  gazette('🕊 <b>Courtesy in the '+z.name+'.</b> Your '+sqn+' takes the crippled '+(war?'galleon':'argosy')+' under escort and sees her safe to the roadstead. '+(re.ruler? re.ruler.name : 'Their court')+' sends plate and thanks — 25g, and worth a great deal more in memory than in metal.');
+  toast('🕊 Escorted home — their court remembers.');
+  save();}},
+{label:'🌊 Let her pass', fn:()=>{ clearSail();
+  ledger(rid,'trust',3,'you let their crippled '+(war?'treasure galleon':'argosy')+' pass off the '+z.name); ledger(rid,'threat',-3,'your restraint off the '+z.name); ledger(rid,'grievance',-2,'your restraint off the '+z.name);
+  gazette('🌊 <b>The one that got away.</b> The crippled '+(war?'galleon':'argosy')+' limps home past your watching squadron, unmolested. The taverns will call it softness. The courts will call it something else, and write it under a kinder heading.');
+  toast('🌊 She passes. The chart notes your restraint.');
+  save();}}]});
+gazette('⛵ <b>A sail in distress — and in reach.</b> A crippled '+(war?'enemy treasure galleon':'rich argosy of the '+re.name)+' crawls across the '+z.name+' within reach of your '+sqn+'. The court awaits your answer.');
+pushEvent('⛵ <b>'+(war?'A treasure galleon':'A rich argosy')+' within reach</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
+refreshHUD(); save();
+}
+/* the late-reign reckoning: once the reign has real weight — year 3's door, or sooner for a
+   crown grown fat fast — the world presents a bill the young game never sees. It wears one of
+   three faces depending on the realm you built: your own governors grown bold (a succession-
+   style demand), the counting-houses of two rival courts pooling their grievances, or — for
+   the rare crown with no enemies left to bill it — its own court demanding to be seen.
+   Every road is priced in print before the choice; a prepared realm pays in coin, an
+   unprepared one pays in notes and goodwill. Never a hard fail. */
+function lateCrisis(){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}});
+if(co.done.crisis) return;
+const governed=myRegions().filter(r=>r.gov);
+if(governed.length>=2){ crisisGovernors(governed); return; }
+const rivals=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!allied(id,'player'));
+if(rivals.length) crisisEmbargo(rivals); else crisisCourt();
+}
+function crisisGovernors(governed){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}}); co.done.crisis=1;
+governed=governed.slice().sort((a,b)=>(b.gov.purse||0)-(a.gov.purse||0));
+const lead=governed[0], chest=governed.reduce((s,r)=>s+(r.gov.purse||0),0), charter=140;
+const names=governed.map(r=>r.gov.name+' of '+r.name).join(', ');
+G.crownQueue.push({icon:'📜', urgent:true, title:'The Governors’ Remonstrance',
+body:'Your governors have grown fat on your peace, and now they write as one body: <b>'+names+'</b>. Between them their city chests hold <b>'+fmt(chest)+'g</b>. They petition for a <b>Charter of Liberties</b> — their seals made permanent, their purses their own by right — and the ask is priced, as such things are, in ceremony: <b>'+fmt(charter)+'g</b> of progress, parchment and feast. Grant it and their towns keep faith (each chest +60g, each town +150 folk); refuse with the scales and you take half their chests but thin their towns; or make an example of the loudest. <b>Your treasury:</b> '+fmt(emp('player').gold)+'g'+(emp('player').debt? ' · <b>debt:</b> '+fmt(emp('player').debt)+'g':'')+'. If the coin is short, your clerks will sign 120g of Crown notes — the bankers are happy to be owed.',
+choices:[
+{label:'📜 Grant the Charter ('+fmt(charter)+'g)', fn:()=>{ const me=emp('player'); let text='The Crown pays in coin and keeps its credit.';
+  if(me.gold>=charter){ me.gold-=charter; } else { me.debt+=120; text='The treasury could not stretch — 120g of Crown notes are signed instead, and the bankers bow very low indeed.'; }
+  governed.forEach(r=>{ r.gov.purse=(r.gov.purse||0)+60; r.pop+=150; govJournal(r,'the Charter hangs framed in the hall — the Crown keeps its word'); });
+  gazette('📜 <b>The Charter is granted.</b> Your governors hold their seals by right now, their chests fattened 60g apiece and their towns swelling with folk who trust a chartered roof. '+text);
+  toast('📜 The Charter is granted — your governors stand taller.');
+  if(me.debt>0) advisorTry('debt');
+  save();}},
+{label:'⚖ Seize half their chests (+'+fmt(Math.floor(chest/2))+'g)', fn:()=>{ const me=emp('player'); let took=0;
+  governed.forEach(r=>{ const half=Math.floor((r.gov.purse||0)/2); took+=half; r.gov.purse-=half; r.pop=Math.max(800, Math.round(r.pop*0.95)); govJournal(r,'the Crown’s men came with scales and left with half the chest'); });
+  me.gold+=took;
+  gazette('⚖ <b>The Remonstrance is answered with scales.</b> The Crown takes '+fmt(took)+'g from its own governors’ chests. The towns pay in folk as well — one family in twenty drifts beyond the tax-rolls before spring.');
+  toast('⚖ You take '+fmt(took)+'g. The governors smile with their teeth.');
+  save();}},
+{label:'🚪 Dismiss '+lead.gov.name+' of '+lead.name, fn:()=>{
+  const nm=lead.gov.name, town=lead.name;
+  governed.slice(1).forEach(r=>{ r.gov.purse=(r.gov.purse||0)+15; govJournal(r,'they saw the seals change hands at '+town+', kept their own counsel — and found a small kindness from the Crown'); });
+  lead.pop=Math.max(800, Math.round(lead.pop*0.97));
+  dismissGovernor(lead, true);
+  gazette('🚪 <b>'+nm+' surrenders the seals of '+town+'.</b> The Remonstrance loses its loudest voice; '+town+' quietly sheds folk who had come for his favour. The quieter governors find 15g of the Crown’s gratitude in their chests, and say nothing at all, elegantly.');
+  toast('🚪 '+nm+' is dismissed. The rest take the hint, and the coin.');
+  save();}}]});
+gazette('🏛 <b>A petition sealed with many seals.</b> Your governors write to the Crown as one body — the Remonstrance awaits your answer.');
+pushEvent('🏛 <b>The Governors’ Remonstrance</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
+refreshHUD(); save();
+}
+function crisisEmbargo(rivals){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}}); co.done.crisis=1;
+rivals=rivals.slice().sort((a,b)=>(emp('player').relations[b].grievance||0)-(emp('player').relations[a].grievance||0));
+const two=rivals.slice(0,2);
+const gSum=two.reduce((s,id)=>s+(emp('player').relations[id].grievance||0),0);
+const names=two.map(id=>emp(id).name).join(' and the ');
+const indemnity=110+Math.min(90, Math.round(gSum)); // the bill is priced off what they truly nurse
+const earn=100;
+G.crownQueue.push({icon:'⚖', urgent:true, title:'The Counting-Houses’ Ultimatum',
+body:'The counting-houses of the <b>'+names+'</b> have done a sum together and dislike the answer. '+(gSum>0? 'Their courts nurse <b>'+Math.round(gSum)+' grievances</b> between them, and the merchants have turned them into a bill: ':'Their courts have little true complaint — which has never yet stopped a bill being written: ')+'<b>'+fmt(indemnity)+'g</b>, “for losses, insults, and lanes made nervous”, payable this season — or their ports turn cold to your flags, and any running trade deal is torn up in the harbourmaster’s office. <b>Pay:</b> grievance −10, trust +6 with each court. <b>Trade instead ('+fmt(earn)+'g earnest):</b> two-season deals, dependence +6, trust +8. <b>Defy:</b> grievance +8, threat +6, deals torn. <b>Your treasury:</b> '+fmt(emp('player').gold)+'g. If the coin is short, Crown notes will serve — the counting-houses invented being owed.',
+choices:[
+{label:'💰 Pay the indemnity ('+fmt(indemnity)+'g)', fn:()=>{ const me=emp('player'); let text='Paid in coin, over the counter, with witnesses.';
+  if(me.gold>=indemnity){ me.gold-=indemnity; two.forEach(id=>{ ledger(id,'grievance',-10,'the indemnity paid in full'); ledger(id,'trust',6,'the indemnity paid in full'); }); }
+  else { me.debt+=Math.round(indemnity*0.75); text='The coin was short, so Crown notes for '+fmt(Math.round(indemnity*0.75))+'g change hands instead — the bill is met, and the bankers own a little more of your future.'; two.forEach(id=>{ ledger(id,'grievance',-8,'the indemnity met in Crown notes'); ledger(id,'trust',4,'the indemnity met in Crown notes'); }); }
+  gazette('💰 <b>The bill is settled.</b> The counting-houses of the '+names+' pocket your '+fmt(indemnity)+'g and unclench, port by port. '+text);
+  toast('💰 The ultimatum is paid off. Expensive peace, real peace.');
+  if(me.debt>0) advisorTry('debt');
+  save();}},
+{label:'📜 Buy them with trade ('+fmt(earn)+'g earnest)', fn:()=>{ const me=emp('player'); let text='';
+  if(me.gold>=earn){ me.gold-=earn; two.forEach(id=>{ const rel=me.relations[id]; rel.dealUntil=G.day+270; ledger(id,'dependence',6,'the counting-houses’ settlement'); ledger(id,'trust',8,'the counting-houses’ settlement'); ledger(id,'grievance',-4,'the counting-houses’ settlement'); }); text='signed for two full seasons'; }
+  else { me.debt+=80; two.forEach(id=>{ const rel=me.relations[id]; rel.dealUntil=G.day+180; ledger(id,'dependence',4,'the counting-houses’ settlement, on credit'); ledger(id,'trust',5,'the counting-houses’ settlement, on credit'); ledger(id,'grievance',-3,'the counting-houses’ settlement, on credit'); }); text='signed for two seasons, the earnest on Crown credit'; }
+  gazette('📜 <b>Trade, not tribute.</b> The ultimatum is answered with manifests: deals with the '+names+' '+text+'. Their harbours now feed on your lanes, and harbours that feed do not close.');
+  toast('📜 The counting-houses take trade over tribute.');
+  if(me.debt>0) advisorTry('debt');
+  save();}},
+{label:'🦂 Defy the counting-houses', fn:()=>{
+  two.forEach(id=>{ const rel=emp('player').relations[id]; ledger(id,'grievance',8,'your defiance of the counting-houses'); ledger(id,'threat',6,'your defiance of the counting-houses'); rel.score-=8; if(rel.dealUntil>G.day) rel.dealUntil=0; });
+  gazette('🦂 <b>The bill is torn up on the counting-house steps.</b> The '+names+' nurse new grievances and tear up what deals they had with your Crown. Their ports will be cold, their merchants colder. Your admirals are advised — quietly, in writing — to watch the horizon.');
+  toast('🦂 Defied. Watch the horizon, and the prices.');
+  save();}}]});
+gazette('⚖ <b>The counting-houses present a bill.</b> Envoys of the '+names+' arrive together, with one ink between them — the Ultimatum awaits your answer.');
+pushEvent('⚖ <b>The Counting-Houses’ Ultimatum</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
+refreshHUD(); save();
+}
+function crisisCourt(){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}}); co.done.crisis=1;
+const big=myRegions().slice().sort((a,b)=>b.pop-a.pop).slice(0,3);
+const cap=G.regions.find(r=>r.name===emp('player').capitalName), cost=120;
+G.crownQueue.push({icon:'👑', urgent:true, title:'The Court Demands a Progress',
+body:'With every foreign court bound to your friendship, your own chamberlains grow bold: the realm has not <i>seen</i> its Crown in years, and the capital mutters that the throne has become a counting-desk. A Royal Progress through <b>'+big.map(r=>r.name).join(', ')+'</b> would cost <b>'+fmt(cost)+'g</b> of feasts and gifts — or the court can be taught to love the counting-desk. <b>Your treasury:</b> '+fmt(emp('player').gold)+'g.',
+choices:[
+{label:'🐎 Ride the Progress ('+fmt(cost)+'g)', fn:()=>{ const me=emp('player');
+  if(me.gold>=cost){ me.gold-=cost; } else { me.debt+=90; }
+  big.forEach(r=>{ r.pop+=200; });
+  gazette('🐎 <b>The Crown rides out.</b> Feasts at '+(big.map(r=>r.name).join(', '))+', gifts in every market square — two hundred new souls a town drift toward a Crown that shows its face. The counting-desk is forgotten by supper.');
+  toast('🐎 The court is seen, and applauded.');
+  if(me.debt>0) advisorTry('debt');
+  save();}},
+{label:'🎉 A tournament at '+(cap? cap.name:'the capital')+' (60g)', fn:()=>{ const me=emp('player');
+  if(me.gold>=60){ me.gold-=60; } else { me.debt+=45; }
+  if(cap){ cap.troops+=300; cap.pop+=80; }
+  gazette('🎉 <b>Lances at '+(cap? cap.name:'the capital')+'.</b> Three hundred men-at-arms take the Crown’s shilling at the barriers, and the capital gains a story and a garrison in one afternoon.');
+  toast('🎉 The capital feasts, and musters.');
+  if(me.debt>0) advisorTry('debt');
+  save();}},
+{label:'🪙 Stay and count coin', fn:()=>{
+  if(cap) cap.pop=Math.max(800, cap.pop-150);
+  ['aurelia','meridian','sable'].forEach(id=>{ if(G.empires[id]) ledger(id,'threat',-3,'a crown that stays home to count its coin'); });
+  gazette('🪙 <b>The counting-desk keeps its king.</b> The levees thin, the capital sheds a hundred and fifty souls to quieter towns — and abroad, courts quietly mark you down as a crown that stays home. Threats cool where you are not feared.');
+  toast('🪙 The court sulks. The treasury does not.');
+  save();}}]});
+gazette('👑 <b>The chamberlains petition.</b> The Court Demands a Progress — the answer is the Crown’s.');
+pushEvent('👑 <b>The Court Demands a Progress</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
+refreshHUD(); save();
+}
 function coldSeason(){
 const co=G.coldopen||(G.coldopen={stage:0,done:{}});
 if(G.turn===1&&!co.done.econ){ co.done.econ=1;
@@ -4145,11 +4310,16 @@ realmBreathesDaily();
   if(G.day>=4 && !co.done.pirates){ co.done.pirates=1; spawnFreebooters(); }
   // the second early beat: a named rival admiral comes to take the young reign's measure
   if(G.day>=46 && G.day<=175 && co.done.pirates && !co.done.admiral) admiralDebut();
+  // the third early beat: a crippled treasure hull within reach of your squadron (seasons 3–4)
+  if(!co.done.prize && G.day>=186 && G.day<=370 && co.done.pirates) prizeBeat();
+  // the late-reign reckoning: once, when the reign carries weight — year 3, or sooner for the fat
+  if(!co.done.crisis && (G.turn>=9 || myRegions().length>=10 || totalMen('player')>=22000)) lateCrisis();
   // the visiting squadron sails home when its leave day passes; an unanswered card goes with it
-  const gone=G.fleets.filter(f=>f.debut && G.day>(f.leaveDay||1e9));
+  const gone=G.fleets.filter(f=>(f.debut||f.prize) && G.day>(f.leaveDay||1e9));
   if(gone.length){ G.fleets=G.fleets.filter(f=>!gone.includes(f));
-    gone.forEach(f=>{ for(let j=G.crownQueue.length-1;j>=0;j--) if(G.crownQueue[j].debutFleet===f.id) G.crownQueue.splice(j,1);
-      pushEvent('⚓ <b>'+f.name+'</b> strikes its pennants and sails for home waters.'); }); }
+    gone.forEach(f=>{ for(let j=G.crownQueue.length-1;j>=0;j--) if(G.crownQueue[j].debutFleet===f.id||G.crownQueue[j].prizeFleet===f.id) G.crownQueue.splice(j,1);
+      pushEvent(f.prize? '⛵ <b>'+f.name+'</b> makes her rudder good in the night and is gone by dawn — the moment, and the cargo, sail with her.'
+        : '⚓ <b>'+f.name+'</b> strikes its pennants and sails for home waters.'); }); }
 }
 }
 
@@ -5004,13 +5174,29 @@ try{
       if(KIT.geo.wallwood && KIT.geo.roofpoint) KIT.houses.push(houseFrom(KIT.geo.wallwood, KIT.geo.roofpoint, 1, null));
       if(KIT.geo.wall && KIT.geo.roof && KIT.geo.door) KIT.houses.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 2, KIT.geo.door));
       // one full variant ladder per biome: [stone gable, wood point, two-storey, warehouse shed]
+      const ladderFor=(bk, roofCol)=>{ const h=[];
+        if(KIT.geo.wall && KIT.geo.roof) h.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 1, null, WALL_PAL[bk], roofCol));
+        if(KIT.geo.wallwood && KIT.geo.roofpoint) h.push(houseFrom(KIT.geo.wallwood, KIT.geo.roofpoint, 1, null, WALL_PAL[bk], roofCol));
+        if(KIT.geo.wall && KIT.geo.roof && KIT.geo.door) h.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 2, KIT.geo.door, WALL_PAL[bk], roofCol));
+        if(KIT.geo.wallwood && KIT.geo.roof) h.push(houseFrom(KIT.geo.wallwood, KIT.geo.roof, 1, null, WALL_PAL[bk], roofCol)); // warehouses: broad wood shed under a full roof
+        return h; };
       KIT.housesByBiome={};
-      Object.keys(ROOF_PAL).forEach(bk=>{ const h=[];
-        if(KIT.geo.wall && KIT.geo.roof) h.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 1, null, WALL_PAL[bk], ROOF_PAL[bk]));
-        if(KIT.geo.wallwood && KIT.geo.roofpoint) h.push(houseFrom(KIT.geo.wallwood, KIT.geo.roofpoint, 1, null, WALL_PAL[bk], ROOF_PAL[bk]));
-        if(KIT.geo.wall && KIT.geo.roof && KIT.geo.door) h.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 2, KIT.geo.door, WALL_PAL[bk], ROOF_PAL[bk]));
-        if(KIT.geo.wallwood && KIT.geo.roof) h.push(houseFrom(KIT.geo.wallwood, KIT.geo.roof, 1, null, WALL_PAL[bk], ROOF_PAL[bk])); // warehouses: broad wood shed under a full roof
-        KIT.housesByBiome[bk]=h; });
+      Object.keys(ROOF_PAL).forEach(bk=>{ KIT.housesByBiome[bk]=ladderFor(bk, ROOF_PAL[bk]); });
+      /* per-lot roof variety: three more ladders per biome with the ROOF tone nudged —
+         a shade off, warmer, cooler — strictly inside the palette row (the PixPal row is
+         the law; the jitter is its weather). Walls keep the biome's exact plaster, and
+         the crown's colour stays off the roofline as ever. The town builder picks a
+         ladder per lot, seeded from the region hash, so a town keeps ITS tiling. */
+      const jitRoof=(pal, seed)=>{ const rn=mulberry(seed);
+        const b=0.8+rn()*0.42, w=0.88+rn()*0.26; // brightness drift + warm/cool lean
+        return [ pal[0]*b*w, pal[1]*b*(1+(w-1)*0.55), pal[2]*b*(2-w)*0.96 ]; };
+      KIT.houseVariants={};
+      Object.keys(ROOF_PAL).forEach((bk,bi)=>{
+        KIT.houseVariants[bk]=[ KIT.housesByBiome[bk],
+          ladderFor(bk, jitRoof(ROOF_PAL[bk], 4211+bi*97+1)),
+          ladderFor(bk, jitRoof(ROOF_PAL[bk], 4211+bi*97+2)),
+          ladderFor(bk, jitRoof(ROOF_PAL[bk], 4211+bi*97+3)) ];
+      });
       KIT.sailMat = windify(lambert(famTex.pirate), 0.055, 0.8); // sailcloth breathes on the shared wind clock
       // smoke sprite + terrain detail (optional garnish — failure just skips them)
       try{ const t = await new THREE.TextureLoader().loadAsync((man.textures||{}).smoke_a || 'assets/textures/smoke_puff_a.edbf08c4.png'); KIT.smokeTex=t; }catch(e){}
@@ -5353,14 +5539,17 @@ try{
     const dec=new Batch(); // flat ground glyphs — plaza cobbles, worn paths, dock aprons
     const objs=[];
     let winMesh=null; const winGeos=[]; // per-house lit panes: baked quads on real walls, lit by a shared dusk material
-    const houses=KIT.housesByBiome[biomeKey(r)]||KIT.houses;
+    const bkKey=biomeKey(r);
+    const houses=KIT.housesByBiome[bkKey]||KIT.houses;
+    const houseVars=(KIT.houseVariants||{})[bkKey]; // the same houses, roofs remembering drift
     const kindIdx={tall:2, house:0, small:1, warehouse:3};
     P.lots.forEach((lot,i)=>{
       let hi=kindIdx[lot.kind];
       if(lot.kind==='house' && i%3===2) hi=1;
       if(lot.kind==='tall' && i%5===4) hi=0;
       if(lot.kind==='small' && i%4===3) hi=0;
-      const geo=houses[hi]||houses[0]; if(!geo) return;
+      const vh=houseVars? houseVars[Math.floor(hash(r.id*131.7+i*17.31)*houseVars.length)] : null;
+      const geo=(vh&&vh[hi])||houses[hi]||houses[0]; if(!geo) return;
       ft.add(geo, M4(lot.x, by, lot.z, 0, lot.rot, 0, lot.s, lot.s, lot.s), '#ffffff');
       if(lot.kind!=='warehouse'&&geo.boundingBox&&hash(r.id*57.3+i*13.7)<0.66){ // this household keeps a lamp after dark
         const bb=geo.boundingBox, cx=(bb.min.x+bb.max.x)/2, cz=(bb.min.z+bb.max.z)/2,
