@@ -71,7 +71,17 @@
   #aims .aim{margin:3px 0;display:flex;gap:6px;align-items:baseline;}
   #aims .aim .tick{color:var(--forest);font-weight:bold;}
   #aims .aim .prog{color:#7a6238;font-size:11px;white-space:nowrap;}
-  @media (max-width:600px){ #aims{display:none;} #aims.show{display:block;top:auto;bottom:170px;} }
+  @media (max-width:600px){ #aims{display:none;} #aims.show{display:block;top:auto;bottom:170px;}
+    /* every control stays reachable on a phone: the crown bar scrolls sideways rather than clipping */
+    #topbar{overflow-x:auto; scrollbar-width:none;} #topbar::-webkit-scrollbar{display:none;}
+    #topbar .cell, #topbar .bar-btn{flex:none;} }
+
+  /* ---------- second age: next-arrivals + orders ---------- */
+  #nextbar{position:absolute;left:50%;transform:translateX(-50%);bottom:76px;z-index:14;max-width:min(92vw,720px);
+    background:linear-gradient(180deg,#f6ecd6,#e8d5ae);border:1.6px solid #7a5c2e;border-radius:10px;
+    padding:5px 11px;font-size:12px;color:#3a2a12;box-shadow:0 3px 10px rgba(20,10,2,.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  @media (max-width:640px){ #nextbar{bottom:118px;font-size:11px;max-width:94vw;} }
+  .ord-line{background:linear-gradient(180deg,#f8efdc,#eeddbb);border:1.4px solid #8a6a35;border-radius:10px;padding:8px 10px;font-size:13.5px;color:#2a1e0d;box-shadow:0 2px 6px rgba(20,10,2,.25);}
 
   /* ---------- warnings ---------- */
   #warnings{position:absolute;top:56px;right:8px;z-index:15;display:flex;flex-direction:column;gap:6px;max-width:260px;}
@@ -262,13 +272,14 @@
     <div class="cell" id="tb-debt-cell" style="display:none">🏦 <b id="tb-debt">0</b></div>
     <div id="spacer"></div>
     <button class="bar-btn" id="btn-crown">👑 Crown <span id="crown-badge">0</span></button>
-    <button class="bar-btn" id="btn-realm">Realm</button>
+    <button class="bar-btn" id="btn-realm">Realm</button><button class="bar-btn" id="btn-orders">⚜ Orders</button>
   </div>
 
   <div id="aims"><h4>Sovereign's Aims</h4><div id="aims-list"></div></div>
   <div id="warnings"></div>
   <div id="tally"></div>
   <div id="ticker"></div>
+  <div id="nextbar"></div>
 
   <div id="zoomctl">
     <button id="zoom-in" aria-label="Zoom in">+</button>
@@ -326,11 +337,25 @@
     <div class="rule"></div>
     <button class="big-btn" id="menu-continue">Continue Campaign</button>
     <button class="big-btn secondary" id="menu-new">New Campaign</button>
+    <button class="big-btn secondary" id="menu-orders">⚜ Give Orders (typed)</button>
+    <button class="big-btn secondary" id="menu-winds">🌬 Wind Lanes: Off</button>
     <button class="big-btn secondary" id="menu-how">How to Play</button>
     <button class="big-btn secondary" id="menu-close">Close</button>
   </div></div>
 
   <!-- How to play -->
+  <div class="veil" id="orders"><div class="card">
+    <h2>⚜ Orders of the Crown</h2>
+    <div class="rule"></div>
+    <p style="font-size:12.5px">Speak plainly — name an army, a squadron, a city, a governor. Try: <i>“move my Lisbon army and attack León”</i> · <i>“send my squadron to blockade Algiers”</i> · <i>“put Reyes on Porto for wealth”</i> · <i>“found a colony at Chesdin”</i> · <i>“show the winds”</i>. Say <b>cancel</b> to unwrite the last order — the Contrarian’s Quill holds <span id="ord-quill">2</span> charges a season.</p>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <input id="ord-input" type="text" placeholder="Your order, in plain words…" style="flex:1;min-width:0;min-height:46px;font-family:inherit;font-size:15px;padding:8px 10px;border-radius:9px;border:1.6px solid #7a5c2e;background:#f6ead0;color:#2a1e0d;">
+      <button class="mini-btn" id="ord-send" style="min-height:46px">Give the Order</button>
+    </div>
+    <div id="ord-log" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:32vh;overflow-y:auto"></div>
+    <button class="big-btn secondary" id="ord-close">Close</button>
+  </div></div>
+
   <div class="veil" id="howto"><div class="card">
     <h2>How to Play</h2>
     <div class="rule"></div>
@@ -368,7 +393,9 @@
       <li>⛵ <b>Rule the sea:</b> build fleets, steal trade lanes, and blockade enemy ports until they starve.</li>
       <li>👑 <b>Reign, don't micromanage:</b> your empire earns on its own — you make the big calls.</li>
     </ul>
-    <button class="big-btn" id="btn-new">New Campaign</button>
+    <button class="big-btn" id="btn-new">🟥 New Campaign — the Crimson Crown of Lisbon</button>
+    <button class="big-btn secondary" id="btn-new-aurelia">🌙 Become the Aurelian Empire — Venice, purse first</button>
+    <button class="big-btn secondary" id="btn-new-meridian">⚖ Become the Meridian League — Holland, the counting-houses</button>
     <button class="big-btn secondary" id="btn-continue" style="display:none">Continue Campaign</button>
   </div></div>
 
@@ -397,7 +424,7 @@ const rr=(a,b)=>a+rnd()*(b-a);
 const pick=a=>a[Math.floor(rnd()*a.length)];
 
 // ---------- world definition ----------
-const WORLD_W=8040, WORLD_H=5360; // the 10x chart — authored small below, stretched by WS (was 6000×4000)
+const WORLD_W=10920, WORLD_H=7280; // the Second Age chart — authored small below, stretched by WS (target ~11000×6800)
 const SEASONS=['Spring','Summer','Autumn','Winter'];
 
 // terrains: plains, forest, hills, coast handled by isPort, marsh
@@ -468,6 +495,37 @@ const REGION_DEFS=[
  ['Boston',        920,  95,'coast','timber',true,'I'],
  ['New York',      980, 265,'coast','grain', true,'I'],
  ['Virginia',      960, 420,'coast','grain', true,'I'],
+ // ---- THE SECOND AGE: the new world (authored onto the same compact chart) ----
+ // North-America colonial coast (group 'A') — unclaimed shores, founded by charter
+ ['New Albion',    130,120,'coast','timber', true,'A'],
+ ['Chesdin',       250,185,'coast','naval',  true,'A'],
+ ['Tuckahoe',      380,120,'coast','grain',  true,'A'],
+ ['Waymouth',      520,165,'coast','cloth',  true,'A'],
+ ['Cape Mercy',    640,105,'coast','timber', true,'A'],
+ ['Kanakan Fields',330, 70,'forest','grain', false,'A'],
+ ['Elk Meadows',   560,230,'plains','grain', false,'A'],
+ // the Caribbean chain (islands, held by the Coastal Peoples)
+ ["Isle d'Or",     740,560,'coast','sugar',  true,'I'],
+ ['San Aurelio',   640,650,'coast','spices', true,'I'],
+ ['Kestrel Cay',   560,760,'coast','sugar',  true,'I'],
+ ['Verde Isle',    790,720,'coast','sugar',  true,'I'],
+ ['Buccaneer Cay', 470,660,'coast','wine',   true,'I'],
+ ['Santa Irene',   880,610,'coast','cloth',  true,'I'],
+ // the Brazil bulge (group 'B') — unclaimed
+ ['Bahía Verde',   430,1440,'coast','sugar', true,'B'],
+ ['Pedraza',       640,1520,'coast','spices',true,'B'],
+ ['Rio Selvagem',  780,1450,'coast','timber', true,'B'],
+ ['Serra Verde',   560,1420,'forest','iron', false,'B'],
+ // the West Africa / Guinea coast (group 'F') — unclaimed
+ ['Guinea Shore',  880,1420,'coast','spices',true,'F'],
+ ["Trader's Rest", 990,1490,'coast','wine',  true,'F'],
+ ['Bight of Palms',1120,1430,'coast','sugar', true,'F'],
+ ['Gold Coast',    1180,1510,'coast','iron', true,'F'],
+ ['Sahel Marches', 1010,1380,'plains','grain',false,'F'],
+ // the eastern spice reach (islands, held by the Coastal Peoples)
+ ['Zanzibar Reach',2300,1310,'coast','spices',true,'I'],
+ ['Malabar',       2335,1130,'coast','spices',true,'I'],
+ ['Spice Isles',   2260,1450,'coast','wine',  true,'I'],
 ];
 const SEA_DEFS=[
  // name, x, y, adjacent zone indices (filled below)
@@ -478,12 +536,16 @@ const SEA_DEFS=[
  ['Eastern Med',    1850,1120],['Aegean',       1850, 960],
  ['Baltic Sea',     1750, 120],['Black Sea',    2150, 700],
  ['Caribbean',       900, 620],['American Coast',1050, 330],
+ // Second Age seas
+ ['Newfound Banks',  400, 150],['Windward Passage', 700, 640],
+ ['Southern Reach',  720,1300],['Spice Sea',      2240,1260],
+ ['Pillars Straits', 430,1255],
 ];
 // ---------- grandeur scale ----------
 // REGION_DEFS / SEA_DEFS / LAND_PATHS are authored on a compact 2400×1600 chart.
 // WS stretches every anchor into a vast 8040×5360 world: same graph, real distances.
 // 10x pass: 2.5 → 3.35 — settlements keep their size, the spaces between them grow.
-const WS=3.35;
+const WS=4.55; // Second Age: the world widened again — same traced shores, grander seas between them
 REGION_DEFS.forEach(d=>{ d[1]*=WS; d[2]*=WS; });
 SEA_DEFS.forEach(d=>{ d[1]*=WS; d[2]*=WS; });
 // uninhabited islets — pure scenery (chart units, scaled here): x, y, radius
@@ -497,6 +559,18 @@ const TRAVEL={marchPerDay:Math.round(120*WS/2.5), sailPerDay:Math.round(300*WS/2
 function landDays(a,b){ return Math.max(1,Math.round(Math.hypot(a.x-b.x,a.y-b.y)/TRAVEL.marchPerDay)); }
 function seaDays(a,b){ return Math.max(1,Math.round(Math.hypot(a.x-b.x,a.y-b.y)/TRAVEL.sailPerDay)); }
 
+/* WHO RULES LISBON'S CHAIR: at a new game the player may wear another crown.
+   startDefs() swaps the mantles — the chosen empire's id becomes 'player', and the
+   displaced crown keeps its capital (and its grudge) as a rival. Ids stay stable. */
+let START_PICK='player';
+function startDefs(pick){
+  const defs=EMPIRES.map(d=>Object.assign({},d));
+  if(pick && pick!=='player'){
+    const chosen=defs.find(d=>d.id===pick), crown=defs.find(d=>d.id==='player');
+    if(chosen && crown){ chosen.id='player'; crown.id=pick; crown.name='Crown of '+crown.capital; }
+  }
+  return defs;
+}
 const EMPIRES=[
  {id:'player', name:'Your Crown', color:'#8e2f32', dark:'#5e1d20', capital:'Lisbon'},
  {id:'aurelia',name:'Aurelian Empire', color:'#2c4a7c', dark:'#1b2f52', capital:'Venice'},
@@ -505,7 +579,8 @@ const EMPIRES=[
 ];
 const ARMY_TECH=['Militia','Muskets','Line Infantry','Élite Guards'];
 const SHIP_TECH=['Sloops','Frigates','Ships of the Line'];
-const GOODS={grain:'🌾 grain',timber:'🪵 timber',iron:'⛏ iron',sugar:'🍯 sugar'};
+const GOODS={grain:'🌾 grain',timber:'🪵 timber',naval:'⚓ naval stores',iron:'⛏ iron',cloth:'🧵 cloth',wine:'🍷 wine',sugar:'🍯 sugar',spices:'🌶 spices'};
+const GOODS_PRICE={grain:2,timber:3,naval:4,iron:5,cloth:6,wine:7,sugar:8,spices:14};
 const MUSTER_COST=40, MUSTER_MEN=1000, SHIP_COST=120;
 const REGION_COUNT=REGION_DEFS.length;
 const WIN_REGIONS=Math.ceil(REGION_COUNT*0.6);
@@ -519,6 +594,7 @@ const tickerLines=[]; // "what's happening" — latest first, stamped with the d
 
 function freshState(){
   _seed=1234567;
+  const DEFS=startDefs(START_PICK);
   const regions=REGION_DEFS.map((d,i)=>({
     id:i, name:d[0], x:d[1], y:d[2], terrain:d[3], specialty:d[4], isPort:d[5], group:d[6],
     owner:null, tier:0, // 0 hamlet 1 town 2 city 3 great port/city
@@ -545,7 +621,7 @@ function freshState(){
     if(a&&b){ if(!a.neighbors.includes(b.id))a.neighbors.push(b.id); if(!b.neighbors.includes(a.id))b.neighbors.push(a.id);} };
   link('Cádiz','Morocco'); link('London','Flanders'); link('Bristol','Brittany'); link('Venice','Dalmatia');
   // sea zones
-  const seas=SEA_DEFS.map((d,i)=>({id:i,name:d[0],x:d[1],y:d[2],ports:[],neighbors:[]}));
+  const seas=SEA_DEFS.map((d,i)=>({id:i,name:d[0],x:d[1],y:d[2],ports:[],neighbors:[],strait:STRAIT_NAMES.includes(d[0])}));
   regions.filter(r=>r.isPort).forEach(p=>{
     let best=0,bd=1e9; seas.forEach(s=>{const d=Math.hypot(p.x-s.x,p.y-s.y); if(d<bd){bd=d;best=s.id;}});
     p.seaZone=best; seas[best].ports.push(p.id);
@@ -554,7 +630,7 @@ function freshState(){
   weldSeaNeighbors(seas); // two straits sit just beyond the distance rule — no crown's fleet may be landlocked by arithmetic
   // empires
   const empires={};
-  EMPIRES.forEach(e=>{
+  DEFS.forEach(e=>{
     const cap=regions.find(r=>r.name===e.capital);
     empires[e.id]={id:e.id,name:e.name,color:e.color,dark:e.dark,gold:e.id==='player'?600:550,
       armyTech:0, shipTech:0, debt:0, relations:{}, tradeStreak:0};
@@ -563,14 +639,19 @@ function freshState(){
     // two home regions around the capital
     cap.neighbors.map(id=>regions[id]).filter(r=>!r.owner).slice(0,2).forEach(r=>{r.owner=e.id; r.tier=1; r.troops=1500;});
   });
-  EMPIRES.forEach(a=>EMPIRES.forEach(b=>{ if(a.id!==b.id) empires[a.id].relations[b.id]={score:a.id==='player'||b.id==='player'?10:0, war:false, ally:false}; }));
+  EMPIRES.forEach(a=>EMPIRES.forEach(b=>{ if(a.id!==b.id) empires[a.id].relations[b.id]=mkRel(a.id==='player'||b.id==='player'?10:0); }));
+  // the Coastal Peoples: no crown, no capital — they hold the new-world isles, trade with all, and fight when provoked
+  empires['natives']={id:'natives',name:'Coastal Peoples',color:'#6f7d4f',dark:'#47552f',gold:0,armyTech:0,shipTech:0,debt:0,relations:{},tradeStreak:0,capitalName:null,native:true,ruler:{name:'The Shore Councils',arch:'council'}};
+  Object.keys(empires).forEach(id=>{ if(id!=='natives'){ empires[id].relations['natives']=mkRel(0); empires['natives'].relations[id]=mkRel(0); } });
+  DEFS.forEach(e=>{ empires[e.id].capitalName=e.capital; empires[e.id].ruler=rulerFor(e.id); });
   // scattered free-town garrisons
   regions.filter(r=>!r.owner).forEach(r=>{ r.troops=Math.round(rr(1200,3200)); });
   // a soft first target beside the player's capital — a winnable first conquest in the opening seasons
-  const home=regions.find(r=>r.name===EMPIRES[0].capital);
+  const home=regions.find(r=>r.name===(DEFS.find(e=>e.id==='player')||{}).capital);
   home.neighbors.map(id=>regions[id]).filter(r=>!r.owner).forEach(r=>{ r.troops=Math.min(r.troops,1600); });
+  classifyNewWorld(regions); // Second Age shores: colonies wait empty; the isles already have keepers
   const fleets=[];
-  EMPIRES.forEach(e=>{
+  DEFS.forEach(e=>{
     const cap=regions.find(r=>r.name===e.capital);
     fleets.push({id:fleets.length, owner:e.id, zone:cap.seaZone, node:'s'+cap.seaZone,
       pos:{x:seas[cap.seaZone].x, y:seas[cap.seaZone].y}, at:null,
@@ -581,6 +662,9 @@ function freshState(){
     day:0, clockSpeed:0, clockDaysPerSec:2, pauseOnEvent:true,
     gazette:[], crownQueue:[], warnings:[], lastIncome:{gold:0,trade:0,upkeep:0,interest:0},
     govPool:GOV_POOL_DEFS.map(d=>({name:d[0], trait:d[1], posted:false})),
+    hour:9, showWinds:false, storms:initStormCells(seas), contracts:[], prizeCases:[], privateers:[], ultimatums:[],
+    seaStances:{}, chokePolicies:{}, landGrab:[], league:null, quill:2, undertaking:null,
+    coldopen:{stage:0, done:{}}, playerStart:START_PICK, nextIncident:2, stormSeed:1,
     tradeLeaderSeasons:0, over:false, startedAt:Date.now(), lastSeenAt:Date.now()
   };
 }
@@ -597,7 +681,7 @@ function rebuildIndex(){ rById={}; G.regions.forEach(r=>rById[r.id]=r); seaById=
    units with a current node (fleet.node === 's<zoneId>') and a live
    position (fleet.pos, world coords) — see syncUnits().
    ============================================================ */
-const WORLD_VER=8; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle, 6 = the 8040×5360 10x chart, 7 = town detail + great works, 8 = governors)
+const WORLD_VER=9; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle, 6 = the 8040×5360 10x chart, 7 = town detail + great works, 8 = governors)
 // Great works: ONE landmark per crown seat, raised from the city sheet. The hook is deliberately
 // a toy, not a spreadsheet — a flag on the region, read by income/battle/ship-cost code below.
 const GREAT_WORKS=[
@@ -721,6 +805,112 @@ function findSeaZonePath(fromZone, toZone){
   if(fromZone===toZone) return {nodes:['s'+fromZone], days:0};
   return graphPath('s'+fromZone, 's'+toZone, k=>k==='sea');
 }
+
+/* ================= THE SECOND AGE — world meta =================
+   Straits are the sea's narrow doors: whoever holds their shores sets the terms. */
+const STRAIT_NAMES=['The Rift','Gibraltar Strait','Windward Passage','Pillars Straits'];
+function mkRel(score){ return {score:score||0, war:false, ally:false, trust:0, grievance:0, dependence:0, threat:0, favours:0, dealUntil:0, warScore:0, lastGift:0}; }
+const ARCHETYPES={
+  ledger:  {title:'Ledger Queen',   doctrine:'Counts every ducat twice; makes war only when the ledger bleeds.'},
+  glory:   {title:'Glory Admiral',  doctrine:'Dreams in broadsides; honours daring and despises caution.'},
+  corsair: {title:'Corsair Prince', doctrine:'Takes what the sea offers; respects strength, mocks tribute.'},
+  banker:  {title:'Cautious Banker',doctrine:'Lends to everyone, trusts no one; peace is a paying asset.'},
+  grudge:  {title:'Old Grudge',     doctrine:'Keeps a list of every insult since the old wars. It is long.'},
+  fortress:{title:'Fortress Lord',  doctrine:'Builds walls first and empires second; rarely marches, never forgets a siege.'},
+  council: {title:'Shore Councils', doctrine:'No single voice: the isles answer together, slowly — and remember together.'},
+};
+const RULER_NAMES={
+  aurelia:['Doge Isabella Ferro','Serenissima Caterina Vail','Doge Marco Anselmi'],
+  meridian:['Stadholder Bram Kessler','Grand Pensionary Lotte Verhoeven','Admiral-Stadholder Joris Brandt'],
+  sable:['Prince Yussuf al-Marid','The Corsair Prince Nassim Grey','Princess Amira of the Reefs'],
+};
+const ARCH_BY_EMPIRE={aurelia:'ledger', meridian:'banker', sable:'corsair'};
+function rulerFor(id){
+  if(id==='player'||id==='natives') return null;
+  const names=RULER_NAMES[id]||['The Crown of '+id];
+  return {name:names[0], arch:ARCH_BY_EMPIRE[id]||'fortress', revealed:false};
+}
+function regionFromDef(d,i){
+  return { id:i, name:d[0], x:d[1], y:d[2], terrain:d[3], specialty:d[4], isPort:d[5], group:d[6],
+    owner:null, tier:0, hasWall:false, hasFort:false, hasShipyard:false, hasMarket:false, greatWork:null,
+    gov:null, pop:Math.round(rr(3000,7000)), troops:0, towns:Math.floor(rr(2,5)), flashUntil:0, neighbors:[] };
+}
+const NATIVE_ISLES=["Isle d'Or",'San Aurelio','Kestrel Cay','Verde Isle','Buccaneer Cay','Santa Irene','Zanzibar Reach','Malabar','Spice Isles'];
+function classifyNewWorld(regions){
+  regions.forEach(r=>{
+    if(r.owner) return;
+    if(r.group==='A'||r.group==='B'||r.group==='F'){ r.colony=true; r.troops=0; }
+    else if(NATIVE_ISLES.includes(r.name)){ r.owner='natives'; r.native=true; r.troops=Math.round(rr(700,1500)); r.tier=1; }
+  });
+}
+function computeNeighbors(regions){
+  regions.forEach(r=>{ r.neighbors=[]; });
+  regions.forEach(a=>{ regions.forEach(b=>{
+    if(a===b) return;
+    if(Math.hypot(a.x-b.x,a.y-b.y)<330*WS && a.group===b.group && a.group!=='I') a.neighbors.push(b.id);
+  }); });
+  regions.filter(r=>r.group==='I').forEach(a=>{
+    const sorted=regions.filter(b=>b!==a).map(b=>({b,d:Math.hypot(a.x-b.x,a.y-b.y)})).sort((p,q)=>p.d-q.d);
+    sorted.slice(0,2).forEach(({b})=>{ if(!a.neighbors.includes(b.id))a.neighbors.push(b.id); if(!b.neighbors.includes(a.id))b.neighbors.push(a.id); });
+  });
+  const link=(n1,n2)=>{const a=regions.find(r=>r.name===n1),b=regions.find(r=>r.name===n2);
+    if(a&&b){ if(!a.neighbors.includes(b.id))a.neighbors.push(b.id); if(!b.neighbors.includes(a.id))b.neighbors.push(a.id);} };
+  link('Cádiz','Morocco'); link('London','Flanders'); link('Bristol','Brittany'); link('Venice','Dalmatia');
+}
+function computeSeas(regions, seas){
+  seas.forEach(s=>{ s.ports=[]; s.neighbors=[]; s.strait=STRAIT_NAMES.includes(s.name); });
+  regions.filter(r=>r.isPort).forEach(p=>{
+    let best=0,bd=1e9; seas.forEach(s=>{const d=Math.hypot(p.x-s.x,p.y-s.y); if(d<bd){bd=d;best=s.id;}});
+    p.seaZone=best; seas[best].ports.push(p.id);
+  });
+  seas.forEach(a=>{ seas.forEach(b=>{ if(a!==b && Math.hypot(a.x-b.x,a.y-b.y)<560*WS) a.neighbors.push(b.id); }); });
+  weldSeaNeighbors(seas);
+}
+function ensureEmpireMeta(s){
+  if(!s.empires) return;
+  if(!s.empires['natives']){
+    s.empires['natives']={id:'natives',name:'Coastal Peoples',color:'#6f7d4f',dark:'#47552f',gold:0,armyTech:0,shipTech:0,debt:0,relations:{},tradeStreak:0,capitalName:null,native:true,ruler:{name:'The Shore Councils',arch:'council'}};
+  }
+  Object.keys(s.empires).forEach(id=>{
+    const e=s.empires[id];
+    if(e.capitalName===undefined){ const d=EMPIRES.find(x=>x.id===id); e.capitalName=d? d.capital : null; }
+    if(!e.ruler && id!=='player') e.ruler = id==='natives'? {name:'The Shore Councils',arch:'council'} : rulerFor(id);
+    e.relations=e.relations||{};
+    Object.keys(s.empires).forEach(o=>{
+      if(o===id) return;
+      if(!e.relations[o]) e.relations[o]=mkRel(id==='player'||o==='player'?10:0);
+      else { const r=e.relations[o]; ['trust','grievance','dependence','threat','favours','dealUntil','warScore'].forEach(k=>{ if(typeof r[k]!=='number') r[k]=0; }); }
+    });
+  });
+}
+function initStormCells(seas){
+  const cells=[];
+  if(!seas||!seas.length) return cells;
+  for(let i=0;i<4;i++){
+    const z=seas[(i*4+3)%seas.length];
+    cells.push({x:z.x+rr(-260,260)*WS/3.35, y:z.y+rr(-200,200)*WS/3.35, vx:rr(-1,1), vy:rr(-0.7,0.7), r:210*WS/3.35, seed:i*1.7+1});
+  }
+  return cells;
+}
+function ensureWorldMeta(s){
+  if(typeof s.hour!=='number') s.hour=9;
+  if(typeof s.showWinds!=='boolean') s.showWinds=false;
+  if(!Array.isArray(s.storms)) s.storms=[];
+  if(!Array.isArray(s.contracts)) s.contracts=[];
+  if(!Array.isArray(s.prizeCases)) s.prizeCases=[];
+  if(!Array.isArray(s.privateers)) s.privateers=[];
+  if(!Array.isArray(s.ultimatums)) s.ultimatums=[];
+  if(!s.seaStances) s.seaStances={};
+  if(!s.chokePolicies) s.chokePolicies={};
+  if(!Array.isArray(s.landGrab)) s.landGrab=[];
+  if(s.league===undefined) s.league=null;
+  if(typeof s.quill!=='number') s.quill=2;
+  if(s.undertaking===undefined) s.undertaking=null;
+  if(!s.coldopen) s.coldopen={stage:0, done:{}};
+  if(!s.playerStart) s.playerStart='player';
+  if(!Array.isArray(s.storms)||!s.storms.length) s.storms=initStormCells(s.seas);
+}
+
 // pre-grandeur saves were laid out on the old 2400×1600 chart — stretch them onto the new world
 function migrateSave(s){
   if(!s||!s.regions) return s;
@@ -771,6 +961,21 @@ function migrateSave(s){
     if(!Array.isArray(s.govPool)) s.govPool=GOV_POOL_DEFS.map(d=>({name:d[0], trait:d[1], posted:false}));
     if(typeof s.lastSeenAt!=='number') s.lastSeenAt=Date.now();
     s.wv=8;
+  }
+  if(s.wv===8){ // THE SECOND AGE: the chart widens — new shores rise out of the mist and old anchors are re-surveyed
+    const byName={}; (s.regions||[]).forEach(r=>byName[r.name]=r);
+    REGION_DEFS.forEach((d,i)=>{ if(!byName[d[0]]){ const r=regionFromDef(d,i); s.regions.push(r); byName[r.name]=r; } });
+    const bySea={}; (s.seas||[]).forEach(z=>bySea[z.name]=z);
+    SEA_DEFS.forEach((d,i)=>{ if(!bySea[d[0]]) s.seas.push({id:i,name:d[0],x:d[1],y:d[2],ports:[],neighbors:[],strait:STRAIT_NAMES.includes(d[0])}); });
+    const byR={}; REGION_DEFS.forEach(d=>{ byR[d[0]]=d; });
+    (s.regions||[]).forEach(r=>{ const d=byR[r.name]; if(d){ r.x=d[1]; r.y=d[2]; } if(r.greatWork===undefined) r.greatWork=null; if(r.gov===undefined) r.gov=null; });
+    const byS={}; SEA_DEFS.forEach(d=>{ byS[d[0]]=d; });
+    (s.seas||[]).forEach(z=>{ const d=byS[z.name]; if(d){ z.x=d[1]; z.y=d[2]; } });
+    classifyNewWorld(s.regions||[]);
+    computeNeighbors(s.regions||[]);
+    computeSeas(s.regions||[], s.seas||[]);
+    ensureEmpireMeta(s); ensureWorldMeta(s);
+    s.wv=9;
   }
   return s;
 }
@@ -845,6 +1050,9 @@ function s2w(x,y){ return [(x-view.x)/view.scale,(y-view.y)/view.scale]; }
 const LAND_PATHS=[ // continent silhouettes traced from Natural Earth 50m coastline data (public domain), warped onto the chart
  [[495,1203],[493,1202],[486,1203],[483,1207],[481,1210],[478,1214],[472,1215],[465,1216],[459,1216],[452,1217],[447,1214],[442,1211],[437,1208],[432,1205],[428,1202],[424,1199],[421,1196],[418,1193],[415,1190],[412,1187],[408,1187],[403,1186],[401,1183],[399,1181],[396,1178],[394,1176],[391,1174],[387,1171],[384,1168],[379,1165],[372,1160],[358,1147],[347,1119],[352,1091],[360,1078],[360,1076],[359,1075],[366,1069],[373,1064],[372,1064],[364,1068],[361,1067],[359,1066],[356,1065],[354,1063],[352,1062],[348,1063],[344,1065],[339,1067],[335,1069],[331,1070],[326,1074],[322,1077],[319,1081],[315,1081],[311,1080],[307,1080],[302,1079],[298,1078],[293,1077],[288,1078],[284,1080],[280,1076],[281,1071],[282,1067],[282,1063],[283,1059],[283,1055],[284,1052],[282,1049],[280,1046],[278,1043],[279,1040],[279,1038],[279,1035],[277,1032],[273,1028],[276,1026],[277,1026],[272,1022],[266,1020],[260,1018],[256,1017],[253,1011],[250,1004],[252,1002],[255,1000],[253,993],[253,984],[253,974],[256,968],[256,967],[253,972],[251,983],[251,991],[251,999],[249,999],[246,999],[244,995],[242,991],[242,984],[242,976],[243,969],[244,961],[245,955],[248,949],[252,945],[255,940],[258,935],[261,930],[264,925],[267,921],[269,917],[272,913],[271,911],[270,908],[271,904],[272,899],[273,894],[274,889],[275,883],[275,878],[275,872],[273,866],[271,861],[268,855],[266,849],[264,844],[261,838],[259,836],[255,832],[256,828],[257,823],[252,820],[251,815],[249,809],[251,805],[253,800],[252,796],[250,792],[251,787],[246,784],[244,779],[238,776],[233,774],[234,769],[234,764],[231,764],[228,765],[224,762],[220,759],[216,757],[215,752],[215,747],[215,743],[218,739],[221,735],[224,731],[227,728],[232,727],[237,726],[242,723],[246,719],[250,716],[254,712],[252,709],[250,705],[254,701],[258,698],[261,694],[265,690],[269,686],[275,687],[280,687],[286,687],[292,687],[298,688],[303,685],[309,682],[314,680],[319,677],[324,674],[329,672],[334,669],[339,666],[344,664],[350,663],[356,662],[362,661],[367,660],[373,659],[379,658],[384,658],[390,657],[396,656],[401,656],[406,653],[411,651],[416,649],[420,648],[425,646],[430,644],[428,641],[427,639],[427,636],[427,633],[428,630],[423,627],[422,624],[422,622],[421,619],[420,616],[415,613],[410,609],[403,604],[402,601],[396,594],[390,584],[385,572],[383,559],[384,547],[386,538],[392,528],[389,527],[390,522],[391,517],[392,513],[396,510],[399,510],[401,507],[397,507],[393,506],[389,505],[394,498],[394,494],[393,490],[392,486],[387,485],[383,485],[378,484],[374,484],[371,481],[368,478],[364,474],[365,471],[367,468],[364,467],[361,466],[364,462],[363,461],[357,463],[351,464],[352,461],[352,458],[347,459],[336,459],[330,459],[324,457],[317,456],[310,455],[304,453],[298,451],[292,450],[287,448],[282,447],[278,447],[273,448],[270,444],[267,440],[262,438],[261,434],[264,431],[263,426],[260,424],[261,421],[264,421],[264,418],[262,417],[259,417],[256,418],[252,418],[252,412],[251,406],[254,403],[258,399],[261,398],[264,395],[267,393],[270,391],[274,388],[277,386],[281,383],[286,380],[291,373],[297,367],[304,361],[312,357],[320,355],[329,354],[337,354],[345,356],[353,359],[362,367],[370,375],[376,384],[380,392],[381,388],[383,385],[385,382],[388,382],[391,383],[394,383],[398,383],[401,387],[403,384],[407,384],[408,388],[412,390],[416,391],[420,393],[424,395],[427,391],[425,386],[423,381],[424,376],[426,371],[427,367],[428,362],[430,357],[431,352],[430,347],[429,342],[429,337],[428,331],[427,326],[428,321],[429,316],[434,313],[438,315],[442,317],[445,314],[449,311],[452,307],[455,312],[457,316],[459,318],[462,319],[466,316],[470,312],[474,307],[480,303],[485,298],[492,293],[500,289],[508,285],[512,282],[516,279],[520,276],[526,277],[528,276],[523,273],[526,271],[530,269],[536,271],[541,272],[546,274],[551,276],[556,278],[560,280],[564,282],[567,283],[570,283],[573,283],[574,280],[575,276],[575,272],[576,268],[577,263],[579,263],[581,263],[583,263],[585,260],[588,255],[591,250],[595,241],[604,229],[620,217],[640,213],[651,212],[657,213],[661,212],[664,211],[667,210],[669,208],[671,206],[674,207],[677,208],[680,209],[682,209],[684,210],[686,209],[688,213],[689,217],[691,223],[693,232],[693,215],[692,209],[692,205],[692,198],[693,193],[697,190],[701,188],[706,186],[714,183],[721,181],[733,179],[748,181],[775,196],[789,228],[788,247],[790,244],[792,231],[789,216],[780,198],[781,197],[781,194],[772,185],[764,179],[758,174],[763,174],[767,173],[774,175],[780,176],[786,178],[791,179],[795,181],[799,179],[802,178],[805,176],[809,174],[812,172],[816,170],[820,168],[825,169],[830,171],[835,169],[840,167],[845,165],[851,163],[855,163],[860,163],[865,163],[870,163],[875,165],[881,166],[886,168],[891,169],[896,171],[899,175],[903,176],[905,172],[909,170],[912,168],[916,166],[920,167],[925,169],[930,171],[934,173],[939,175],[940,179],[941,184],[944,186],[948,186],[951,186],[953,182],[955,177],[960,173],[962,176],[964,179],[966,178],[964,174],[966,171],[969,167],[970,163],[974,161],[975,157],[975,153],[978,149],[982,144],[985,140],[983,136],[981,133],[985,129],[988,125],[992,121],[995,117],[1001,117],[1004,120],[1008,119],[1012,118],[1016,122],[1019,119],[1022,117],[1018,114],[1014,116],[1010,117],[1004,115],[1002,112],[1005,110],[1008,109],[1013,108],[1018,111],[1022,113],[1027,116],[1033,116],[1038,116],[1043,116],[1049,116],[1054,116],[1054,119],[1054,122],[1057,125],[1060,128],[1063,132],[1063,137],[1063,143],[1066,147],[1069,151],[1071,155],[1074,155],[1077,155],[1081,153],[1085,150],[1087,154],[1089,157],[1088,160],[1086,163],[1081,164],[1081,170],[1080,176],[1079,182],[1076,183],[1076,187],[1073,191],[1070,196],[1067,200],[1069,205],[1070,209],[1068,214],[1069,220],[1073,220],[1073,223],[1074,226],[1078,228],[1082,229],[1080,234],[1082,237],[1086,236],[1090,238],[1094,241],[1098,244],[1102,247],[1106,251],[1110,255],[1114,259],[1118,263],[1122,267],[1125,272],[1129,276],[1130,281],[1131,286],[1132,290],[1134,295],[1135,300],[1136,305],[1135,311],[1134,317],[1133,323],[1132,328],[1131,334],[1130,340],[1129,346],[1128,352],[1127,358],[1126,363],[1125,369],[1124,375],[1123,381],[1122,387],[1121,392],[1120,398],[1119,404],[1117,409],[1116,414],[1114,419],[1112,424],[1110,429],[1108,434],[1106,439],[1105,444],[1106,449],[1107,454],[1107,459],[1108,463],[1106,468],[1103,473],[1101,478],[1099,484],[1102,486],[1106,489],[1105,493],[1104,497],[1103,501],[1100,506],[1097,510],[1094,514],[1091,519],[1088,523],[1085,528],[1080,531],[1076,535],[1071,538],[1066,542],[1066,549],[1070,553],[1075,556],[1079,560],[1083,563],[1088,567],[1092,570],[1096,574],[1101,577],[1105,581],[1107,586],[1108,591],[1106,596],[1103,601],[1101,607],[1098,612],[1096,617],[1093,622],[1090,628],[1088,633],[1085,638],[1083,644],[1080,649],[1078,654],[1074,657],[1069,660],[1065,663],[1061,665],[1056,666],[1051,666],[1046,666],[1045,670],[1049,674],[1053,678],[1056,683],[1060,687],[1064,691],[1068,696],[1065,699],[1059,701],[1054,702],[1048,704],[1043,706],[1037,707],[1031,709],[1026,711],[1020,711],[1014,711],[1008,711],[1008,717],[1008,723],[1007,729],[1007,735],[1007,740],[1007,746],[1006,752],[1006,758],[1006,764],[1006,770],[1005,776],[1005,781],[1010,784],[1015,786],[1020,789],[1025,789],[1031,789],[1036,789],[1040,791],[1043,794],[1047,797],[1051,799],[1056,800],[1061,801],[1066,802],[1071,803],[1076,804],[1082,807],[1087,809],[1092,811],[1097,813],[1103,816],[1108,818],[1109,822],[1110,826],[1107,830],[1103,834],[1099,839],[1096,843],[1091,845],[1087,847],[1083,850],[1078,852],[1077,857],[1075,862],[1070,864],[1066,861],[1062,858],[1059,855],[1055,851],[1050,850],[1045,849],[1040,848],[1039,853],[1042,858],[1045,863],[1049,868],[1052,873],[1053,878],[1054,883],[1055,887],[1054,893],[1053,899],[1052,905],[1046,907],[1041,908],[1035,910],[1030,912],[1024,913],[1019,915],[1013,917],[1008,917],[1003,918],[997,918],[994,921],[990,925],[986,928],[982,929],[977,930],[972,931],[967,932],[962,931],[957,930],[952,930],[946,929],[941,928],[936,928],[930,927],[928,924],[925,920],[920,918],[916,916],[911,914],[906,911],[904,906],[902,902],[899,897],[896,893],[892,890],[888,887],[884,883],[880,880],[880,876],[881,871],[881,867],[878,864],[874,860],[871,857],[867,854],[869,851],[871,847],[866,845],[861,844],[856,842],[851,840],[845,838],[842,834],[839,830],[836,825],[833,821],[829,817],[824,816],[818,815],[812,814],[806,814],[800,813],[794,812],[788,811],[782,810],[776,810],[770,809],[764,808],[758,807],[752,806],[747,806],[741,805],[736,805],[731,805],[726,805],[721,805],[716,805],[714,809],[711,814],[709,818],[706,822],[704,826],[702,830],[702,835],[702,839],[702,843],[708,847],[713,846],[717,848],[721,853],[724,857],[724,861],[722,865],[721,870],[719,875],[718,881],[716,886],[715,892],[712,897],[708,902],[705,907],[701,912],[697,918],[694,924],[691,930],[693,933],[690,936],[689,941],[688,945],[687,950],[686,955],[685,959],[685,964],[684,969],[684,973],[686,977],[689,981],[692,984],[694,988],[697,992],[702,994],[706,996],[711,998],[708,1002],[705,1007],[702,1011],[699,1015],[696,1020],[693,1024],[693,1029],[693,1034],[692,1040],[692,1045],[691,1050],[694,1053],[696,1055],[693,1058],[690,1060],[685,1060],[680,1060],[675,1061],[670,1061],[666,1064],[662,1067],[658,1070],[654,1073],[651,1078],[648,1083],[645,1088],[643,1093],[640,1098],[637,1103],[634,1107],[631,1112],[628,1117],[623,1118],[618,1118],[616,1121],[613,1124],[610,1127],[605,1130],[599,1132],[594,1134],[588,1136],[583,1139],[578,1141],[573,1144],[569,1148],[565,1151],[561,1154],[557,1158],[553,1161],[549,1164],[545,1168],[540,1168],[536,1167],[531,1167],[527,1169],[522,1172],[518,1175],[515,1181],[511,1187],[506,1194],[502,1199]],
  [[1132,1150],[1137,1148],[1143,1145],[1149,1142],[1157,1138],[1167,1135],[1177,1134],[1188,1134],[1195,1134],[1201,1134],[1206,1134],[1211,1133],[1217,1135],[1223,1137],[1228,1138],[1233,1140],[1238,1141],[1243,1142],[1248,1142],[1253,1143],[1258,1143],[1263,1144],[1268,1144],[1273,1144],[1278,1146],[1282,1149],[1287,1152],[1292,1154],[1296,1157],[1302,1154],[1307,1152],[1312,1149],[1317,1147],[1323,1145],[1327,1147],[1332,1149],[1335,1149],[1338,1148],[1342,1145],[1347,1148],[1351,1150],[1355,1149],[1360,1147],[1364,1145],[1369,1144],[1374,1141],[1379,1138],[1384,1135],[1389,1132],[1393,1133],[1393,1134],[1397,1134],[1401,1134],[1401,1137],[1401,1139],[1401,1142],[1406,1141],[1410,1138],[1413,1134],[1416,1131],[1422,1129],[1426,1131],[1425,1135],[1425,1138],[1424,1142],[1424,1145],[1423,1148],[1422,1151],[1431,1154],[1442,1159],[1451,1165],[1458,1170],[1464,1175],[1468,1182],[1472,1190],[1474,1197],[1474,1204],[1473,1212],[1472,1219],[1470,1226],[1468,1232],[1465,1238],[1462,1243],[1459,1248],[1456,1253],[1453,1257],[1457,1258],[1460,1260],[1463,1262],[1467,1263],[1470,1265],[1473,1263],[1476,1261],[1477,1263],[1479,1266],[1483,1262],[1487,1260],[1491,1262],[1495,1264],[1499,1265],[1503,1264],[1508,1263],[1512,1262],[1517,1263],[1523,1263],[1528,1263],[1533,1261],[1538,1259],[1542,1258],[1545,1255],[1549,1252],[1552,1249],[1555,1248],[1558,1248],[1563,1248],[1568,1249],[1573,1250],[1578,1251],[1583,1253],[1589,1254],[1595,1256],[1601,1258],[1605,1261],[1609,1264],[1613,1267],[1619,1268],[1624,1269],[1630,1270],[1635,1271],[1640,1272],[1644,1277],[1647,1282],[1650,1287],[1654,1292],[1657,1297],[1660,1302],[1665,1303],[1669,1305],[1673,1306],[1678,1308],[1682,1307],[1687,1307],[1692,1306],[1697,1305],[1703,1306],[1708,1306],[1714,1307],[1720,1308],[1726,1308],[1732,1309],[1737,1308],[1743,1306],[1748,1305],[1753,1304],[1759,1303],[1763,1301],[1768,1300],[1773,1298],[1778,1296],[1783,1294],[1788,1292],[1792,1291],[1792,1286],[1791,1282],[1789,1278],[1787,1273],[1784,1269],[1782,1264],[1780,1260],[1780,1254],[1780,1248],[1783,1244],[1785,1240],[1788,1237],[1792,1234],[1796,1232],[1800,1229],[1803,1227],[1809,1227],[1814,1228],[1819,1228],[1824,1229],[1826,1232],[1828,1234],[1830,1237],[1834,1238],[1838,1238],[1843,1239],[1847,1239],[1853,1238],[1860,1237],[1867,1236],[1871,1233],[1876,1231],[1880,1230],[1884,1230],[1886,1227],[1888,1224],[1890,1221],[1896,1220],[1901,1218],[1906,1217],[1907,1218],[1902,1220],[1904,1222],[1909,1221],[1915,1220],[1916,1217],[1917,1213],[1922,1215],[1926,1216],[1931,1218],[1936,1220],[1940,1218],[1945,1216],[1949,1214],[1953,1217],[1953,1220],[1948,1223],[1947,1228],[1951,1229],[1956,1231],[1958,1234],[1961,1237],[1964,1234],[1967,1231],[1971,1232],[1975,1234],[1979,1233],[1983,1232],[1987,1231],[1989,1234],[1994,1234],[2000,1233],[2004,1231],[2008,1230],[2012,1228],[2015,1224],[2017,1220],[2020,1216],[2022,1211],[2025,1207],[2027,1203],[2028,1197],[2030,1191],[2031,1185],[2032,1179],[2034,1173],[2036,1166],[2038,1160],[2041,1154],[2043,1148],[2048,1143],[2052,1138],[2057,1134],[2061,1129],[2065,1125],[2069,1121],[2073,1117],[2077,1113],[2081,1109],[2085,1105],[2088,1101],[2092,1097],[2094,1093],[2096,1089],[2098,1085],[2102,1082],[2105,1079],[2109,1076],[2110,1071],[2110,1065],[2111,1060],[2111,1055],[2112,1049],[2113,1044],[2111,1039],[2110,1033],[2109,1028],[2107,1022],[2106,1017],[2102,1013],[2098,1010],[2094,1006],[2095,1001],[2096,996],[2097,990],[2098,985],[2093,984],[2087,982],[2082,981],[2077,983],[2072,986],[2067,988],[2069,993],[2070,999],[2072,1004],[2073,1010],[2075,1015],[2076,1021],[2078,1026],[2081,1029],[2085,1031],[2087,1036],[2089,1040],[2088,1044],[2088,1048],[2088,1053],[2085,1056],[2082,1060],[2079,1064],[2076,1068],[2072,1072],[2068,1075],[2064,1079],[2060,1082],[2056,1085],[2052,1089],[2049,1092],[2046,1096],[2044,1100],[2044,1104],[2044,1109],[2040,1113],[2036,1117],[2033,1122],[2029,1126],[2024,1129],[2019,1131],[2015,1133],[2010,1135],[2005,1137],[2001,1139],[1996,1137],[1990,1135],[1987,1131],[1984,1127],[1981,1124],[1976,1122],[1972,1120],[1967,1118],[1963,1116],[1957,1116],[1951,1115],[1945,1115],[1942,1119],[1939,1124],[1936,1128],[1933,1133],[1930,1137],[1927,1135],[1924,1133],[1919,1133],[1915,1133],[1910,1133],[1905,1134],[1901,1130],[1898,1126],[1894,1122],[1893,1117],[1893,1112],[1892,1107],[1892,1103],[1886,1103],[1882,1099],[1877,1095],[1873,1091],[1869,1093],[1865,1094],[1860,1090],[1855,1089],[1850,1087],[1850,1084],[1855,1081],[1859,1079],[1864,1076],[1868,1074],[1873,1071],[1877,1069],[1880,1064],[1883,1060],[1885,1055],[1888,1050],[1890,1046],[1893,1041],[1896,1037],[1895,1032],[1895,1027],[1895,1023],[1895,1018],[1892,1013],[1889,1008],[1887,1003],[1884,998],[1881,992],[1878,987],[1875,982],[1872,977],[1869,972],[1866,967],[1863,962],[1860,957],[1857,952],[1854,947],[1851,942],[1848,937],[1845,932],[1842,926],[1839,921],[1836,916],[1833,914],[1833,911],[1833,907],[1829,905],[1825,902],[1821,900],[1817,897],[1816,894],[1815,890],[1814,887],[1809,887],[1805,887],[1800,887],[1796,887],[1795,883],[1795,879],[1797,874],[1798,869],[1799,863],[1802,859],[1805,855],[1808,851],[1811,851],[1815,851],[1818,851],[1820,848],[1822,845],[1827,843],[1831,840],[1836,837],[1841,837],[1846,837],[1849,832],[1847,827],[1851,825],[1856,823],[1860,821],[1865,819],[1870,819],[1876,819],[1882,820],[1887,820],[1892,822],[1897,824],[1901,827],[1904,829],[1907,832],[1910,835],[1913,834],[1917,833],[1921,837],[1926,835],[1930,832],[1935,829],[1940,827],[1945,824],[1945,820],[1945,817],[1950,815],[1955,813],[1960,811],[1965,810],[1970,808],[1974,805],[1978,802],[1982,798],[1986,795],[1990,792],[1996,791],[2002,790],[2007,789],[2013,787],[2019,786],[2025,785],[2031,784],[2037,783],[2041,784],[2046,785],[2050,786],[2055,787],[2061,786],[2066,785],[2070,786],[2075,788],[2079,789],[2084,788],[2088,787],[2094,787],[2099,787],[2105,787],[2110,787],[2116,787],[2122,787],[2127,787],[2132,786],[2137,784],[2142,782],[2146,780],[2150,781],[2153,782],[2156,783],[2159,784],[2162,785],[2164,786],[2167,787],[2169,786],[2172,785],[2175,784],[2177,782],[2181,779],[2186,773],[2197,762],[2231,750],[2267,766],[2277,779],[2282,785],[2284,789],[2287,791],[2290,792],[2292,794],[2295,793],[2298,792],[2301,792],[2304,791],[2307,791],[2309,787],[2311,783],[2314,779],[2314,773],[2315,767],[2318,765],[2321,763],[2323,758],[2324,752],[2326,747],[2328,742],[2326,737],[2324,732],[2322,727],[2320,723],[2318,718],[2317,713],[2315,708],[2311,705],[2308,702],[2305,699],[2304,694],[2302,688],[2297,688],[2292,688],[2287,689],[2284,685],[2281,681],[2278,677],[2274,673],[2272,669],[2274,665],[2276,661],[2278,657],[2283,656],[2288,654],[2292,653],[2293,649],[2289,647],[2284,645],[2280,642],[2276,640],[2271,639],[2266,638],[2261,638],[2256,637],[2251,639],[2247,640],[2242,642],[2237,644],[2235,647],[2239,648],[2243,649],[2245,655],[2242,660],[2239,665],[2237,670],[2234,675],[2228,675],[2222,675],[2216,675],[2211,675],[2205,675],[2199,675],[2194,672],[2190,668],[2185,665],[2181,662],[2177,662],[2174,663],[2171,666],[2168,669],[2165,672],[2160,672],[2155,671],[2150,671],[2146,674],[2142,676],[2138,673],[2134,671],[2130,668],[2126,665],[2122,663],[2116,662],[2110,661],[2104,661],[2098,663],[2093,665],[2087,666],[2082,668],[2076,670],[2071,672],[2065,674],[2061,672],[2057,670],[2053,669],[2051,665],[2048,662],[2045,659],[2046,655],[2048,651],[2049,647],[2044,645],[2040,643],[2039,639],[2043,636],[2046,634],[2050,631],[2049,629],[2044,629],[2039,629],[2035,629],[2030,627],[2028,621],[2029,619],[2027,614],[2026,614],[2022,617],[2017,619],[2012,621],[2010,626],[2007,631],[2005,636],[2000,638],[1996,640],[1997,645],[1998,650],[1999,654],[2000,659],[2001,664],[1997,666],[1994,669],[1990,668],[1987,672],[1988,677],[1989,683],[1990,689],[1991,694],[1993,700],[1994,705],[1995,711],[1994,715],[1991,716],[1987,717],[1986,721],[1985,725],[1985,731],[1984,736],[1984,742],[1984,747],[1983,753],[1983,758],[1983,764],[1982,769],[1977,771],[1972,774],[1969,778],[1965,782],[1962,786],[1959,790],[1955,794],[1952,798],[1948,799],[1943,799],[1939,800],[1935,803],[1932,806],[1926,804],[1921,803],[1915,801],[1909,800],[1904,798],[1898,796],[1892,795],[1886,793],[1881,792],[1875,790],[1870,793],[1865,797],[1860,800],[1856,803],[1851,807],[1846,810],[1841,813],[1836,817],[1831,820],[1827,823],[1825,821],[1823,818],[1818,817],[1810,816],[1806,814],[1802,812],[1800,814],[1802,819],[1800,819],[1797,816],[1794,813],[1790,812],[1785,811],[1780,810],[1775,809],[1777,812],[1778,816],[1783,820],[1787,824],[1787,827],[1784,826],[1781,825],[1779,825],[1776,826],[1773,826],[1774,832],[1776,840],[1778,848],[1781,850],[1784,851],[1787,852],[1789,855],[1790,858],[1790,865],[1787,866],[1784,867],[1780,869],[1777,872],[1771,881],[1763,889],[1753,897],[1751,899],[1758,898],[1764,897],[1769,894],[1774,891],[1778,889],[1777,893],[1772,897],[1767,901],[1761,904],[1756,905],[1749,905],[1742,905],[1732,907],[1723,907],[1715,907],[1709,907],[1710,910],[1711,913],[1711,917],[1712,920],[1712,923],[1713,927],[1719,929],[1724,931],[1730,932],[1736,934],[1741,935],[1747,936],[1752,938],[1757,938],[1762,938],[1767,938],[1771,939],[1776,939],[1780,941],[1784,943],[1788,945],[1787,950],[1781,952],[1778,949],[1774,950],[1770,952],[1766,953],[1766,959],[1769,962],[1772,965],[1768,968],[1764,971],[1766,977],[1771,979],[1776,982],[1781,984],[1785,988],[1789,991],[1793,995],[1798,998],[1802,1002],[1803,1007],[1804,1013],[1804,1018],[1805,1024],[1806,1029],[1803,1031],[1798,1028],[1793,1025],[1788,1021],[1784,1018],[1779,1020],[1775,1023],[1770,1025],[1766,1027],[1768,1033],[1770,1038],[1772,1043],[1776,1045],[1779,1046],[1781,1050],[1782,1054],[1779,1057],[1775,1060],[1772,1062],[1769,1060],[1766,1057],[1763,1054],[1760,1053],[1757,1051],[1756,1054],[1758,1060],[1760,1066],[1762,1073],[1764,1079],[1765,1085],[1766,1091],[1767,1097],[1767,1101],[1767,1106],[1766,1110],[1770,1112],[1774,1114],[1774,1117],[1770,1119],[1766,1120],[1762,1120],[1758,1120],[1754,1120],[1749,1120],[1745,1120],[1742,1123],[1739,1126],[1736,1129],[1737,1133],[1737,1136],[1738,1140],[1739,1144],[1741,1147],[1739,1151],[1735,1152],[1731,1149],[1727,1145],[1724,1143],[1720,1140],[1716,1137],[1712,1134],[1707,1132],[1702,1129],[1697,1126],[1691,1127],[1685,1127],[1684,1131],[1683,1134],[1682,1137],[1677,1137],[1672,1133],[1668,1129],[1663,1124],[1659,1120],[1654,1115],[1651,1110],[1652,1105],[1652,1099],[1653,1094],[1653,1087],[1654,1081],[1654,1074],[1654,1067],[1654,1061],[1653,1057],[1652,1053],[1650,1049],[1649,1046],[1650,1041],[1650,1037],[1648,1033],[1646,1030],[1644,1026],[1647,1021],[1651,1017],[1654,1012],[1657,1008],[1659,1003],[1661,998],[1662,993],[1664,988],[1669,987],[1674,985],[1679,984],[1684,982],[1687,978],[1690,973],[1692,969],[1696,971],[1698,969],[1697,964],[1696,960],[1691,959],[1685,959],[1680,958],[1679,955],[1675,952],[1671,948],[1670,943],[1669,938],[1667,933],[1672,932],[1673,930],[1671,928],[1669,925],[1669,921],[1669,917],[1669,912],[1669,908],[1672,905],[1675,902],[1678,900],[1680,897],[1680,893],[1680,888],[1680,883],[1679,877],[1679,871],[1680,866],[1681,861],[1681,860],[1680,851],[1680,843],[1683,838],[1686,833],[1692,823],[1698,815],[1704,808],[1709,803],[1714,799],[1718,795],[1721,791],[1727,788],[1731,784],[1732,780],[1727,778],[1723,775],[1722,771],[1721,767],[1720,763],[1719,759],[1719,754],[1718,749],[1717,744],[1716,738],[1712,734],[1708,730],[1704,727],[1700,726],[1696,730],[1692,733],[1688,730],[1683,727],[1678,724],[1676,720],[1675,716],[1679,713],[1682,711],[1680,706],[1678,701],[1674,700],[1670,700],[1666,697],[1663,694],[1660,691],[1654,692],[1648,694],[1643,693],[1638,692],[1633,691],[1628,690],[1623,689],[1618,688],[1613,690],[1607,692],[1602,693],[1596,695],[1591,697],[1585,699],[1580,701],[1575,703],[1569,704],[1564,706],[1558,708],[1553,710],[1547,712],[1546,715],[1544,718],[1545,722],[1547,726],[1549,729],[1546,731],[1542,733],[1538,735],[1538,739],[1537,742],[1536,746],[1535,749],[1539,752],[1542,754],[1546,756],[1550,759],[1555,761],[1560,764],[1566,767],[1574,771],[1579,777],[1586,784],[1593,795],[1597,808],[1599,822],[1597,834],[1595,843],[1593,850],[1591,856],[1590,861],[1589,865],[1589,869],[1588,873],[1591,875],[1593,878],[1596,880],[1594,885],[1590,887],[1591,890],[1592,894],[1594,897],[1596,901],[1595,907],[1595,912],[1595,918],[1595,924],[1595,930],[1596,935],[1597,941],[1598,947],[1599,952],[1600,958],[1601,963],[1599,968],[1603,970],[1607,967],[1612,971],[1613,976],[1613,982],[1612,986],[1610,991],[1609,996],[1608,999],[1608,1003],[1606,1004],[1604,1006],[1602,1007],[1597,1005],[1592,1004],[1591,1005],[1591,1006],[1592,1008],[1594,1011],[1596,1013],[1599,1016],[1606,1021],[1612,1026],[1617,1031],[1621,1038],[1625,1045],[1625,1047],[1625,1049],[1626,1052],[1629,1062],[1631,1073],[1631,1084],[1630,1096],[1628,1108],[1626,1112],[1623,1117],[1621,1120],[1618,1125],[1613,1131],[1604,1140],[1592,1148],[1546,1159],[1485,1051],[1510,1021],[1496,1032],[1490,1038],[1487,1042],[1485,1043],[1481,1049],[1478,1054],[1476,1058],[1476,1055],[1479,1047],[1481,1042],[1483,1038],[1484,1034],[1485,1031],[1485,1028],[1483,1029],[1480,1029],[1478,1029],[1478,1026],[1478,1024],[1475,1026],[1473,1024],[1469,1023],[1464,1022],[1459,1019],[1454,1017],[1449,1015],[1448,1011],[1448,1008],[1447,1004],[1446,1001],[1445,997],[1444,994],[1442,990],[1440,986],[1434,982],[1428,975],[1421,966],[1416,955],[1414,947],[1412,941],[1409,938],[1407,936],[1404,934],[1401,933],[1401,927],[1401,922],[1401,916],[1401,911],[1400,909],[1398,907],[1396,905],[1399,901],[1399,897],[1398,894],[1397,890],[1396,886],[1398,881],[1399,876],[1401,871],[1404,866],[1407,861],[1410,856],[1413,851],[1411,846],[1408,841],[1406,835],[1404,830],[1401,824],[1399,819],[1397,813],[1394,808],[1392,802],[1391,796],[1390,790],[1390,784],[1389,778],[1388,773],[1387,767],[1387,761],[1386,755],[1385,749],[1384,743],[1383,737],[1383,731],[1382,726],[1381,720],[1380,714],[1380,708],[1379,702],[1380,696],[1381,690],[1382,685],[1384,679],[1385,673],[1386,667],[1387,661],[1388,655],[1390,650],[1391,644],[1392,638],[1393,632],[1395,627],[1398,621],[1400,616],[1402,610],[1404,605],[1406,599],[1408,594],[1410,588],[1412,583],[1414,577],[1417,572],[1419,566],[1421,561],[1423,555],[1424,550],[1426,544],[1428,539],[1429,533],[1431,527],[1433,522],[1434,516],[1436,511],[1438,505],[1439,499],[1441,494],[1443,488],[1445,483],[1446,477],[1448,472],[1450,466],[1451,460],[1453,455],[1455,449],[1456,444],[1458,438],[1460,432],[1461,427],[1463,421],[1465,416],[1467,410],[1468,404],[1469,399],[1471,394],[1472,388],[1473,383],[1474,377],[1475,372],[1477,366],[1478,361],[1479,356],[1480,350],[1481,345],[1482,339],[1482,334],[1482,328],[1481,322],[1481,317],[1481,311],[1480,306],[1480,300],[1479,294],[1479,289],[1479,283],[1478,278],[1478,272],[1482,271],[1487,270],[1490,266],[1494,262],[1498,257],[1501,253],[1505,249],[1508,244],[1512,240],[1516,236],[1516,232],[1517,228],[1518,224],[1521,219],[1524,214],[1527,209],[1531,206],[1534,202],[1537,198],[1541,194],[1544,191],[1549,189],[1550,189],[1551,193],[1555,195],[1558,196],[1562,198],[1565,200],[1569,198],[1573,195],[1577,192],[1583,188],[1589,184],[1598,180],[1607,175],[1616,172],[1624,170],[1630,169],[1632,166],[1633,163],[1635,160],[1636,157],[1643,157],[1649,158],[1655,159],[1661,159],[1667,159],[1670,157],[1673,155],[1676,152],[1679,149],[1681,145],[1683,141],[1685,137],[1688,139],[1688,144],[1684,148],[1680,151],[1677,155],[1674,158],[1675,163],[1680,165],[1685,168],[1690,170],[1695,172],[1696,168],[1698,164],[1699,160],[1701,156],[1701,151],[1701,147],[1701,142],[1703,136],[1705,131],[1707,125],[1709,120],[1711,114],[1713,111],[1714,108],[1719,105],[1724,103],[1729,100],[1734,99],[1739,97],[1745,95],[1750,93],[1755,91],[1760,89],[1762,93],[1763,97],[1764,101],[1765,105],[1764,109],[1763,114],[1765,117],[1767,119],[1771,118],[1776,115],[1777,118],[1778,120],[1779,123],[1787,115],[1800,108],[1816,104],[1831,104],[1843,108],[1852,113],[1859,119],[1865,124],[1869,128],[1869,125],[1868,122],[1864,115],[1858,109],[1857,106],[1857,103],[1856,100],[1859,98],[1862,97],[1865,95],[1869,98],[1870,96],[1872,95],[1875,94],[1878,95],[1882,96],[1885,97],[1887,101],[1889,106],[1891,111],[1893,115],[1896,114],[1899,120],[1901,125],[1903,131],[1904,136],[1905,142],[1909,144],[1913,146],[1917,148],[1922,151],[1927,151],[1932,151],[1937,151],[1943,151],[1948,152],[1954,152],[1959,152],[1965,152],[1970,153],[1975,153],[1981,154],[1986,156],[1991,158],[1997,159],[2002,161],[2008,163],[2013,165],[2018,166],[2024,168],[2029,170],[2034,171],[2040,174],[2045,177],[2050,180],[2055,183],[2060,186],[2065,189],[2071,193],[2076,196],[2081,199],[2086,202],[2090,206],[2095,209],[2100,213],[2104,217],[2109,220],[2114,224],[2118,228],[2123,231],[2128,235],[2132,238],[2137,242],[2142,246],[2146,249],[2151,253],[2156,256],[2160,260],[2165,264],[2170,267],[2174,271],[2179,275],[2184,277],[2189,280],[2194,282],[2199,285],[2205,287],[2210,290],[2215,292],[2220,295],[2225,297],[2230,300],[2232,306],[2233,311],[2235,317],[2236,323],[2238,329],[2240,334],[2241,340],[2243,346],[2245,352],[2246,357],[2248,363],[2249,369],[2251,375],[2253,380],[2254,386],[2256,392],[2258,397],[2259,403],[2261,409],[2262,415],[2264,420],[2266,426],[2267,432],[2269,438],[2271,443],[2272,449],[2274,455],[2275,461],[2277,466],[2279,472],[2280,478],[2282,483],[2284,489],[2285,495],[2287,501],[2288,506],[2290,512],[2292,518],[2293,524],[2295,529],[2297,535],[2298,541],[2300,547],[2301,552],[2303,558],[2305,564],[2306,569],[2308,575],[2309,581],[2311,587],[2313,592],[2314,598],[2316,604],[2318,610],[2319,615],[2321,621],[2322,627],[2324,633],[2326,638],[2327,644],[2329,650],[2331,655],[2332,661],[2334,667],[2335,673],[2337,678],[2339,684],[2340,690],[2342,696],[2344,701],[2345,707],[2347,713],[2348,719],[2350,724],[2352,730],[2353,736],[2355,741],[2357,747],[2358,753],[2360,759],[2361,764],[2363,770],[2365,776],[2366,782],[2368,787],[2370,793],[2371,799],[2373,805],[2374,810],[2376,816],[2378,822],[2379,827],[2381,833],[2383,839],[2384,845],[2386,850],[2387,856],[2389,862],[2391,868],[2392,873],[2394,879],[2393,885],[2393,890],[2393,896],[2392,902],[2392,908],[2391,913],[2391,919],[2391,925],[2390,930],[2390,936],[2389,942],[2389,947],[2389,953],[2388,959],[2388,964],[2387,970],[2386,976],[2385,981],[2384,987],[2383,992],[2382,998],[2381,1004],[2380,1009],[2380,1015],[2379,1020],[2378,1026],[2377,1032],[2376,1037],[2375,1043],[2374,1049],[2373,1054],[2372,1060],[2372,1066],[2371,1072],[2370,1078],[2370,1084],[2369,1089],[2368,1095],[2367,1101],[2367,1107],[2366,1113],[2365,1119],[2365,1125],[2364,1131],[2363,1136],[2362,1142],[2362,1148],[2361,1154],[2360,1160],[2360,1166],[2359,1172],[2358,1178],[2358,1184],[2357,1189],[2356,1195],[2355,1201],[2355,1207],[2354,1213],[2353,1219],[2353,1225],[2352,1231],[2351,1236],[2350,1242],[2350,1248],[2349,1254],[2349,1260],[2348,1265],[2348,1271],[2347,1277],[2347,1282],[2347,1288],[2346,1294],[2346,1300],[2345,1305],[2345,1311],[2344,1317],[2344,1322],[2344,1328],[2344,1334],[2345,1339],[2345,1345],[2345,1351],[2346,1357],[2346,1362],[2347,1368],[2347,1374],[2348,1379],[2348,1385],[2349,1391],[2349,1397],[2350,1402],[2350,1408],[2344,1408],[2338,1408],[2332,1408],[2327,1408],[2321,1408],[2315,1408],[2309,1408],[2303,1408],[2297,1408],[2291,1409],[2286,1409],[2280,1409],[2274,1409],[2268,1409],[2262,1409],[2256,1409],[2250,1409],[2245,1409],[2239,1409],[2233,1409],[2227,1409],[2221,1409],[2215,1409],[2210,1412],[2205,1414],[2199,1416],[2194,1419],[2189,1421],[2183,1423],[2179,1421],[2175,1418],[2170,1415],[2166,1412],[2162,1409],[2156,1406],[2151,1403],[2146,1400],[2140,1398],[2135,1395],[2130,1392],[2124,1389],[2119,1387],[2114,1384],[2109,1381],[2103,1378],[2097,1378],[2091,1377],[2086,1376],[2080,1375],[2074,1375],[2068,1374],[2062,1373],[2056,1372],[2051,1372],[2046,1371],[2041,1371],[2036,1371],[2031,1371],[2027,1371],[2022,1371],[2018,1372],[2014,1372],[2009,1373],[2004,1375],[1999,1377],[1993,1379],[1985,1382],[1975,1385],[1963,1386],[1950,1385],[1938,1382],[1929,1378],[1922,1374],[1916,1371],[1911,1368],[1907,1366],[1902,1365],[1898,1363],[1894,1362],[1889,1361],[1885,1361],[1880,1360],[1875,1360],[1870,1359],[1865,1359],[1860,1358],[1854,1358],[1848,1357],[1842,1357],[1836,1356],[1830,1356],[1825,1355],[1819,1355],[1813,1355],[1807,1355],[1801,1354],[1795,1354],[1789,1354],[1783,1354],[1777,1354],[1771,1354],[1765,1354],[1759,1354],[1753,1354],[1747,1354],[1741,1353],[1735,1353],[1729,1353],[1723,1353],[1717,1353],[1711,1353],[1705,1353],[1699,1353],[1693,1353],[1687,1353],[1681,1352],[1675,1352],[1669,1352],[1663,1352],[1657,1352],[1651,1352],[1646,1352],[1640,1352],[1634,1352],[1628,1352],[1622,1352],[1616,1352],[1610,1352],[1605,1352],[1599,1352],[1593,1353],[1587,1353],[1581,1353],[1574,1353],[1568,1353],[1562,1353],[1556,1353],[1549,1353],[1543,1353],[1537,1352],[1531,1352],[1525,1351],[1519,1351],[1513,1351],[1507,1350],[1501,1350],[1495,1350],[1490,1350],[1484,1349],[1478,1349],[1472,1349],[1466,1349],[1460,1349],[1454,1349],[1448,1349],[1442,1349],[1436,1349],[1430,1349],[1424,1349],[1419,1349],[1413,1349],[1407,1349],[1401,1348],[1395,1348],[1389,1348],[1383,1348],[1377,1348],[1371,1348],[1365,1348],[1359,1348],[1353,1348],[1347,1348],[1341,1348],[1335,1348],[1329,1348],[1323,1348],[1318,1348],[1312,1348],[1306,1348],[1300,1348],[1294,1348],[1288,1348],[1282,1348],[1276,1348],[1270,1348],[1264,1348],[1258,1348],[1252,1348],[1246,1348],[1240,1348],[1234,1348],[1228,1348],[1222,1348],[1217,1348],[1211,1348],[1205,1348],[1199,1347],[1193,1347],[1187,1347],[1181,1347],[1175,1347],[1169,1347],[1163,1347],[1157,1347],[1151,1347],[1145,1347],[1139,1347],[1133,1347],[1127,1347],[1121,1347],[1115,1347],[1110,1347],[1104,1347],[1098,1347],[1092,1347],[1086,1347],[1080,1347],[1074,1347],[1068,1347],[1062,1347],[1056,1347],[1050,1347],[1044,1347],[1038,1347],[1032,1347],[1026,1347],[1020,1347],[1014,1347],[1009,1347],[1003,1347],[997,1347],[991,1346],[985,1346],[979,1346],[973,1346],[967,1347],[962,1347],[956,1348],[951,1348],[945,1349],[940,1349],[934,1350],[929,1350],[923,1351],[918,1351],[912,1351],[906,1352],[901,1353],[895,1355],[889,1356],[884,1357],[878,1358],[872,1359],[867,1360],[861,1361],[855,1362],[850,1363],[844,1364],[838,1365],[832,1366],[827,1367],[822,1369],[817,1370],[812,1372],[806,1374],[801,1376],[796,1378],[791,1379],[786,1381],[781,1383],[776,1386],[771,1389],[767,1391],[762,1394],[757,1397],[752,1400],[748,1403],[743,1405],[738,1408],[733,1410],[729,1411],[724,1412],[720,1414],[715,1415],[710,1412],[705,1409],[700,1406],[695,1404],[690,1401],[685,1398],[680,1395],[678,1391],[675,1387],[673,1383],[670,1379],[670,1374],[669,1369],[668,1364],[667,1359],[666,1355],[664,1351],[662,1347],[662,1342],[663,1336],[663,1331],[664,1325],[664,1319],[667,1315],[671,1310],[674,1305],[677,1300],[680,1295],[683,1291],[686,1286],[689,1281],[690,1276],[690,1270],[691,1264],[691,1259],[692,1253],[692,1248],[693,1242],[693,1237],[694,1231],[694,1225],[695,1220],[695,1214],[700,1213],[704,1211],[709,1209],[713,1207],[718,1205],[721,1206],[724,1207],[723,1212],[722,1217],[725,1221],[728,1225],[731,1229],[734,1234],[738,1238],[743,1241],[747,1245],[752,1247],[757,1248],[762,1250],[768,1251],[773,1253],[778,1252],[783,1251],[789,1250],[794,1248],[799,1247],[805,1246],[807,1248],[810,1249],[815,1249],[819,1249],[824,1249],[829,1249],[833,1246],[837,1242],[843,1242],[844,1246],[850,1245],[856,1245],[862,1244],[868,1244],[874,1243],[880,1243],[886,1242],[892,1241],[898,1241],[904,1240],[909,1240],[915,1239],[920,1238],[926,1237],[931,1235],[936,1232],[941,1229],[946,1226],[951,1224],[956,1221],[962,1218],[967,1215],[972,1213],[977,1213],[981,1213],[986,1214],[991,1214],[995,1210],[999,1206],[1002,1202],[1006,1198],[1010,1194],[1015,1192],[1020,1190],[1025,1187],[1030,1185],[1034,1182],[1039,1180],[1044,1177],[1049,1176],[1054,1175],[1059,1173],[1064,1173],[1070,1172],[1075,1172],[1080,1172],[1086,1171],[1090,1171],[1095,1170],[1099,1170],[1104,1169],[1108,1169],[1112,1168],[1116,1167],[1120,1163],[1123,1159],[1128,1155]],
+ [[300,1420],[380,1380],[520,1360],[680,1370],[800,1400],[880,1450],[900,1520],[860,1580],[760,1605],[420,1605],[300,1570],[240,1520],[240,1460]],
+ [[820,1380],[940,1350],[1080,1355],[1200,1390],[1260,1450],[1250,1530],[1180,1585],[980,1595],[860,1560],[790,1490],[790,1430]],
+ [[120,60],[300,35],[520,40],[700,70],[770,130],[740,200],[640,250],[420,265],[220,255],[90,220],[45,150]],
 ];
 LAND_PATHS.forEach(p=>p.forEach(q=>{ q[0]*=WS; q[1]*=WS; })); // stretch the silhouettes onto the grandeur chart
 // decorative waves precomputed
@@ -882,6 +1090,7 @@ function draw(){
   G.regions.forEach(r=>drawRegion(r));
   // trade lanes
   drawLanes();
+  if(G.showWinds) drawWinds();
   // fleets
   G.fleets.forEach(f=>drawFleet(f));
   (G.armies||[]).forEach(drawArmy2D);
@@ -1185,6 +1394,8 @@ function computeLeg(a){
 function targetRegionOf(b){ return b.at? b.destRegion : b.atRegion; }
 function mergeArmies(senior, junior){
   if(!senior || !junior || senior===junior) return;
+  const tot=senior.men+junior.men;
+  senior.vet=Math.floor(((senior.vet||0)*senior.men+(junior.vet||0)*junior.men)/Math.max(1,tot)); // recruits and strangers dilute the laurels
   senior.men+=junior.men;
   G.armies=G.armies.filter(x=>x.id!==junior.id);
   if(senior.owner==='player'){
@@ -1253,7 +1464,8 @@ function splitArmy(a){
   const half=Math.floor(a.men/2); a.men-=half;
   const b={ id:newUnitId(), owner:a.owner, men:half, atRegion:a.atRegion, at:null, path:null, destRegion:null, fromRegion:a.atRegion,
     stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0, joinTarget:null,
-    name:armyNameFor(a.owner, home? home.name : 'the field', home? home.terrain : '', (G.armies||[]).filter(x=>x.owner===a.owner).map(x=>x.name)) };
+    name:armyNameFor(a.owner, home? home.name : 'the field', home? home.terrain : '', (G.armies||[]).filter(x=>x.owner===a.owner).map(x=>x.name)),
+    vet:Math.max(0,(a.vet||0)-1), general:newGeneral() };
   G.armies.push(b);
   if(a.owner==='player'){
     toast('✂ '+a.name+' divides — '+b.name+' takes '+fmt(half)+' men under its own banner');
@@ -1325,7 +1537,7 @@ function startFleetSail(f, path, destPortId){
   const legs=[];
   for(let i=1;i<path.nodes.length;i++){
     const A=WORLD_GRAPH.nodes[path.nodes[i-1]], B=WORLD_GRAPH.nodes[path.nodes[i]];
-    const edgeDays=Math.max(0.4, Math.hypot(A.x-B.x, A.y-B.y)/TRAVEL.sailPerDay);
+    const edgeDays=Math.max(0.4, Math.hypot(A.x-B.x, A.y-B.y)/TRAVEL.sailPerDay*windFactor(A,B));
     legs.push({to:path.nodes[i], days:edgeDays, fromPos:{x:A.x,y:A.y}, toPos:{x:B.x,y:B.y}, ctrl:seaCtrl(A,B)});
   }
   const total=legs.reduce((s,l)=>s+l.days,0);
@@ -1371,9 +1583,10 @@ function formArmy(r, men){
   r.troops-=men;
   const a={ id:newUnitId(), owner:r.owner, men, atRegion:r.id, at:null, path:null, destRegion:null, fromRegion:r.id,
     stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0, joinTarget:null,
-    name:armyNameFor(r.owner, r.name, r.terrain, (G.armies||[]).filter(x=>x.owner===r.owner).map(x=>x.name)) };
+    name:armyNameFor(r.owner, r.name, r.terrain, (G.armies||[]).filter(x=>x.owner===r.owner).map(x=>x.name)),
+    vet:0, general:newGeneral() };
   G.armies.push(a);
-  if(r.owner==='player'){ toast('🪖 '+a.name+' forms at '+r.name+' — '+fmt(men)+' men under one banner'); pushEvent('🪖 <b>'+a.name+'</b> mustered at '+r.name+'.'); selectRegion(r); }
+  if(r.owner==='player'){ toast('🪖 '+a.name+' forms at '+r.name+' — '+fmt(men)+' men under '+a.general.name); pushEvent('🪖 <b>'+a.name+'</b> mustered at '+r.name+', under '+a.general.name+'.'); selectRegion(r); coldEvent('firstArmy'); }
   save(); return a;
 }
 function armiesAt(regionId){ return (G.armies||[]).filter(a=>a.atRegion===regionId); }
@@ -1425,7 +1638,9 @@ function armyArrive(a){
 function finishArrival(a){ /* stance persists ('hold' honours a pre-set dig-in order) */ }
 function resolveArmyBattleFX(a, dest){
   const atkBefore=a.men, defBefore=dest.troops, prevOwner=dest.owner;
-  const res=battle(a.owner, a.men, dest);
+  const effMen=Math.max(1, Math.round(a.men*armyPowerMult(a)));
+  const res=battle(a.owner, effMen, dest);
+  res.aLoss=Math.round(res.aLoss*a.men/effMen); // laurels multiply strength, not the butcher's bill
   if(a.owner==='player' || prevOwner==='player'){
     a.clashLocked=true;
     startClash({type:'land', x:dest.x, y:dest.y, a0:atkBefore, aLoss:res.aLoss, d0:defBefore, dLoss:res.dLoss, unit:'men',
@@ -1449,6 +1664,9 @@ function resolveArmyBattleApply(a, dest, res, atkBefore, defBefore, prevOwner){
     if(survivors-garrisonTake>=1000){ a.men=survivors-garrisonTake; a.atRegion=dest.id; a.destRegion=null; }
     else G.armies=G.armies.filter(x=>x.id!==a.id);
     if(prevOwner && prevOwner!==a.owner) checkCapitalLoss(prevOwner);
+    armyHonours(a, res); // the winning host hardens: chevrons rise, and its general learns
+    if(prevOwner&&prevOwner!==a.owner) warLedger(a.owner, prevOwner);
+    if(a.owner==='player' && prevOwner!=='player') noteConquest(dest);
     if(a.owner==='player'){
       const spoils=prevOwner? 120+dest.tier*60 : 40;
       emp('player').gold+=spoils;
@@ -1495,8 +1713,8 @@ function fleetsOffPort(port){
 function navalBattle(a, d, port){
   // squadron action off a harbour mouth — ships and gunnery (tech) decide
   const admP=id=> G.regions.some(r=>r.owner===id && r.greatWork==='admiralty')? 1.08 : 1; // the Admiralty: charts, signals, better captains
-  const aP=a.ships*(1+emp(a.owner).shipTech*0.4)*admP(a.owner)*rr(0.85,1.2);
-  const dP=d.ships*(1+emp(d.owner).shipTech*0.4)*admP(d.owner)*rr(0.85,1.2);
+  const aP=a.ships*(1+emp(a.owner).shipTech*0.4)*admP(a.owner)*fleetPowerMult(a)*rr(0.85,1.2);
+  const dP=d.ships*(1+emp(d.owner).shipTech*0.4)*admP(d.owner)*fleetPowerMult(d)*rr(0.85,1.2);
   const total=aP+dP||1;
   const aLoss=Math.min(a.ships, Math.round(a.ships*(dP/total)*rr(0.5,0.95)));
   const dLoss=Math.min(d.ships, Math.round(d.ships*(aP/total)*rr(0.5,0.95)));
@@ -1517,6 +1735,7 @@ function navalBattle(a, d, port){
     }
     // wrecks yield nothing but clear water: dead squadrons leave the board
     [a,d].forEach(f=>{ if(f.ships<=0){ G.fleets=G.fleets.filter(x=>x.id!==f.id); if(f.owner==='player') gazette('⚓ <b>Your '+f.name+' is lost</b> off '+port.name+'.'); } });
+    navalHonours(aWon? a : d);
     // a beaten squadron that still floats does not keep its station — it runs for home water (unless re-ordered during the action)
     const loser = aWon? d : a;
     if(loser.ships>0 && G.fleets.includes(loser) && !loser.at){
@@ -1683,6 +1902,7 @@ function rtAdvanceDays(days){
     });
     interceptCheck();
     joinMaintenance();
+    dayTick2();
     if(Math.floor(G.day)%15===0) save();
   }
   syncPositions();
@@ -1704,6 +1924,7 @@ function startClockLoop(){
     const spd=G.clockSpeed||0;
     if(spd<=0) return;
     const daysFloat=spd*dtReal/1600;
+    if(G) G.hour=((G.hour||9)+daysFloat*24)%24;
     clockBucket+=daysFloat;
     if(clockBucket>=1){ const whole=Math.floor(clockBucket); clockBucket-=whole; rtAdvanceDays(whole); }
   };
@@ -1719,7 +1940,7 @@ function setClock(speed){
 function toggleEventPause(on){ if(!G) return; G.pauseOnEvent=!!on; refreshClockUI(); save(); }
 function refreshClockUI(){
   const d=document.getElementById('clock-date'); if(!d || !G) return;
-  d.textContent='📅 '+seasonName()+' · Day '+Math.floor(G.day%90+1);
+  d.textContent='📅 '+seasonName()+' · Day '+Math.floor(G.day%90+1)+' · '+watchName(G.hour||9)+' '+seasonPips();
   const st=document.getElementById('clock-state');
   const spd=G.clockSpeed||0;
   if(st && !eventPaused) st.textContent = spd===0? '⏸ Paused' : (spd===2? '▶ Flowing' : spd===4? '▶▶ Flowing fast' : spd===8? '▶▶▶ Full sail' : '▶ Flowing');
@@ -1729,6 +1950,7 @@ function refreshClockUI(){
     b.classList.toggle('active', mine);
   });
   const tg=document.getElementById('clock-autopause'); if(tg) tg.checked=!!G.pauseOnEvent;
+  renderNextBar();
 }
 
 /* ---- imperial staffs: monthly military orders on the same rules as the player ---- */
@@ -1763,6 +1985,13 @@ function aiMonthlyOps(){
       }
       orderMarchSilent(a, target);
     });
+    // colonies: an idle crown with coin sometimes plants a flag on an empty shore
+    if(e.gold>420 && rnd()<0.22){
+      const shores=G.regions.filter(r=>r.colony && !r.owner);
+      const reach=shores.filter(r=>{ const z=seaById[r.seaZone]; return z && (z.ports.some(pid=>rById[pid].owner===id) || z.neighbors.some(nz=>seaById[nz].ports.some(pid=>rById[pid].owner===id))); });
+      if(reach.length){ const r=pick(reach); e.gold-=150; r.owner=id; r.colony=false; r.tier=0; r.troops=800; r.pop=Math.max(r.pop,2600);
+        gazette('🚩 The '+e.name+' plants its flag at <b>'+r.name+'</b> — a new colony rises on the far shore.'); }
+    }
     // fleets: at war? blockade the nearest enemy port. at peace? drift/raid.
     G.fleets.filter(f=>f.owner===id && !f.at).forEach(f=>{
       const enemies=Object.keys(e.relations).filter(o=>e.relations[o].war);
@@ -1788,7 +2017,8 @@ function formArmySilent(r, men){
   r.troops-=men;
   const a={ id:newUnitId(), owner:r.owner, men, atRegion:r.id, at:null, path:null, destRegion:null, fromRegion:r.id,
     stance:'field', holdUntil:null, departDay:G.day, arriveDay:G.day, daysTotal:0, legIndex:0, joinTarget:null,
-    name:armyNameFor(r.owner, r.name, r.terrain, (G.armies||[]).filter(x=>x.owner===r.owner).map(x=>x.name)) };
+    name:armyNameFor(r.owner, r.name, r.terrain, (G.armies||[]).filter(x=>x.owner===r.owner).map(x=>x.name)),
+    vet:0, general:newGeneral() };
   G.armies.push(a); return a;
 }
 function orderMarchSilent(a, dest){ orderMarch(a, dest); }
@@ -1869,6 +2099,8 @@ function selectRegion(r){
     ...(r.hasWall?[['🧱','Walls']]:[]), ...(r.hasFort?[['♜','Fort']]:[]),
     ...(r.greatWork?[['🏛', (GREAT_WORKS.find(w=>w.id===r.greatWork)||{}).name||'Great Work']]:[]),
     ...(r.hasShipyard?[['🔨','Shipyard']]:[]), ...(r.hasMarket?[['⚖','Market']]:[]),
+    ...(r.isPort?[['🌾 Grain stores',daysOfSupply(r,'grain')+' days · '+goodPrice(r,'grain')+'g/unit'],['📦 '+GOODS[r.specialty]+' price',goodPrice(r,r.specialty)+'g — '+priceWhy(r,r.specialty)]]:[]),
+    ...(blockadeStage(r)?[['⛓ Blockade',blockadeStage(r)+' — the pressure deepens daily']]:[]),
   ]);
   const acts=$('#sheet-acts'); acts.innerHTML='';
   if(r.owner==='player'){
@@ -1966,12 +2198,28 @@ function selectRegion(r){
     if(r.isPort) acts.appendChild(actBtn('⛵ Build Warships','+2 '+SHIP_TECH[me.shipTech]+' · '+shipPairCost(r)+'g · joins nearest fleet',
       ()=>{ doBuildShips(r); },'sea', !r.hasShipyard? 'build a shipyard here first' :
         (me.gold<shipPairCost(r)? 'needs '+shipPairCost(r)+'g in the treasury' : '')));
+    if(r.isPort){
+      const ct=(G.contracts||[]).find(c=>c.portId===r.id);
+      if(window.__ctPick===r.id){
+        [30,45,90].forEach(t=>acts.appendChild(actBtn('📜 Keep grain ≥ '+t+' days','A standing convoy contract for '+r.name+' — the freight runs itself each season',()=>{ window.__ctPick=null; G.contracts=G.contracts||[]; const ex=G.contracts.find(c=>c.portId===r.id); if(ex) ex.target=t; else G.contracts.push({id:newUnitId(), portId:r.id, good:'grain', target:t, escorted:false, lastNote:'newly signed'}); toast('📜 '+r.name+' will be kept at '+t+' days of grain.'); selectRegion(r); save(); },'sea')));
+        if(ct) acts.appendChild(actBtn(ct.escorted? '🛡 Escort: ON (15g/season)':'🚤 Unescorted (free) — hire escorts','Escorted convoys do not feed pirates',()=>{ ct.escorted=!ct.escorted; window.__ctPick=null; selectRegion(r); save(); },'sea'));
+        if(ct) acts.appendChild(actBtn('🗑 Strike the Contract','End the '+r.name+' convoy arrangement',()=>{ G.contracts=G.contracts.filter(c=>c.portId!==r.id); window.__ctPick=null; selectRegion(r); save(); },''));
+        acts.appendChild(actBtn('↩ Back','',()=>{ window.__ctPick=null; selectRegion(r); }));
+      } else if(ct) acts.appendChild(actBtn('📜 Convoy Contract — '+r.name,'Keeps '+GOODS[ct.good]+' ≥ '+ct.target+' days'+(ct.escorted?', escorted':' — unescorted')+'. '+(ct.lastNote||''),()=>{ window.__ctPick=r.id; selectRegion(r); },'sea'));
+      else acts.appendChild(actBtn('📜 Sign a Convoy Contract…','Freight runs itself: surplus sails to deficit, freight money lands each season',()=>{ window.__ctPick=r.id; selectRegion(r); },'sea'));
+      if(window.__pvPick===r.id){
+        ['aurelia','meridian','sable'].filter(id=>G.empires[id]).forEach(id=>acts.appendChild(actBtn('🏴 Hunt '+emp(id).name+'’s lanes','Letters of marque — prize gold after the Court sits (2–5 weeks), a small chance of scandal',()=>{ if(!pay(150)){ toast('150g for the letters of marque.'); return; } window.__pvPick=null; G.privateers=G.privateers||[]; G.privateers.push({target:id, until:G.day+180}); toast('🏴 Privateers sail against '+emp(id).name+' — the Court will sit in due course.'); selectRegion(r); save(); },'sea','')));
+        acts.appendChild(actBtn('↩ Not yet','',()=>{ window.__pvPick=null; selectRegion(r); }));
+      } else acts.appendChild(actBtn('🏴 Fund Privateers (150g)','Letters of marque against a rival’s real lanes — prize gold in 2–5 weeks, if no scandal',()=>{ window.__pvPick=r.id; selectRegion(r); },'sea', (emp('player').gold<150? 'needs 150g in the treasury':'')));
+    }
   } else {
     const rel=r.owner? emp('player').relations[r.owner] : null;
     acts.appendChild(actBtn('👁 Scout Report',
       (r.owner? emp(r.owner).name+' holds this place.' : 'A free town, guarded by its militia.')+
       ' Garrison ~'+fmt(r.troops)+' · '+['hamlet','town','city','great port'][r.tier]+(r.hasFort?', fortified':'')+(r.hasWall?', walled':'')+'.',
       ()=>{},'',true));
+    if(r.colony&&!r.owner) acts.appendChild(actBtn('🚩 Found a Colony (120g)','A squadron riding in the '+(seaById[r.seaZone]? seaById[r.seaZone].name: 'adjacent sea')+', 120g for the charter, 500 settlers drawn from your fullest garrison — this shore becomes yours',
+      ()=>{ foundColony(r); },'sea', (emp('player').gold<120? 'needs 120g in the treasury' : !(G.fleets||[]).some(f=>f.owner==='player'&&!f.at&&f.zone===r.seaZone&&f.ships>0)? 'sail a squadron into these waters first' : '')));
     if(r.owner&&r.owner!=='player'){
       acts.appendChild(actBtn('⚔ '+emp(r.owner).name, rel.war? 'You are at WAR. March an army in to attack.' : 'At peace. Declare war from Realm → Diplomacy.',
         ()=>{},'war',true));
@@ -1982,7 +2230,7 @@ function selectRegion(r){
       let best=null, bd=1e12;
       mineA.forEach(a=>{ const p=findLandPath(a.atRegion, r.id); if(p && p.days<bd){ bd=p.days; best=a; } });
       acts.appendChild(actBtn('🗺 Marching here',
-        best? 'Your '+best.name+' ('+fmt(best.men)+' men, at '+rById[best.atRegion].name+') could be here in ~'+Math.max(1,Math.round(bd))+' days by road.'
+        best? 'Your '+best.name+' ('+fmt(best.men)+' men, at '+rById[best.atRegion].name+') could be here in ~'+Math.max(1,Math.round(bd))+' days by road. At the gates: '+forecastText(Math.round(best.men*armyPowerMult(best)),'player',r)+'.'
             : 'No land road reaches '+r.name+' — the sea cuts this one off. Fleets can blockade its harbour; armies cannot march across water.',
         ()=>{},'',true));
     }
@@ -2002,8 +2250,11 @@ function selectArmy(a){
   $('#sheet-title').textContent='🪖 '+a.name;
   $('#sheet-sub').textContent=e.name+(a.at? ' · on the march to '+(rById[a.destRegion]? rById[a.destRegion].name : '…')+' · ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days out'
     : ' · at '+(home? home.name : '—')+(a.stance==='hold'? ' · 🛡 holding the road':' · awaiting orders'));
+  if(!a.general) a.general=newGeneral(); if(a.vet===undefined) a.vet=0;
   $('#sheet-stats').innerHTML=statRow([
     ['⚔ Men under the banner', fmt(a.men)],
+    ['🎖 General', a.general.name+(a.general.traits.length? ' · '+a.general.traits.join(', ') : '')],
+    ['🏅 Laurels', '◆'.repeat(a.vet||0)||'—'],
     ['🎖 Arms', ARMY_TECH[e.armyTech]],
     ...(a.at? [['🎯 Bound for', rById[a.destRegion]? rById[a.destRegion].name : '—'], ['⏳ Days out', '~'+Math.max(1,Math.ceil(a.arriveDay-G.day))]]
             : [['📍 Standing at', home? home.name : '—'], ['🏠 Garrison apart', home? fmt(home.troops)+' men' : '—']]),
@@ -2079,7 +2330,9 @@ function selectFleet(f){
   selected={type:'fleet',id:f.id};
   const e=emp(f.owner), z=seaById[f.zone];
   $('#sheet-title').textContent='⛵ '+f.name;
-  $('#sheet-stats').innerHTML=statRow([['⛵ Ships',f.ships],['🎖 Class',SHIP_TECH[e.shipTech]],['🌊 Sea',z.name]]);
+  if(f.admiral===undefined){ f.admiral=newAdmiral(); if(f.vet===undefined) f.vet=0; }
+  $('#sheet-stats').innerHTML=statRow([['⛵ Ships',f.ships],['🎖 Class',SHIP_TECH[e.shipTech]],['🌊 Sea',z.name],
+    ['🎖 Admiral', f.admiral.name+(f.admiral.traits.length? ' · '+f.admiral.traits.join(', ') : '')],['🏅 Laurels','◆'.repeat(f.vet||0)||'—']]);
   const acts=$('#sheet-acts'); acts.innerHTML='';
   if(f.at){
     const dest=f.at.destPort!=null? rById[f.at.destPort].name : (f.at.destZone!=null? seaById[f.at.destZone].name : 'sea');
@@ -2131,11 +2384,23 @@ function recallFleet(f){
 }
 function selectSea(z){
   selected={type:'sea',id:z.id};
-  $('#sheet-title').textContent='🌊 '+z.name;
+  $('#sheet-title').textContent='🌊 '+z.name+(z.strait?' — a Strait, the sea’s narrow door':'');
   $('#sheet-sub').textContent='Sea zone · ports: '+(z.ports.map(id=>rById[id].name).join(', ')||'none');
   $('#sheet-stats').innerHTML=statRow([['⚓ Ports',z.ports.length]]);
   const acts=$('#sheet-acts'); acts.innerHTML='';
   acts.appendChild(actBtn('👁 These Waters','Fleets here: '+(G.fleets.filter(f=>f.zone===z.id).map(f=>f.name+' ('+f.ships+')').join(', ')||'none')+'.',()=>{},'',true));
+  const myPortsHere=z.ports.map(id=>rById[id]).filter(p=>p&&p.owner==='player');
+  if(myPortsHere.length){
+    const st=(G.seaStances||{})[z.id]||'collect';
+    [['collect','🌾 Collect — gather your ports’ trade'],['protect','🛡 Protect — your squadrons here cheat the storms'],['toll','🧮 Levy Tolls — coin from foreign keels, goodwill thins'],['raid','🏴 Raid Rivals — sea-wolves worry foreign lanes; crowns remember']].forEach(row=>{
+      acts.appendChild(actBtn(row[1],'',()=>{ G.seaStances=G.seaStances||{}; G.seaStances[z.id]=row[0]; toast(z.name+': '+row[1]); selectSea(z); save(); },'sea', st===row[0]? 'the present stance':'')); });
+  }
+  if(z.strait){
+    const pol=(G.chokePolicies||{})[z.id]||'open';
+    [['open','🌊 Open Passage — free water, no questions'],['toll','🧮 Toll the Strait (+15g/season)'],['deny','⛔ Deny Rivals — shut the door; they will remember']].forEach(row=>{
+      acts.appendChild(actBtn(row[1],'',()=>{ G.chokePolicies=G.chokePolicies||{}; G.chokePolicies[z.id]=row[0]; toast(z.name+': '+row[1]); selectSea(z); save(); },'sea', pol===row[0]? 'the present policy':'')); });
+  }
+  acts.appendChild(actBtn('🌬 Wind Lanes — '+(G.showWinds?'drawn':'hidden')+' ('+SEASONS[G.seasonIdx]+')','The season’s wind bends every sail — toggle the arrows on the chart',()=>{ G.showWinds=!G.showWinds; selectSea(z); save(); },'sea'));
   openSheet();
 }
 
@@ -2169,14 +2434,18 @@ function battle(attacker, atkTroops, defRegion){
   if(defRegion.terrain==='hills') defMult*=1.15; if(defRegion.terrain==='marsh') defMult*=0.9;
   const aPower=atkTroops*aTech*rr(0.85,1.2), dPower=defRegion.troops*defMult*rr(0.85,1.2);
   const total=aPower+dPower||1;
-  const aLoss=Math.round(atkTroops*(dPower/total)*rr(0.5,0.9));
-  const dLoss=Math.round(defRegion.troops*(aPower/total)*rr(0.5,0.9));
-  return {win:aPower>dPower, aLoss:Math.min(aLoss,atkTroops), dLoss:Math.min(dLoss,defRegion.troops)};
+  let aLoss=Math.round(atkTroops*(dPower/total)*rr(0.5,0.9));
+  let dLoss=Math.round(defRegion.troops*(aPower/total)*rr(0.5,0.9));
+  // morale: a line outmatched two-to-one does not die in place — it breaks, and the pursuit does the killing
+  let rout=null;
+  if(aPower<dPower*0.45 && atkTroops>400){ rout='atk'; aLoss+=Math.round(atkTroops*0.15); }
+  else if(dPower<aPower*0.45 && defRegion.troops>400){ rout='def'; dLoss+=Math.round(defRegion.troops*0.15); }
+  return {win:aPower>dPower, aLoss:Math.min(aLoss,atkTroops), dLoss:Math.min(dLoss,defRegion.troops), rout};
 }
 /* doMoveArmy is GONE — armies move in real time now (orderMarch + armyArrive). */
 function checkCapitalLoss(ownerId){
   if(!ownerId||ownerId==='player') return;
-  const capName=EMPIRES.find(e=>e.id===ownerId).capital;
+  const capName=(G.empires[ownerId]||{}).capitalName; if(!capName) return;
   const cap=G.regions.find(r=>r.name===capName);
   if(cap.owner!==ownerId){
     const hasPorts=G.regions.some(r=>r.owner===ownerId&&r.isPort);
@@ -2190,7 +2459,7 @@ function checkCapitalLoss(ownerId){
    A posted governor decides; the Crown checks back. The governor spends ONLY
    the city chest (the works share of that city's income — see collectIncome),
    never the treasury. The capital is exempt by law: no assign button, no brain. */
-function isPlayerCapital(r){ return !!r && r.owner==='player' && r.name===EMPIRES[0].capital; }
+function isPlayerCapital(r){ return !!r && r.owner==='player' && G && emp('player') && r.name===emp('player').capitalName; }
 function govWorksShare(r){ return Math.round(regionIncome(r)*0.7); } // of the city's income: works 7 parts, crown tax the rest
 function govJournal(r, text){
   const gv=r.gov; if(!gv) return;
@@ -2406,6 +2675,626 @@ function aiTurn(id){
   });
 }
 
+
+/* ============================================================
+THE SECOND AGE — waves 2–6: living sky, civilizations, the
+economy spine, the fun spine, and the Orders of the Crown.
+Everything here rides the existing engine: same clock, same
+graph, same sheets. One level deep, always — no spreadsheets.
+============================================================ */
+
+/* ---------- the turning sky ---------- */
+const WINDS=[{x:0.9,y:0.1},{x:-0.5,y:0.55},{x:-0.85,y:-0.1},{x:0.3,y:-0.7}]; // spring westerlies, summer trades, autumn easterlies, winter northerlies
+function windFactor(A,B){
+const dx=B.x-A.x, dy=B.y-A.y, L=Math.hypot(dx,dy)||1;
+const w=WINDS[G.seasonIdx&3]||WINDS[0], wl=Math.hypot(w.x,w.y)||1;
+const align=(dx/L)*(w.x/wl)+(dy/L)*(w.y/wl); // sailing WITH the season's wind is a gift
+let m=clamp(1-0.35*align, 0.68, 1.4);
+if(G.seasonIdx===3 && (A.y<WORLD_H*0.28 || B.y<WORLD_H*0.28)) m*=1.22; // winter shuts the northern water
+return m;
+}
+function watchName(h){ h=((h%24)+24)%24;
+if(h>=4.5&&h<7) return '🌅 Dawn watch';
+if(h<11.5) return '☀ Forenoon watch';
+if(h<14.5) return '🌞 Midday watch';
+if(h<18) return '🌇 Dog watch';
+if(h<21) return '🌆 Dusk watch';
+return '🌙 Night watch';}
+function nightFactor(){ const h=((G&&G.hour)||9); return (h<5.2||h>=19.2)?1: (h<6.8?0.55: (h>=17.8&&h<19.2)?0.4: 0);}
+function seasonPips(){ return ['🌱','☀️','🍂','❄️'].map((s,i)=> i===(G.seasonIdx&3)? '':s).join(' ');}
+window.__wx=function(){ return { hour:G? (G.hour||9):9, night:G? nightFactor():0, storms:(G&&G.storms)||[], winds:!!(G&&G.showWinds), season:G? G.seasonIdx:0};};
+
+/* ---------- storms ---------- */
+function stormAt(x,y){ return (G.storms||[]).find(s=>Math.hypot(s.x-x,s.y-y)<s.r);}
+function stormsDaily(){
+(G.storms||[]).forEach(s=>{
+s.x+=s.vx*46; s.y+=s.vy*46;
+if(onLandWorld(s.x,s.y)){ s.vx*=-1; s.vy*=-1; s.x+=s.vx*70; s.y+=s.vy*70;} // tempests shun the shore
+if(s.x<220||s.x>WORLD_W-220) s.vx*=-1;
+if(s.y<220||s.y>WORLD_H-220) s.vy*=-1;
+s.x=clamp(s.x,140,WORLD_W-140); s.y=clamp(s.y,140,WORLD_H-140);
+});
+(G.fleets||[]).slice().forEach(f=>{
+if(!f.at||!f.ships) return;
+const s=stormAt(fPos(f).x, fPos(f).y); if(!s) return;
+const sheltered=(G.seaStances||{})[f.zone]==='protect' && f.owner==='player';
+if(!sheltered && rnd()<0.09 && f.ships>1){ f.ships--; if(f.owner==='player') pushEvent('🌩 <b>'+f.name+'</b> rides out a tempest — a hull is lost to the storm.');}
+if(emp(f.owner).shipTech>=2 && f.owner!=='player' && rnd()<0.3){ /* old salts sheer away */}
+});
+}
+
+/* ---------- blockade pressure: stages, not switches ---------- */
+function blockadeStage(r){ const d=r.blockadeDays||0; return d<=0? null: d<10?'Harassed': d<30?'Tight': d<60?'Strangled': 'Crisis';}
+function blockadeDaily(){
+G.regions.forEach(r=>{
+if(!r.isPort) return;
+if(isBlockaded(r)){
+r.blockadeDays=(r.blockadeDays||0)+1;
+if(r.blockadeDays===10&&r.owner==='player') pushEvent('⛓ The blockade of <b>'+r.name+'</b> tightens — prices climb, bellies thin.');
+if(r.blockadeDays===30&&r.owner==='player') pushEvent('⛓ <b>'+r.name+'</b> is strangled — the town starves behind enemy sails.');
+if(r.blockadeDays===60&&r.owner==='player'){ pushEvent('🆘 <b>'+r.name+'</b> is in CRISIS — the granaries are ash and the watch deserts.'); simPauseEvent();}
+} else if(r.blockadeDays) r.blockadeDays=Math.max(0, r.blockadeDays-2);
+});
+}
+
+/* ---------- the economy spine: stocks, prices with reasons ---------- */
+function initSupply(r){ if(r.supply) return; r.supply={}; r.supply[r.specialty]=Math.round(rr(40,80)); if(!r.supply.grain) r.supply.grain=Math.round(rr(30,60));}
+function dailyUse(r){ return Math.max(1, r.pop/9000);} // units of grain a day, roughly a meal a soul
+function daysOfSupply(r,g){ initSupply(r); return Math.round((r.supply[g]||0)/dailyUse(r));}
+function priceFactor(r,g){
+initSupply(r); const have=r.supply[g]||0;
+if(g===r.specialty) return have>90?0.7: have>50?0.9: have>20?1.1: 1.45;
+const d=daysOfSupply(r,g);
+let f= d<20?1.6: d<45?1.25: d<=90?1.0: 0.75;
+const st=blockadeStage(r); if(st) f*=1+(['Harassed','Tight','Strangled','Crisis'].indexOf(st))*0.25;
+return f;
+}
+function goodPrice(r,g){ return +(GOODS_PRICE[g]*priceFactor(r,g)).toFixed(1);}
+function priceWhy(r,g){
+initSupply(r); const have=r.supply[g]||0, st=blockadeStage(r);
+if(g===r.specialty) return have>90? 'the quays groan with unsold '+GOODS[g]+' — a glut': have>50? GOODS[g]+' plentiful after a fat season': have>20? GOODS[g]+' moving briskly': 'the last of the '+GOODS[g]+' — merchants bid hard';
+const d=daysOfSupply(r,g);
+if(st) return st.toLowerCase()+' by blockade — only '+d+' days of '+GOODS[g]+' inside the walls';
+return d<20? 'grain short — '+d+' days left and two harvests missed': d<45? 'stores thin ('+d+' days) — prices firm up': d<=90? 'bread secure for '+d+' days': 'granaries brim ('+d+' days) — sellers beg buyers';
+}
+function debtPressure(e){ const base=400+G.regions.filter(r=>r.owner===e.id).length*60+Math.max(0,e.gold)*0.25; return clamp(Math.round(100*(e.debt||0)/Math.max(200,base)),0,100);}
+
+/* ---------- convoys, stances, straits, privateers ---------- */
+function econSeason(){
+// ports eat, ports produce — one honest pass, numbers a soul deep
+G.regions.filter(r=>r.isPort).forEach(r=>{
+initSupply(r);
+r.supply[r.specialty]=clamp((r.supply[r.specialty]||0)+12+r.tier*6, 0, 140);
+const eat=Math.round(dailyUse(r)*30);
+r.supply.grain=Math.max(0,(r.supply.grain||0)-eat+(r.specialty==='grain'? 14+r.tier*5: 0));
+if(r.specialty!=='grain') r.supply[r.specialty]=Math.max(0,(r.supply[r.specialty]||0)-2);
+const st=blockadeStage(r);
+if(st==='Crisis'){ r.pop=Math.max(700,Math.round(r.pop*0.97)); r.troops=Math.max(0,r.troops-150);}
+if(daysOfSupply(r,'grain')<15 && r.owner==='player') gazette('🌾 <b>'+r.name+'</b> counts '+daysOfSupply(r,'grain')+' days of grain. A convoy contract would quiet the bakers.');
+});
+// convoy contracts settle their freight
+(G.contracts||[]).slice().forEach(c=>{
+const r=rById[c.portId];
+if(!r||r.owner!=='player'){ G.contracts=G.contracts.filter(x=>x.id!==c.id); return;}
+if(c.escorted && emp('player').gold>=15) emp('player').gold-=15;
+const gain=contractSeason(c); if(gain>0) gazette('📜 The '+r.name+' convoy lands: +'+fmt(gain)+'g of freight money.');
+});
+// sea stances pay (or cost goodwill)
+Object.keys(G.seaStances||{}).forEach(zid=>{
+const z=seaById[zid]; if(!z) return; const st=G.seaStances[zid];
+const mine=z.ports.map(id=>rById[id]).filter(p=>p&&p.owner==='player').length;
+const foreign=z.ports.map(id=>rById[id]).filter(p=>p&&p.owner&&p.owner!=='player'&&p.owner!=='natives');
+if(st==='collect'&&mine) emp('player').gold+=mine*4;
+if(st==='toll'){ emp('player').gold+=foreign.length*3; foreign.forEach(p=>ledger(p.owner,'grievance',1,'your toll-keepers in the '+z.name));}
+if(st==='raid'){ emp('player').gold+=foreign.length*2; foreign.forEach(p=>{ ledger(p.owner,'grievance',2,'your raiders in the '+z.name); ledger(p.owner,'trust',-1,'your raiders in the '+z.name);});}
+});
+// strait policies
+Object.keys(G.chokePolicies||{}).forEach(zid=>{
+const z=seaById[zid]; if(!z||!z.strait) return; const pol=G.chokePolicies[zid];
+if(pol==='toll') emp('player').gold+=15;
+if(pol==='deny') ['aurelia','meridian','sable'].forEach(id=>{ if(!allied(id,'player')) ledger(id,'grievance',1,'you shut the '+z.name+' against their flags');});
+});
+// privateers hunt; the Prize Court will sit in its own sweet time
+(G.privateers||[]).slice().forEach(p=>{
+if(G.day>p.until){ G.privateers=G.privateers.filter(x=>x!==p); return;}
+G.prizeCases.push({due:G.day+14+Math.floor(rnd()*21), target:p.target, amount:Math.round(rr(60,180))});
+});
+}
+function contractSeason(c){
+const r=rById[c.portId]; if(!r) return 0;
+initSupply(r);
+const need=Math.max(0, Math.round(c.target*dailyUse(r))-(r.supply[c.good]||0));
+c.lastGain=0;
+if(need<=0){ c.lastNote='stores already hold '+daysOfSupply(r,c.good)+' days of '+GOODS[c.good]+'.'; return 0;}
+const srcs=G.regions.filter(p=>p.isPort&&p.id!==r.id&&(p.owner==='player'||allied(p.owner,'player')));
+srcs.forEach(initSupply);
+const src=srcs.filter(p=>(p.supply[c.good]||0)>50).sort((a,b)=>(b.supply[c.good]||0)-(a.supply[c.good]||0))[0];
+if(!src){ c.lastNote='no friendly port holds a surplus of '+GOODS[c.good]+' to send '+r.name+'.'; return 0;}
+const moved=Math.min(need, Math.round((src.supply[c.good]||0)-40));
+if(moved<=0){ c.lastNote=src.name+' cannot spare the cargo.'; return 0;}
+src.supply[c.good]-=moved;
+if(!c.escorted && rnd()<0.22){ c.lastNote='pirates took the '+GOODS[c.good]+' convoy bound for '+r.name+' — nothing arrived.'; gazette('🏴 A convoy for <b>'+r.name+'</b> was taken by pirates. Escorts earn their pay.'); return 0;}
+r.supply[c.good]=(r.supply[c.good]||0)+moved;
+const gain=Math.round(moved*goodPrice(r,c.good)*0.35);
+emp('player').gold+=gain; c.lastGain=gain;
+c.lastNote=fmt(moved)+' of '+GOODS[c.good]+' landed from '+src.name+' (freight +'+fmt(gain)+'g).';
+return gain;
+}
+
+/* ---------- civilizations: rulers who remember ---------- */
+function ledger(other, key, delta, reason){
+if(!other||other==='player'||!G.empires[other]) return;
+const rel=emp('player').relations[other], back=G.empires[other].relations['player'];
+if(rel){ rel[key]=(rel[key]||0)+delta; if(reason){ rel.reasons=rel.reasons||[]; rel.reasons.unshift(reason); rel.reasons.length=Math.min(rel.reasons.length,4);}}
+if(back&&(key==='trust'||key==='grievance'||key==='favours')) back[key]=(back[key]||0)+delta;
+}
+function relationsReasons(other){
+const rel=emp('player').relations[other]; if(!rel) return [];
+const out=[];
+if(rel.war) out.push(['⚔ at war — every account is settled in iron',-40]);
+if(rel.ally) out.push(['🤝 bound by alliance',26]);
+if(rel.grievance>=12) out.push(['😤 they nurse '+Math.round(rel.grievance)+' grievances against you',-Math.min(30,rel.grievance)]);
+if(rel.trust>=12) out.push(['🕊 trust earned and kept ('+Math.round(rel.trust)+')',Math.min(30,rel.trust)]);
+if(rel.favours>=3) out.push(['🎁 favours owed run in your favour',10]);
+if(rel.dealUntil>G.day) out.push(['📜 a trade deal runs '+(Math.round(rel.dealUntil-G.day))+' more days',8]);
+const dp=debtPressure(emp('player'));
+if(dp>55) out.push(['🏦 your debts make them bold ('+dp+'% pressure)',-12]);
+(rel.reasons||[]).slice(0,3).forEach(r=>out.push(['· '+r,0]));
+out.sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+return out.slice(0,3).map(x=>x[0]);
+}
+function archBias(other, kind){
+const arch=(emp(other).ruler||{}).arch;
+if(kind==='trade') return arch==='ledger'||arch==='banker'? 12: arch==='corsair'? -4: 0;
+if(kind==='gift') return arch==='banker'? 8: arch==='corsair'? -6: 2;
+if(kind==='demand') return arch==='corsair'? -14: arch==='fortress'? 8: arch==='grudge'? -10: 0;
+if(kind==='peace') return arch==='banker'? 10: arch==='glory'? -8: 0;
+return 0;
+}
+function acceptChance(other, base, kind){
+const rel=emp('player').relations[other]; if(!G.empires[other]) return 0;
+const threat=(totalMen('player')+totalShips('player')*900)-((totalMen(other)+totalShips(other)*900));
+return clamp(Math.round(base + (rel.trust||0) - (rel.grievance||0)*0.8 + archBias(other,kind) + (kind==='demand'? threat/900: 0)), 5, 95);
+}
+function rulerLetter(other, text){
+const e=emp(other); if(!e) return;
+G.crownQueue.push({icon:'✉', urgent:false, title:e.name+' — '+(e.ruler? e.ruler.name:'the Crown'),
+body:'“'+text+'”', choices:[{label:'Noted',fn:null}]});
+if(G.crownQueue.length && crownAlertPending()) simPauseEvent();
+}
+const RULER_VOICE={
+ledger:['The ledger does not lie, cousin. Neither do I.','Profit is the only apology I accept.'],
+glory:['My admirals speak of your sails. Speak louder.','Glory is a tide — ride it or drown politely.'],
+corsair:['The sea gives to those who take. I like your manners — mostly.','Tribute is just plunder wearing a tie.'],
+banker:['Stability, cousin. I will pay for stability. So will you.','Your credit is your character, in numbers.'],
+grudge:['I keep a list. Your grandfather is on it. Now, perhaps, you.','Some debts are inherited. Yours are compounding.'],
+fortress:['Walls outlive kings. Choose your legacy carefully.','March if you must. We will still be here.'],
+council:['The isles answer together, slowly. This is the answer.','No single voice speaks for the shore.'],
+};
+function diploTradeDeal(other){
+const me=emp('player'); if(me.gold<100){ toast('A trade deal wants 100g of earnest money.'); return;}
+const ch=acceptChance(other,55,'trade');
+me.gold-=100;
+if(rnd()*100<ch){
+const rel=me.relations[other]; rel.dealUntil=G.day+180;
+ledger(other,'trust',12,'a trade deal signed and kept'); ledger(other,'dependence',6,'their harbours feed on your lanes');
+me.gold+=40; toast('📜 '+emp(other).name+' signs! Trade deal runs two seasons (+40g of first fruits).');
+rulerLetter(other,(RULER_VOICE[(emp(other).ruler||{}).arch]||RULER_VOICE.banker)[0]);
+} else { ledger(other,'trust',-2,'a deal refused at the table'); toast(emp(other).name+' declines the deal — for now.');}
+save(); $('#btn-realm').click();
+}
+function diploGift(other){
+const me=emp('player'); if(me.gold<50){ toast('A gift worthy of a crown costs 50g.'); return;}
+me.gold-=50;
+const arch=(emp(other).ruler||{}).arch;
+if(arch==='corsair' && rnd()<0.3){ ledger(other,'grievance',2,'they laughed at your tribute'); rulerLetter(other,'Tribute? Keep your ribbons. Send a squadron next time — that I respect.'); toast(emp(other).name+' mocks the gift. Corsairs…');
+} else { ledger(other,'trust',8,'a gift received in good season'); ledger(other,'grievance',-6,'a gift received in good season'); ledger(other,'favours',2,'a gift received in good season'); toast('🎁 The gift lands well at '+emp(other).name+'.');}
+save(); $('#btn-realm').click();
+}
+function diploDemand(other){
+const ch=acceptChance(other,34,'demand');
+if(rnd()*100<ch){
+emp('player').gold+=150; ledger(other,'trust',-12,'you demanded — and they paid'); ledger(other,'grievance',15,'the humiliation of your demand');
+toast('💰 '+emp(other).name+' pays the 150g. It will not be forgotten.');
+} else {
+G.ultimatums.push({to:other, deadline:G.day+21, kind:'gold', amount:150});
+rulerLetter(other,'No. You have twenty-one days to remember your manners — or to make this a war.');
+toast('⏳ '+emp(other).name+' REFUSES. The ultimatum runs 21 days.');
+ledger(other,'grievance',8,'your demand, refused');
+}
+save(); $('#btn-realm').click();
+}
+function diploEmbargo(other){
+const rel=emp('player').relations[other]; rel.dealUntil=0; emp(other).relations['player'].dealUntil=0;
+ledger(other,'grievance',12,'your embargo chokes their harbours'); ledger(other,'trust',-10,'your embargo chokes their harbours');
+gazette('🚫 <b>Embargo.</b> Your harbours close to '+emp(other).name+' — leverage, at a price in goodwill.');
+toast('🚫 Embargo laid on '+emp(other).name+'.');
+save(); $('#btn-realm').click();
+}
+function peacePrice(other){
+const rel=emp('player').relations[other];
+return clamp(150-(rel.warScore||0)*25+debtPressure(emp('player'))*2, 40, 700);
+}
+function diploPeace(other, mode){
+const me=emp('player'), rel=me.relations[other], ch=acceptChance(other,45,'peace')+(rel.warScore||0)*6;
+const settle=()=>{ rel.war=false; emp(other).relations['player'].war=false; ledger(other,'grievance',-10,'a peace signed'); ledger(other,'trust',4,'a peace signed');
+gazette('🕊 <b>Peace with '+emp(other).name+'.</b> The guns cool; the ledgers reopen.'); toast('🕊 Peace with '+emp(other).name);};
+if(mode==='gold'){
+const price=peacePrice(other); if(me.gold<price){ toast('Peace costs '+fmt(price)+'g this season.'); return;}
+if(rnd()*100<ch){ me.gold-=price; settle(); pushEvent('🕊 Peace bought from '+emp(other).name+' for '+fmt(price)+'g.');}
+else toast(emp(other).name+' spurns your coin — they smell a longer war.');
+} else if(mode==='land'){
+const cede=myRegions().filter(r=>r.neighbors.some(n=>rById[n]&&rById[n].owner===other)).sort((a,b)=>a.troops-b.troops)[0];
+if(!cede){ toast('You share no border to cede along.'); return;}
+if(rnd()*100<ch+10){ cede.owner=other; cede.troops=Math.max(400,cede.troops); settle(); gazette('🕊 '+cede.name+' is ceded to '+emp(other).name+' — the price of quiet.');}
+else toast(emp(other).name+' wants more than '+cede.name+'.');
+} else { // treaty: peace + non-privateering pledge
+if(rnd()*100<ch+6){ settle(); G.privateers=(G.privateers||[]).filter(p=>p.target!==other); ledger(other,'trust',6,'the non-privateering pledge'); toast('🕊 Peace — and the privateers stand down.');}
+else toast(emp(other).name+' will not disarm its sea-wolves for paper.');
+}
+save(); $('#btn-realm').click();
+}
+/* record the war's running score against whoever just changed flags */
+function warLedger( winner, loser){ if(!winner||!loser||!G.empires[winner]||!G.empires[loser]) return;
+if(loser==='player'&&G.empires[winner]) G.empires[winner].relations['player'].warScore=(G.empires[winner].relations['player'].warScore||0)+1;
+if(winner==='player') emp('player').relations[loser].warScore=(emp('player').relations[loser].warScore||0)+1;
+}
+/* the League: take too much, too fast, and the chart conspires */
+function noteConquest(r){
+coldEvent('firstConquest');
+G.landGrab=(G.landGrab||[]).filter(d=>G.day-d<360); G.landGrab.push(G.day);
+if(G.landGrab.length>=8 &&!G.league){
+const foes=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!allied(id,'player')&&id!==r.owner);
+if(!foes.length) return;
+G.league={since:G.day, members:foes};
+foes.forEach(id=>{ emp('player').relations[id].war=true; emp(id).relations['player'].war=true; ledger(id,'grievance',25,'the League answers your land-hunger');});
+G.crownQueue.push({icon:'⚖', urgent:true, title:'THE LEAGUE OF CROWNS',
+body:'Eight flags torn down in a year. '+foes.map(id=>emp(id).name).join(', ')+' sign a League against you — war, together, until you disgorge. Allies of yours stand apart, watching.',
+choices:[{label:'Then let them come',fn:null}]});
+gazette('⚖ <b>The League of Crowns forms against you.</b> Land-grabs have united the chart.');
+simPauseEvent();
+}
+}
+function diplomacyDaily(){
+(G.ultimatums||[]).slice().forEach(u=>{
+if(G.day<u.deadline) return;
+G.ultimatums=G.ultimatums.filter(x=>x!==u);
+G.crownQueue.push({icon:'⏳', urgent:true, title:'The ultimatum expires',
+body:emp(u.to).name+' has not paid the '+fmt(u.amount)+'g. War would answer the insult; silence would price you cheap across every court.',
+choices:[{label:'⚔ Declare war', fn:()=>{ emp('player').relations[u.to].war=true; emp(u.to).relations['player'].war=true; ledger(u.to,'grievance',10,'war after the ultimatum'); toast('War with '+emp(u.to).name+'.'); save();}},
+{label:'Let it pass', fn:()=>{ ledger(u.to,'trust',-6,'you backed down at the deadline'); toast('The courts note the silence. Trust cools.'); save();}}]});
+});
+(G.prizeCases||[]).slice().forEach(p=>{
+if(G.day<p.due) return;
+G.prizeCases=G.prizeCases.filter(x=>x!==p);
+if(rnd()<0.85){ emp('player').gold+=p.amount; gazette('⚖ <b>Prize Court verdict:</b> the '+emp(p.target).name+' hulls are condemned — '+fmt(p.amount)+'g of prize money is yours.'); if(emp('player').gold!==undefined) toast('⚖ Prize money: +'+fmt(p.amount)+'g');}
+else { ledger(p.target,'grievance',20,'a prize reversed in scandal'); gazette('⚖ <b>Prize Court scandal!</b> The verdict reverses — the '+emp(p.target).name+' hulls sail home, and '+emp(p.target).name+' nurses a famous grievance.');}
+});
+}
+/* incidents: the world writes back, with choices */
+const INCIDENTS=[
+{icon:'🏴', title:'A privateer incident', body:'%E claims your letter-of-marque men took one of their hulls — wrong flag, wrong week, they say. Their envoy demands satisfaction in the form of coin.',
+choices:[{label:'Pay 60g reparations', fn:o=>{ if(emp('player').gold>=60){ emp('player').gold-=60; ledger(o,'trust',4,'reparations paid without a quarrel'); ledger(o,'grievance',-10,'reparations paid without a quarrel');}}},
+{label:'Deny everything', fn:o=>{ ledger(o,'grievance',12,'you denied the privateer affair'); ledger(o,'trust',-4,'you denied the privateer affair');}}]},
+{icon:'🗣', title:'An insulted envoy', body:'Your envoy was mocked at the court of %E — the fool was made to hold a chamberpot through the audience. The court waits to see your temper.',
+choices:[{label:'Demand an apology', fn:o=>{ ledger(o,'grievance',6,'you demanded an apology for the envoy affair');}},
+{label:'Laugh it off', fn:o=>{ ledger(o,'trust',3,'you laughed off the envoy affair');}}]},
+{icon:'🔥', title:'A border skirmish', body:'Garrisons traded shots along the %E marches in the night. Nobody important died; everybody important is angry.',
+choices:[{label:'Reinforce the border (40g)', fn:o=>{ if(emp('player').gold>=40){ emp('player').gold-=40; const b=myRegions().filter(r=>r.neighbors.some(n=>rById[n]&&rById[n].owner===o))[0]; if(b) b.troops+=300; ledger(o,'trust',2,'the border cools');}}},
+{label:'Stand both sides down', fn:o=>{ ledger(o,'grievance',5,'the border skirmish, unanswered');}}]},
+];
+function incidentSeason(){
+if(G.turn<(G.nextIncident||2)) return;
+G.nextIncident=G.turn+2+Math.floor(rnd()*3);
+const others=['aurelia','meridian','sable'].filter(id=>G.empires[id]);
+if(!others.length||rnd()>0.65) return;
+const other=pick(others), inc=pick(INCIDENTS);
+G.crownQueue.push({icon:inc.icon, urgent:false, title:inc.title,
+body:inc.body.replace(/%E/g, emp(other).name),
+choices:inc.choices.map(c=>({label:c.label, fn:()=>{ try{ c.fn(other);}catch(e){} save();}}))});
+}
+/* ruler temper, revealed by long dealing */
+function revealCheck(other){ const rel=emp('player').relations[other], e=emp(other);
+if(e.ruler &&!e.ruler.revealed && (rel.trust+rel.grievance)>30){ e.ruler.revealed=true; gazette('🕵 Your envoys finally know '+e.ruler.name.split(' ')[0]+'’s measure: '+(ARCHETYPES[e.ruler.arch]||{}).doctrine);}}
+function diplomacyPanel(b){
+const dh=document.createElement('h3'); dh.style.fontVariant='small-caps'; dh.style.marginTop='12px'; dh.textContent='Diplomacy — The Crowns'; b.appendChild(dh);
+Object.keys(G.empires).filter(id=>id!=='player').forEach(id=>{
+const e=G.empires[id], rel=emp('player').relations[id];
+const row=document.createElement('div'); row.className='dip-row';
+const rulerTxt=e.ruler? ' · 👑 '+e.ruler.name+' <i>('+( (ARCHETYPES[e.ruler.arch]||{}).title||'Crown')+(e.ruler.revealed?' · their measure is known to you':' · their temper is still a closed book')+')</i>': '';
+const doctrine=e.ruler? '<br><span style="font-size:11px">'+(ARCHETYPES[e.ruler.arch]||{}).doctrine+'</span>':'';
+const reasons=relationsReasons(id);
+const ledgerTxt='trust '+Math.round(rel.trust||0)+' · grievance '+Math.round(rel.grievance||0)+' · favours '+Math.round(rel.favours||0)+(rel.warScore? ' · war runs '+(rel.warScore>0?'+':'')+Math.round(rel.warScore)+' your way':'');
+row.innerHTML='<span style="font-size:30px;line-height:1">'+shieldSVG(e,30)+'</span><div style="flex:1"><span class="who" style="color:'+e.color+'">'+e.name+'</span>'+rulerTxt+doctrine+'<br><span class="rel">'+
+(rel.war?'⚔ AT WAR':rel.ally?'🤝 Allied':'At peace')+' · relations '+Math.round(rel.score)+' · '+ledgerTxt+'<br>'+reasons.map(x=>'· '+x).join('<br>')+'</span></div>';
+const mk=(label,fn,danger,dis,title)=>{ const btn=document.createElement('button'); btn.className='mini-btn'+(danger?' danger':''); btn.textContent=label; if(title) btn.title=title; btn.disabled=!!dis; btn.onclick=fn; row.appendChild(btn);};
+const me=emp('player');
+if(!rel.war){
+mk('📜 Trade Deal 100g',()=>diploTradeDeal(id),'', me.gold<100, 'They will likely '+(acceptChance(id,55,'trade')>=50?'sign':'refuse')+' ('+acceptChance(id,55,'trade')+'%)');
+mk('🎁 Gift 50g',()=>diploGift(id),'', me.gold<50,'');
+mk('💰 Demand 150g',()=>diploDemand(id),true,'','Refusal starts a 21-day ultimatum ('+acceptChance(id,34,'demand')+'% they pay)');
+mk('🚫 Embargo',()=>diploEmbargo(id),true,'','Shut their trade; salt the wound');
+if(!rel.ally) mk('🤝 Ally',()=>{ if(rel.score>=20||rel.trust>=25){ rel.ally=true; emp(id).relations['player'].ally=true; ledger(id,'trust',6,'the alliance signed'); toast(id==='natives'?'The Shore Councils nod as one.': emp(id).name+' signs the alliance!');} else { rel.score+=8; ledger(id,'trust',3,'courtship at their court'); toast(emp(id).name+' warms to you (relations '+Math.round(rel.score)+'/20, trust '+Math.round(rel.trust)+'/25 to ally).');} save(); $('#btn-realm').click();});
+if(rel.ally) mk('End Alliance',()=>{ rel.ally=false; emp(id).relations['player'].ally=false; rel.score-=15; ledger(id,'trust',-8,'the alliance cast off'); toast('Alliance with '+emp(id).name+' ended.'); save(); $('#btn-realm').click();});
+mk('⚔ Declare War',()=>{ rel.war=true; rel.ally=false; emp(id).relations['player'].war=true; rel.score-=40; ledger(id,'grievance',20,'your declaration of war'); gazette('👑 You have declared war on the '+emp(id).name+'.'); toast('War declared on '+emp(id).name); save(); $('#btn-realm').click();},true);
+} else {
+mk('🕊 Peace for '+fmt(peacePrice(id))+'g',()=>diploPeace(id,'gold'),'', me.gold<peacePrice(id),'Your war runs '+(rel.warScore>0?'well':'poorly')+': '+(acceptChance(id,45,'peace')+(rel.warScore||0)*6)+'% they take coin');
+const cede=myRegions().filter(r=>r.neighbors.some(n=>rById[n]&&rById[n].owner===id)).sort((a,b)=>a.troops-b.troops)[0];
+if(cede) mk('🗺 Cede '+cede.name,()=>diploPeace(id,'land'),'', '','Offer the border town for quiet');
+mk('📜 Peace + Pledge',()=>diploPeace(id,'treaty'),'', '','Peace, and both sides leash their privateers');
+}
+b.appendChild(row);
+revealCheck(id);
+});
+// the debt-pressure gauge — how bold your creditors' friends feel
+const dp=debtPressure(emp('player'));
+const dpEl=document.createElement('p'); dpEl.style.fontSize='12px';
+dpEl.textContent='🏦 War-debt pressure: '+dp+'%'+(dp>55?' — creditors whisper, rivals smile. Reparations will be priced accordingly.':' — the bankers still bow when you enter.');
+b.appendChild(dpEl);
+}
+
+/* ---------- generals, admirals, laurels ---------- */
+const GENERAL_NAMES=['Col. Inês Barros','Gen. Tomás Rocha','Col. Marguerite Favre','Gen. Caspar Lindqvist','Col. Rafael Costa','Gen. Beatriz Saldanha','Col. Henrik Voss','Gen. Pieter Vermeer','Col. Lucia Ferrante','Gen. Amara Diallo','Col. Nadia Rahal','Gen. Isolde Brandt'];
+const ADMIRAL_NAMES=['Adm. Beatriz Saldanha','Adm. Henrik Voss','Adm. Lucia Ferrante','Adm. Pieter van der Meer','Adm. Rafael Costa','Adm. Nadia Rahal','Adm. Inês Duarte','Adm. Caspar Lindqvist'];
+const GEN_TRAITS=['Bold','Steady','Logistician','Beloved'];
+const ADM_TRAITS=['Bold','Gunnery','Weatherly','Beloved'];
+function newGeneral(){ return {name:GENERAL_NAMES[Math.floor(rnd()*GENERAL_NAMES.length)], traits:[], wins:0};}
+function newAdmiral(){ return {name:ADMIRAL_NAMES[Math.floor(rnd()*ADMIRAL_NAMES.length)], traits:[], wins:0};}
+function armyPowerMult(a){ if(!a) return 1; let m=1+0.06*(a.vet||0); const g=a.general; if(g&&g.traits.includes('Bold')) m*=1.08; return m;}
+function fleetPowerMult(f){ if(!f) return 1; let m=1+0.06*(f.vet||0); const ad=f.admiral; if(ad&&ad.traits.includes('Bold')) m*=1.08; if(ad&&ad.traits.includes('Gunnery')) m*=1.05; return m;}
+function armyHonours(a, res){
+if(!a||!res) return;
+if(res.win&&a.men>300){ if((a.vet||0)<3&&rnd()<0.6) a.vet=(a.vet||0)+1;
+if(a.general){ a.general.wins=(a.general.wins||0)+1;
+if(a.general.wins===2&&!a.general.traits.length){ a.general.traits.push(pick(GEN_TRAITS)); if(a.owner==='player') pushEvent('🎖 '+a.general.name+' earns a name for it — '+(a.general.traits[0])+'.');}
+if(a.general.wins===4&&a.general.traits.length<2){ a.general.traits.push(pick(GEN_TRAITS.filter(t=>!a.general.traits.includes(t)))||'Steady'); if(a.owner==='player') pushEvent('🎖 '+a.general.name+' is spoken of at court — now also '+a.general.traits[1]+'.');}}}
+}
+function navalHonours(f){
+if(!f||!G.fleets.includes(f)) return;
+if(!f.admiral) f.admiral=newAdmiral();
+if((f.vet||0)<3&&rnd()<0.6) f.vet=(f.vet||0)+1;
+f.admiral.wins=(f.admiral.wins||0)+1;
+if(f.admiral.wins===2&&!f.admiral.traits.length){ f.admiral.traits.push(pick(ADM_TRAITS)); if(f.owner==='player') pushEvent('🎖 '+f.admiral.name+' wins a reputation — '+f.admiral.traits[0]+'.');}
+}
+/* forecast chip: every costly order prices its likely end out loud */
+function battleChance(atkTroops, atkOwner, defRegion){
+const aT=1+(atkOwner?emp(atkOwner).armyTech*0.35:0);
+let dM=1+(defRegion.owner?emp(defRegion.owner).armyTech*0.3:0);
+if(defRegion.hasFort)dM*=1.45; if(defRegion.hasWall)dM*=1.25;
+if(defRegion.greatWork==='citadel')dM*=1.3; if(defRegion.terrain==='hills')dM*=1.15; if(defRegion.terrain==='marsh')dM*=0.9;
+const ap=atkTroops*aT, dp=Math.max(1,defRegion.troops*dM);
+return ap/(ap+dp);
+}
+function forecastText(atkTroops, atkOwner, defRegion){
+const p=battleChance(atkTroops, atkOwner, defRegion);
+return '≈'+Math.round(p*100)+'% — '+(p>0.65?'likely victory':p>0.45?'a hard fight, honestly weighed':'likely repulse — think twice');
+}
+
+/* wind lanes on the chart: the season's wind, drawn as travelling arrows */
+function drawWinds(){
+  if(!G||!G.showWinds) return; const w=WINDS[G.seasonIdx&3]; const L=Math.hypot(w.x,w.y)||1; const ux=w.x/L, uy=w.y/L;
+  ctx.save(); ctx.strokeStyle='rgba(255,246,221,.55)'; ctx.lineWidth=2.2/Math.max(view.scale,0.001);
+  G.seas.forEach(z=>{ z.neighbors.forEach(nid=>{ if(z.id>=nid) return; const n=seaById[nid]; if(!n) return;
+    const mx=(z.x+n.x)/2, my=(z.y+n.y)/2;
+    const off=((performance.now()/1100)+(z.id*0.37))%1;
+    const px=mx+ux*90*(WS/3.35)*(off-0.5), py=my+uy*90*(WS/3.35)*(off-0.5);
+    const ang=Math.atan2(uy,ux), s=16*(WS/3.35);
+    ctx.beginPath(); ctx.moveTo(px-ux*s*1.6, py-uy*s*1.6); ctx.lineTo(px, py);
+    ctx.lineTo(px-s*Math.cos(ang-0.5), py-s*Math.sin(ang-0.5)); ctx.moveTo(px,py);
+    ctx.lineTo(px-s*Math.cos(ang+0.5), py-s*Math.sin(ang+0.5)); ctx.stroke(); }); });
+  ctx.restore();
+}
+/* ---------- the fun spine: always three things in flight ---------- */
+function nextArrivals(){
+const items=[];
+(G.armies||[]).filter(a=>a.owner==='player'&&a.at).forEach(a=>items.push({day:a.arriveDay, ico:'🪖', txt:a.name+' reaches '+(rById[a.destRegion]? rById[a.destRegion].name:'its road’s end')}));
+(G.fleets||[]).filter(f=>f.owner==='player'&&f.at).forEach(f=>items.push({day:f.at.arriveDay, ico:'⛵', txt:f.name+' makes '+(f.at.destPort!=null&&rById[f.at.destPort]? rById[f.at.destPort].name: (f.at.destZone!=null&&seaById[f.at.destZone]? seaById[f.at.destZone].name: 'port'))}));
+(G.prizeCases||[]).forEach(p=>items.push({day:p.due, ico:'⚖', txt:'Prize Court sits on the '+emp(p.target).name+' hulls'}));
+(G.ultimatums||[]).forEach(u=>items.push({day:u.deadline, ico:'⏳', txt:'the ultimatum to '+emp(u.to).name+' expires'}));
+items.push({day:(Math.floor(G.day/90)+1)*90, ico:'📜', txt:'the season turns — incomes & the Gazette'});
+return items.sort((a,b)=>a.day-b.day).slice(0,5);
+}
+const QUIET_HOOKS=['🌩 A storm is brewing over the open sea — lanes will want care','🦜 Tavern talk: a rival lays new keels this season','🗺 An unclaimed shore waits beyond the horizon for a flag and 120g','🍷 A merchant in port swears spice prices cannot hold','🕯 The Grand Light-keepers report strange sails, far off'];
+function renderNextBar(){
+const el=document.getElementById('nextbar'); if(!el||!G) return;
+const items=nextArrivals();
+let hooks=0;
+while(items.length<3){ items.push({day:null, ico:'', txt:QUIET_HOOKS[(hooks++)%QUIET_HOOKS.length]});}
+el.innerHTML='<b>⏳ Next ashore:</b> '+items.slice(0,3).map(i=>' '+i.ico+' '+i.txt+(i.day!=null? ' · ~'+Math.max(0,Math.ceil(i.day-G.day))+'d':'')).join('<span style="opacity:.5"> · </span>');
+}
+function cliffhangerLine(){
+const others=['aurelia','meridian','sable'].filter(id=>G.empires[id]);
+const storms=G.storms||[];
+if(storms.length){ const s=storms[0]; const near=G.regions.filter(r=>r.isPort).sort((a,b)=>Math.hypot(a.x-s.x,a.y-s.y)-Math.hypot(b.x-s.x,b.y-s.y))[0];
+if(near) return '<i>…and far off the '+near.name+' roadstead, a black wall of weather gathers. The harbourmasters are watching it. So should you.</i>';}
+const hot=others.map(id=>({id, g:emp('player').relations[id].grievance||0})).sort((a,b)=>b.g-a.g)[0];
+if(hot&&hot.g>18) return '<i>…and in the court of '+emp(hot.id).name+', they are still counting what you owe them. The list grows teeth.</i>';
+const rich=others.sort((a,b)=>totalShips(b)-totalShips(a))[0];
+if(rich) return '<i>…and across the water, '+emp(rich).name+' keeps '+totalShips(rich)+' hulls at anchor. For now, at anchor.</i>';
+return '<i>…and somewhere beyond the chart’s edge, a sail you have not met yet is beating toward your world.</i>';
+}
+/* undertakings — a reign takes shape around a chosen boast */
+const UNDERTAKINGS=[
+{id:'sword', icon:'🗡', name:'Sword of the Rift', desc:'Hold 20 regions under your flag', target:20, prog:()=>myRegions().length, reward:300},
+{id:'ledger', icon:'🧮', name:'Ledger of Crowns', desc:'Lead the world’s trade 3 seasons running', target:3, prog:()=>emp('player').tradeStreak, reward:250},
+{id:'charter', icon:'🚩', name:'The Long Charter', desc:'Fly your flag over 8 ports (colonies count double-weight)', target:8, prog:()=>myPorts().length, reward:250},
+];
+function undertakingCheck(){
+const u=G.undertaking; if(!u||u.done) return;
+const def=UNDERTAKINGS.find(x=>x.id===u.id); if(!def) return;
+if(def.prog()>=def.target){ u.done=true; emp('player').gold+=def.reward;
+gazette('🏆 <b>The '+def.name+' is fulfilled!</b> '+def.desc+' — the court grants '+def.reward+'g and the singers a new verse.');
+toast('🏆 Undertaking fulfilled: '+def.name+' (+'+def.reward+'g)');}
+}
+/* the cold open: a reign should begin mid-story, not mid-menu */
+function coldEvent(kind){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}});
+if(kind==='firstArmy'&&!co.done.army){ co.done.army=1; const a=(G.armies||[]).filter(x=>x.owner==='player').slice(-1)[0];
+if(a) pushEvent('🎖 <b>'+a.general.name+'</b> takes the colours of '+a.name+' — a named host, with a named man to answer for it.');}
+if(kind==='firstConquest'&&!co.done.conquest){ co.done.conquest=1; gazette('🗞 <b>The first flag falls.</b> Word runs the lanes faster than any ship: your Crown takes ground. Every court on the chart recalculates tonight.');}
+if(kind==='firstColony'&&!co.done.colony){ co.done.colony=1; pushEvent('🚩 A flag beyond the old chart — the world just got wider, and some of it is yours.');}
+}
+function coldSeason(){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}});
+if(G.turn===1&&!co.done.pirates){ co.done.pirates=1;
+const homeZone=(G.regions.find(r=>r.name===(emp('player').capitalName||'Lisbon'))||{}).seaZone;
+if(homeZone!=null){ const z=seaById[homeZone];
+const f={id:newUnitId(),owner:'natives',zone:homeZone,node:'s'+homeZone,pos:{x:z.x+40*WS/3.35,y:z.y+30*WS/3.35},at:null,ships:2,stance:'raid',name:'Freebooters'};
+G.fleets.push(f);
+G.crownQueue.push({icon:'🏴', urgent:true, title:'Freebooters in your home water',
+body:'Two lean sails flying no crown are worrying the lanes off '+(emp('player').capitalName||'your capital')+'. The Coastal Peoples disown them. Your squadron could settle the matter — the Admiralty awaits your word.',
+choices:[{label:'⚔ Hunt them down', fn:()=>{ emp('player').relations['natives'].war=true; emp('natives').relations['player'].war=true; toast('War on the freebooters — sail your squadron at them.'); save();}},
+{label:'Let them pass', fn:()=>{ toast('The freebooters keep the lanes nervous. For now.');}}]});
+}
+}
+if(G.turn===1&&!co.done.econ){ co.done.econ=1;
+const port=myPorts()[0];
+if(port){ initSupply(port); gazette('🪙 <b>The harbormaster explains himself, once:</b> “'+port.name+' eats grain by the day — '+daysOfSupply(port,'grain')+' days in store, priced '+goodPrice(port,'grain')+'g because '+priceWhy(port,'grain')+'. Sign a convoy contract in any port of yours and the freight runs itself.”');}
+}
+if(G.turn===2&&!co.done.undertaking){ co.done.undertaking=1;
+G.crownQueue.push({icon:'⚜', urgent:false, title:'Choose your Undertaking',
+body:'A reign needs a boast the chart can measure. Choose, and the Gazette will hold you to it.',
+choices:UNDERTAKINGS.map(u=>({label:u.icon+' '+u.name, fn:()=>{ G.undertaking={id:u.id, since:G.day, done:false}; toast('⚜ Your Undertaking: '+u.name+' — '+u.desc); gazette('⚜ <b>The Crown undertakes:</b> '+u.name+' — '+u.desc+'.'); save();}}))});
+}
+}
+/* season seam for the whole Second Age */
+function secondAgeSeason(){
+G.quill=2; // the Contrarian's Quill is re-inked each season
+econSeason();
+undertakingCheck();
+incidentSeason();
+coldSeason();
+}
+/* the daily heartbeat: storms wander, blockades bite, courts sit, deadlines die */
+function dayTick2(){
+if(!G||G.over) return;
+stormsDaily();
+blockadeDaily();
+diplomacyDaily();
+}
+
+/* ---------- founding colonies ---------- */
+function foundColony(r){
+const me=emp('player');
+if(!r||!r.colony||r.owner) return false;
+const fleetHere=(G.fleets||[]).some(f=>f.owner==='player'&&!f.at&&f.zone===r.seaZone&&f.ships>0);
+if(!fleetHere){ toast('No squadron rides in the '+(seaById[r.seaZone]?seaById[r.seaZone].name:'')+' — sail one there to plant the flag.'); return false;}
+if(me.gold<120){ toast('A charter costs 120g.'); return false;}
+const donor=myRegions().filter(x=>x.troops>1100).sort((a,b)=>b.troops-a.troops)[0];
+if(!donor){ toast('No garrison can spare 500 settlers — muster more men somewhere fat.'); return false;}
+me.gold-=120; donor.troops-=500;
+r.owner='player'; r.colony=false; r.tier=0; r.troops=500; r.pop=Math.max(r.pop,2400);
+toast('🚩 '+r.name+' is founded — 500 settlers sail from '+donor.name+'.');
+pushEvent('🚩 <b>Colony founded:</b> '+r.name+' flies your colours.');
+gazette('🚩 <b>'+r.name+'</b> is chartered. Five hundred souls from '+donor.name+' make a new shore yours.');
+coldEvent('firstColony'); selectRegion(r); save(); return true;
+}
+
+/* ---------- heraldry: every crown a shield of its own ---------- */
+function shieldSVG(e, size){
+size=size||44;
+const charges={player:'⚜', aurelia:'🌙', meridian:'⚖', sable:'🦂', natives:'🌊'};
+const ch=charges[e.id]||'⚓';
+return '<svg width="'+size+'" height="'+Math.round(size*1.18)+'" viewBox="0 0 44 52" style="vertical-align:middle"><path d="M4 4 H40 V26 C40 40 32 47 22 50 C12 47 4 40 4 26 Z" fill="'+(e.color||'#888')+'" stroke="'+(e.dark||'#444')+'" stroke-width="2.5"/><path d="M4 16 H40" stroke="'+(e.dark||'#444')+'" stroke-width="2" opacity="0.7"/><text x="22" y="37" font-size="16" text-anchor="middle">'+ch+'</text></svg>';
+}
+
+/* ---------- ORDERS OF THE CROWN: plain words, obeyed ---------- */
+let lastOrder=null; // {label, undo}
+function ordReply(html){
+const log=document.getElementById('ord-log'); if(!log) return;
+const d=document.createElement('div'); d.className='ord-line'; d.innerHTML=html; if(log.prepend) log.prepend(d); else log.appendChild(d);
+}
+function snapUnit(u){ return JSON.stringify({at:u.at||null, atRegion:u.atRegion, zone:u.zone, pos:u.pos, path:u.path||null, destRegion:u.destRegion, stance:u.stance, legIndex:u.legIndex||0, arriveDay:u.arriveDay, joinTarget:u.joinTarget||null});}
+function restoreUnit(u, s){ const o=JSON.parse(s); u.at=o.at; u.atRegion=o.atRegion; if(o.zone!==undefined)u.zone=o.zone; u.pos=o.pos; u.path=o.path; u.destRegion=o.destRegion; u.stance=o.stance; u.legIndex=o.legIndex; u.arriveDay=o.arriveDay; u.joinTarget=o.joinTarget;}
+function undoLastOrder(){
+if(!lastOrder){ ordReply('🕯 Nothing stands written to unwrite.'); return;}
+if((G.quill||0)<=0){ ordReply('🕯 The Contrarian’s Quill is dry this season — two un-writings a season, no more.'); return;}
+lastOrder.undo(); G.quill--; const l=lastOrder.label; lastOrder=null;
+ordReply('↩ <b>Unwritten.</b> '+l+' (The Quill has '+G.quill+' charge'+(G.quill===1?'':'s')+' left this season.)');
+refreshHUD(); save();
+}
+function findRegionIn(txt, excludeId){ let best=null,bl=0; G.regions.forEach(r=>{ if(r.id===excludeId) return; const n=r.name.toLowerCase(); if(txt.includes(n)&&n.length>bl){ best=r; bl=n.length; } }); return best; }
+function findZoneIn(txt){ let best=null,bl=0; G.seas.forEach(z=>{ const n=z.name.toLowerCase(); if(txt.includes(n)&&n.length>bl){ best=z; bl=n.length;}}); return best;}
+function armiesInText(txt){ return (G.armies||[]).filter(a=>a.owner==='player').map(a=>{ const home=rById[a.atRegion]; let s=0;
+if(txt.includes(a.name.toLowerCase())) s=100+a.name.length;
+else if(home&&txt.includes(home.name.toLowerCase())) s=50+home.name.length;
+else if(home&&a.general&&txt.includes(a.general.name.split(' ').slice(-1)[0].toLowerCase())) s=40;
+return {a,s};}).filter(x=>x.s>0).sort((x,y)=>y.s-x.s).map(x=>x.a);}
+function fleetsInText(txt){ return (G.fleets||[]).filter(f=>f.owner==='player').map(f=>{ let s=0; const z=seaById[f.zone];
+if(txt.includes(f.name.toLowerCase())) s=100+f.name.length;
+else if((txt.includes('fleet')||txt.includes('squadron')||txt.includes('ships'))&&z&&txt.includes(z.name.toLowerCase())) s=60;
+else if(txt.includes('fleet')||txt.includes('squadron')) s=10;
+return {f,s};}).filter(x=>x.s>0).sort((x,y)=>y.s-x.s).map(x=>x.f);}
+function parseOrder(raw){
+if(!G||G.over) return;
+const txt=' '+String(raw||'').toLowerCase().replace(/[.,!?]/g,' ')+' ';
+const heard='<span style="opacity:.75">“'+raw+'”</span>';
+if(/\b(cancel|undo|unwrite|belay)\b/.test(txt)){ undoLastOrder(); return;}
+let r=findRegionIn(txt); const z=findZoneIn(txt);
+const armies=armiesInText(txt), fleets=fleetsInText(txt);
+const a=armies[0], f=fleets[0];
+  // "move my Lisbon army and attack León" names two towns: the army stands in one, marches to the other
+  if(a&&r&&r.id===a.atRegion){ const alt=findRegionIn(txt, a.atRegion); if(alt) r=alt; }
+  if(f&&!f.at&&r&&r.isPort&&seaById[f.zone]&&seaById[f.zone].ports.includes(r.id)){ const alt=findRegionIn(txt, r.id); if(alt) r=alt; }
+// ---- governors by word of mouth ----
+if(/governor|appoint|put |place /.test(txt)&&r){
+const cand=(G.govPool||[]).find(en=>txt.includes(en.name.split(' ')[0].toLowerCase())||txt.includes(en.name.split(' ').slice(-1)[0].toLowerCase()));
+const polTxt=/wealth|money|trade/.test(txt)? 'wealth': /growth|grow|people/.test(txt)? 'growth': /war|arms|defen/.test(txt)? 'war': /harbou?r|ships|sea/.test(txt)? 'harbor': null;
+if(r.owner!=='player'){ ordReply('🏛 '+r.name+' is not yours to govern. '+heard); return;}
+if(isPlayerCapital(r)){ ordReply('👑 The capital is ruled by your own hand — no governor sits there. That was your law, and a good one.'); return;}
+if(cand&&!cand.posted){ assignGovernor(r, cand); if(polTxt) setGovPolicy(r, polTxt);
+ordReply('🏛 <b>'+cand.name+'</b> takes up '+r.name+(polTxt? ' on a '+GOV_POLICIES[polTxt].label+' course':'')+'. Population, army and income are theirs to answer for now.'); return;}
+if(r.gov&&polTxt){ setGovPolicy(r, polTxt); ordReply('🏛 '+r.name+' steers by '+GOV_POLICIES[polTxt].label+' now — '+r.gov.name+' has the word.'); return;}
+ordReply('🏛 I heard a governorship at <b>'+r.name+'</b>, but no free name. Say e.g. “put Reyes on '+r.name+'” — or open the city and appoint by tap.'); return;
+}
+// ---- founding ----
+if(/found|coloni[sz]e|charter|settle/.test(txt)&&r&&r.colony){ if(foundColony(r)) ordReply('🚩 The charter is sealed: <b>'+r.name+'</b> is yours. '+heard); else ordReply('🚩 The founding at '+r.name+' wants a squadron in its waters, 120g, and 500 settlers from a fat garrison. '+heard); return;}
+// ---- fleets ----
+if(f){
+const snap=snapUnit(f), fid=f.id;
+const hostilePort=r&&r.isPort&&r.owner&&r.owner!=='player'&&atWar('player',r.owner);
+if(/blockade|strangle/.test(txt)&&r&&r.isPort){ if(orderSailPort(f,r)){ const ff=G.fleets.find(x=>x.id===fid); if(ff&&hostilePort) ff.stance='blockade';
+lastOrder={label:f.name+'’s blockade of '+r.name, undo:()=>{ const u=G.fleets.find(x=>x.id===fid); if(u) restoreUnit(u,snap);}};
+ordReply('⛓ <b>'+f.name+'</b> sails to blockade <b>'+r.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days. '+(hostilePort?'It is war work and will bite the day it anchors.':'No war, no stranglehold — she will anchor as a guest.')+' Say “cancel” to unwrite it.');}
+else ordReply('⛵ No sailing road for '+f.name+' to '+r.name+'. '+heard); return;}
+if(/escort/.test(txt)){ f.stance='escort'; ordReply('🛡 <b>'+f.name+'</b> takes escort station'+(z?' on the '+z.name:'')+' — your lanes here breathe easier.'); save(); return;}
+if(r&&r.isPort){ if(orderSailPort(f,r)){ lastOrder={label:f.name+' sailing for '+r.name, undo:()=>{ const u=G.fleets.find(x=>x.id===fid); if(u) restoreUnit(u,snap);}};
+ordReply('⛵ <b>'+f.name+'</b> sails for <b>'+r.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days under the '+SEASONS[G.seasonIdx]+' wind. Say “cancel” to unwrite it.');}
+else ordReply('⛵ No sailing road there for '+f.name+'. '+heard); return;}
+if(z){ if(orderSailZone(f,z)){ lastOrder={label:f.name+' sailing to the '+z.name, undo:()=>{ const u=G.fleets.find(x=>x.id===fid); if(u) restoreUnit(u,snap);}};
+ordReply('⛵ <b>'+f.name+'</b> makes sail for the <b>'+z.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days. Say “cancel” to unwrite it.');}
+else ordReply('⛵ '+f.name+' cannot reach the '+z.name+' from here. '+heard); return;}
+}
+// ---- armies ----
+if(a){
+const snap=snapUnit(a), aid=a.id;
+if(/combine|join|merge/.test(txt)&&armies[1]){ const b=armies[1];
+if(orderJoin(a,b)){ lastOrder={label:a.name+' joining '+b.name, undo:()=>{ const u=(G.armies||[]).find(x=>x.id===aid); if(u) restoreUnit(u,snap);}};
+ordReply('🤝 <b>'+a.name+'</b> marches to join <b>'+b.name+'</b> ('+fmt(a.men+b.men)+' men under one banner when they meet). Say “cancel” to unwrite it.');}
+else ordReply('🤝 No land road joins them — the sea is in the way. '+heard); return;}
+if(/split|divide|halve/.test(txt)){
+if(a.at){ ordReply('✂ '+a.name+' cannot divide on the march — halt it first. '+heard); return; }
+if(a.men<1000){ ordReply('✂ '+a.name+' is under 1,000 men — one banner or none. '+heard); return; }
+const before=a.men, idsBefore=new Set((G.armies||[]).map(x=>x.id));
+splitArmy(a);
+const young=(G.armies||[]).find(x=>!idsBefore.has(x.id));
+lastOrder={label:'the splitting of '+a.name, undo:()=>{ const u=(G.armies||[]).find(x=>x.id===aid); if(young) G.armies=(G.armies||[]).filter(x=>x.id!==young.id); if(u) u.men=before; }};
+ordReply('✂ <b>'+a.name+'</b> divides — two banners where one stood ('+fmt(before)+' men between them). Say “cancel” to unwrite it.'); return; }
+if(/hold|garrison|dig in|stay/.test(txt)&&!r){ a.stance='hold'; a.holdUntil=1e9; ordReply('🛡 <b>'+a.name+'</b> digs in where it stands — the road is blocked.'); save(); return;}
+if(r){ if(a.at){ ordReply('🚶 '+a.name+' is already on the march — halt it by tap, then speak again. '+heard); return;}
+const hostile=r.owner!=='player'&&(!r.owner || atWar('player',r.owner) ||!r.owner);
+if(orderMarch(a,r)){ lastOrder={label:a.name+' marching on '+r.name, undo:()=>{ const u=(G.armies||[]).find(x=>x.id===aid); if(u) restoreUnit(u,snap);}};
+ordReply('🚶 <b>'+a.name+'</b> ('+fmt(a.men)+' men'+(a.vet?', '+'◆'.repeat(a.vet):'')+') marches on <b>'+r.name+'</b> — ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days. '+(r.owner&&r.owner!=='player'&&atWar('player',r.owner)? 'Forecast at the gates: '+forecastText(Math.round(a.men*armyPowerMult(a)),'player',r)+'. ': (r.owner&&r.owner!=='player'? 'You are at peace with its holders — the host will camp at the border. ': 'An empty chair: it will be yours on arrival. '))+'Say “cancel” to unwrite it.');}
+else ordReply('🚶 No land road from '+rById[a.atRegion].name+' to '+r.name+'. '+heard); return;}
+}
+// ---- sails without a named squadron ----
+if(/blockade/.test(txt)&&r&&r.isPort&&fleets.length===0){ ordReply('⛓ A blockade of '+r.name+' wants a named squadron — e.g. “send my squadron to blockade '+r.name+'”. '+heard); return;}
+if(/winds?/.test(txt)){ G.showWinds=!G.showWinds; ordReply('🌬 The wind lanes are '+(G.showWinds?'drawn on the chart':'struck from the chart')+' — the '+SEASONS[G.seasonIdx]+' wind bends every sail.'); save(); return;}
+// ---- nothing heard: echo and offer the nearest shapes ----
+const suggestions=G.regions.filter(x=>x.owner==='player').slice(0,2).map(x=>'“move my '+(x.name)+' army”').join(' · ');
+ordReply('🕯 I heard '+heard+' but found no hand to move. Name an army, fleet, city or governor — e.g. “move my Lisbon army and attack León”, “sail the Home Squadron to blockade Algiers”, “put Reyes on Porto for wealth”'+(suggestions?'. Or: '+suggestions:'')+'.');
+}
+
 /* ================= SEASON ENGINE ================= */
 function collectIncome(id){
   const e=emp(id); if(!e) return {gold:0,trade:0,upkeep:0,interest:0};
@@ -2443,6 +3332,18 @@ function detectWarnings(){
     const days=Math.max(1, Math.ceil(a.arriveDay-G.day));
     const dest=rById[a.destRegion];
     G.warnings.unshift('⚔ '+emp(a.owner).name+' army ('+fmt(a.men)+' men) marching on '+dest.name+' — arrives in ~'+days+' days!');
+    if(days<=10 && !a._iprompt){ a._iprompt=1;
+      const destId=dest.id;
+      G.crownQueue.push({icon:'⚔', urgent:true,
+        title:'Intercept the '+emp(a.owner).name+'?',
+        body:emp(a.owner).name+' marches on '+dest.name+' with '+fmt(a.men)+' men — ~'+days+' days out. Your '+fmt(dest.troops)+' garrison holds the walls; a field army could meet them in the open.',
+        choices:[
+          {label:'Send my nearest army', fn:()=>{ const cand=(G.armies||[]).filter(x=>x.owner==='player'&&!x.at); if(!cand.length){ toast('No field army stands ready to march.'); return; }
+            let bestA=null,bd=1e12; cand.forEach(x=>{ const p=findLandPath(x.atRegion,destId); if(p&&p.days<bd){bd=p.days;bestA=x;} });
+            if(bestA && orderMarch(bestA, rById[destId])) toast('⚔ '+bestA.name+' marches to intercept — ~'+Math.max(1,Math.round(bd))+' days out.'); else toast('No road reaches '+dest.name+' in time — the garrison must hold.'); }},
+          {label:'Let them come', fn:null},
+        ]});
+    }
     if(days<=7 && G.pauseOnEvent) simPauseEvent();
   });
   // blockades are positional now — say which harbour, not which zone
@@ -2454,8 +3355,8 @@ function detectWarnings(){
 }
 function checkEnd(){
   const mine=myRegions();
-  const cap=G.regions.find(r=>r.name==='Lisbon');
-  if((!mine.some(r=>r.isPort))||cap.owner!=='player'){ endGame(false,'Your capital and harbours are lost. The court sails into exile, and your line ends in a foreign port.'); return true; }
+  const cap=G.regions.find(r=>r.name===(emp('player').capitalName||'Lisbon'));
+  if((!mine.some(r=>r.isPort))||!cap||cap.owner!=='player'){ endGame(false,'Your capital and harbours are lost. The court sails into exile, and your line ends in a foreign port.'); return true; }
   if(mine.length>=WIN_REGIONS){ endGame(true,'Sixty percent of the chart flies your colours. Ports from Lisbon to the Levant pay your dues — the Rift itself seems to bow. History will call this the Age of Your Crown.'); return true; }
   if(G.empires['player'].tradeStreak>=5){ endGame(true,'Five straight seasons your lanes out-earned every empire on the sea. Rivals fly flags; you own the water beneath them. A merchant-emperor\'s victory.'); return true; }
   return false;
@@ -2471,6 +3372,7 @@ function endSeason(){
   // player upkeep already in collect below; order: incomes, growth, AI
   EMPIRES.map(e=>e.id).forEach(id=>{ const inc=collectIncome(id); if(id==='player') G.lastIncome=inc; });
   growWorld();
+  secondAgeSeason();
   ['aurelia','meridian','sable'].forEach(id=>{ if(G.empires[id]) aiTurn(id); });
   // trade supremacy streak
   const trades={}; EMPIRES.forEach(e=>{ if(G.empires[e.id]) trades[e.id]=tradeIncome(e.id); });
@@ -2487,6 +3389,7 @@ function endSeason(){
   // your governors render their accounts — one line each, read over breakfast
   const govLines=myRegions().filter(r=>r.gov).map(govReportLine).filter(Boolean);
   if(govLines.length) G.gazette.splice(1,0,'🏛 <b>Governors’ reports</b>',...govLines);
+  G.gazette.push(cliffhangerLine()); // the Gazette NEVER closes on a settled note
   detectWarnings();
   if(coachStep===1) coachStep=2;
   refreshHUD(); save();
@@ -2527,7 +3430,8 @@ function refreshHUD(){
     {id:'trade',name:'trade supremacy',t:'Lead trade 5 seasons ('+me.tradeStreak+'/5)', done:me.tradeStreak>=5, prog:me.tradeStreak/5},
     {id:'men',name:'a host of 25,000',t:'Field 25,000 men ('+kfmt(totalMen('player'))+')', done:totalMen('player')>=25000, prog:totalMen('player')/25000},
   ];
-  aims.forEach(a=>{ if(a.done&&!G.aimsRewarded.includes(a.id)){ G.aimsRewarded.push(a.id); me.gold+=150;
+  if(G.undertaking&&UNDERTAKINGS){ const u=UNDERTAKINGS.find(x=>x.id===G.undertaking.id); if(u) aims.push({id:'und', name:u.name, t:u.icon+' '+u.name+' — '+u.desc, done:!!G.undertaking.done, prog:Math.min(1,(u.prog()||0)/u.target)}); }
+  aims.forEach(a=>{ if(a.done&&a.id!=='und'&&!G.aimsRewarded.includes(a.id)){ G.aimsRewarded.push(a.id); me.gold+=150;
     toast('🏆 Aim achieved: '+a.name+' — the court grants +150g'); } });
   $('#aims-list').innerHTML=aims.map(a=>'<div class="aim"><span class="tick">'+(a.done?'✓':'▸')+'</span><span>'+a.t+'</span></div>').join('');
   // no dead seasons: when nothing demands attention, point at the single most useful act
@@ -2564,8 +3468,9 @@ $('#btn-realm').onclick=()=>{
   // — the kingdoms board: the political world at a glance —
   h+='<div class="rule"></div><h3 style="font-variant:small-caps">👑 Kingdoms of the Rift</h3>';
   h+='<p style="font-size:12px">Four crowns share this sea. Grow yours; watch theirs.</p>';
-  EMPIRES.forEach(e2=>{
-    if(!G.empires[e2.id]) return;
+  Object.keys(G.empires).filter(id=>id!=='natives').forEach(id=>{
+    const ge=G.empires[id]; if(!ge) return;
+    const e2={id, name:ge.name, color:ge.color, dark:ge.dark, capital:ge.capitalName};
     const regs=G.regions.filter(r=>r.owner===e2.id);
     const cap=G.regions.find(r=>r.name===e2.capital);
     const rel=e2.id==='player'? null : me.relations[e2.id];
@@ -2632,21 +3537,7 @@ $('#btn-realm').onclick=()=>{
   const bbtn=document.createElement('button'); bbtn.className='mini-btn'; bbtn.textContent='Borrow 500g';
   bbtn.onclick=()=>{ me.gold+=500; me.debt+=500; toast('500g borrowed. The bankers bow and smile.'); refreshHUD(); save(); $('#btn-realm').click(); };
   row3.appendChild(bbtn); b.appendChild(row3);
-  const dh=document.createElement('h3'); dh.style.fontVariant='small-caps'; dh.style.marginTop='10px'; dh.textContent='Diplomacy'; b.appendChild(dh);
-  EMPIRES.filter(e=>e.id!=='player').forEach(e=>{
-    if(!G.empires[e.id]) return;
-    const rel=me.relations[e.id];
-    const row=document.createElement('div'); row.className='dip-row';
-    row.innerHTML='<span class="who" style="color:'+e.dark+'">'+e.name+'</span><span class="rel">'+
-      (rel.war?'⚔ AT WAR':rel.ally?'🤝 Allied':'At peace')+' · relations '+Math.round(rel.score)+
-      ' · '+G.regions.filter(r=>r.owner===e.id).length+' regions · '+fmt(totalMen(e.id))+' men</span>';
-    const mk=(label,fn,danger,dis)=>{ const btn=document.createElement('button'); btn.className='mini-btn'+(danger?' danger':''); btn.textContent=label; btn.disabled=!!dis; btn.onclick=fn; row.appendChild(btn); };
-    if(!rel.war) mk('Declare War',()=>{ rel.war=true; rel.ally=false; emp(e.id).relations['player'].war=true; rel.score-=40; gazette('👑 You have declared war on the '+e.name+'.'); toast('War declared on '+e.name); save(); $('#realm').classList.remove('open'); refreshHUD(); },true);
-    if(rel.war) mk('Make Peace',()=>{ rel.war=false; emp(e.id).relations['player'].war=false; rel.score+=5; toast('Peace with '+e.name); save(); $('#btn-realm').click(); });
-    if(!rel.war&&!rel.ally) mk('Ally (+)',()=>{ if(rel.score>=20){ rel.ally=true; emp(e.id).relations['player'].ally=true; toast(e.name+' signs the alliance!'); } else { rel.score+=8; toast(e.name+' warms to you (relations '+Math.round(rel.score)+'/20 to ally).'); } save(); $('#btn-realm').click(); });
-    if(rel.ally) mk('End Alliance',()=>{ rel.ally=false; emp(e.id).relations['player'].ally=false; rel.score-=15; toast('Alliance with '+e.name+' ended.'); save(); $('#btn-realm').click(); });
-    b.appendChild(row);
-  });
+  diplomacyPanel(b);
   $('#realm').classList.add('open');
 };
 $('#realm-close').onclick=()=>$('#realm').classList.remove('open');
@@ -2655,7 +3546,7 @@ $('#clock-1').onclick=()=>{ simResumeFromEvent(); setClock(2); };
 $('#clock-2').onclick=()=>{ simResumeFromEvent(); setClock(4); };
 $('#clock-4').onclick=()=>{ simResumeFromEvent(); setClock(8); };
 $('#clock-autopause').onchange=e=>toggleEventPause(e.target.checked);
-$('#btn-menu').onclick=()=>$('#menu').classList.add('open');
+$('#btn-menu').onclick=()=>{ syncWindsBtn(); $('#menu').classList.add('open'); };
 $('#menu-close').onclick=()=>$('#menu').classList.remove('open');
 $('#menu-continue').onclick=()=>$('#menu').classList.remove('open');
 $('#menu-how').onclick=()=>{ $('#menu').classList.remove('open'); $('#howto').classList.add('open'); };
@@ -2669,9 +3560,9 @@ window.__coachRegion=null;
 function updateHint(){
   const h=$('#hint'); if(!h||!G){ return; }
   if(coachStep===0){
-    const cap=G.regions.find(r=>r.name==='Lisbon');
+    const cap=G.regions.find(r=>r.name===(emp('player').capitalName||'Lisbon'));
     window.__coachRegion=cap?cap.id:null;
-    h.innerHTML='👑 Tap your crimson capital — <b>Lisbon</b> — to muster your first regiments.';
+    h.innerHTML='👑 Tap your capital — <b>'+(cap?cap.name:'Lisbon')+'</b> — to muster your first regiments.';
     h.classList.add('show');
   } else if(coachStep===1){
     window.__coachRegion=null;
@@ -2703,19 +3594,30 @@ $('#battle-ok').onclick=()=>{ $('#battle').classList.remove('open'); simResumeFr
 /* ================= SAVE / LOAD / BOOT ================= */
 function save(){ if(window.__clashResolveNow) window.__clashResolveNow(); syncUnits(); if(G) G.lastSeenAt=Date.now(); try{ localStorage.setItem('riftsail-save', JSON.stringify(G)); }catch(e){} }
 function load(){ try{ const s=localStorage.getItem('riftsail-save'); return s? JSON.parse(s):null; }catch(e){ return null; } }
-function startNew(){
+function startNew(pick){
+  if(pick) START_PICK=pick;
   G=freshState(); rebuildIndex(); ensureIds(); selected=null; closeSheet();
   coachStep = (localStorage.getItem('riftsail-coached')==='1')? 99 : 0;
   ['#endscreen','#menu','#gazette'].forEach(s=>$(s).classList.remove('open'));
   eventPaused=false; tickerLines.length=0; renderTicker();
   fitWorld(); refreshHUD(); refreshClockUI(); save();
   if(window.R3&&window.R3.rebuild) R3.rebuild();
-  toast('A new reign begins — Lisbon flies your colours');
+  toast('A new reign begins — '+(emp('player').capitalName||'Lisbon')+' flies your colours');
   pushEvent('👑 <b>A new reign begins.</b> Muster an army, then press ▶ to set the world in motion.');
   startClockLoop();
   setTimeout(updateHint,700);
 }
-$('#btn-new').onclick=()=>{ $('#start').classList.remove('open'); startNew(); };
+$('#btn-new').onclick=()=>{ $('#start').classList.remove('open'); startNew('player'); };
+$('#btn-new-aurelia').onclick=()=>{ $('#start').classList.remove('open'); startNew('aurelia'); };
+$('#btn-new-meridian').onclick=()=>{ $('#start').classList.remove('open'); startNew('meridian'); };
+function syncWindsBtn(){ const b=document.getElementById('menu-winds'); if(b) b.textContent='🌬 Wind Lanes: '+((G&&G.showWinds)?'On':'Off'); }
+$('#btn-orders').onclick=()=>{ const q=document.getElementById('ord-quill'); if(q) q.textContent=G? (G.quill||0):2; $('#orders').classList.add('open'); };
+$('#ord-close').onclick=()=>$('#orders').classList.remove('open');
+$('#menu-orders').onclick=()=>{ $('#menu').classList.remove('open'); $('#btn-orders').click(); };
+$('#menu-winds').onclick=()=>{ if(G){ G.showWinds=!G.showWinds; save(); } syncWindsBtn(); };
+const sendOrder=()=>{ const inp=document.getElementById('ord-input'); if(!inp) return; const v=inp.value.trim(); if(!v) return; inp.value=''; parseOrder(v); const q=document.getElementById('ord-quill'); if(q&&G) q.textContent=(G.quill||0); };
+$('#ord-send').onclick=sendOrder;
+$('#ord-input').addEventListener('keydown',e=>{ if(e.key==='Enter') sendOrder(); });
 $('#btn-continue').onclick=()=>{ $('#start').classList.remove('open');
   if(window.__returnReports){ window.__returnReports=false;
     const lines=myRegions().filter(r=>r.gov).map(govReportLine).filter(Boolean);
@@ -2731,14 +3633,19 @@ fitCanvas();
     if(saved.lastSeenAt && Date.now()-saved.lastSeenAt>=86400000 && G.regions.some(r=>r.owner==='player'&&r.gov)) window.__returnReports=true; }
   else { G=freshState(); rebuildIndex(); }
   ensureIds(); syncPositions();
+  if(!Array.isArray(G.storms)||!G.storms.length) G.storms=initStormCells(G.seas);
   fitWorld(); refreshHUD(); refreshClockUI(); renderTicker();
   requestAnimationFrame(draw);
   startClockLoop();
   if(location.hash.includes('shot')){ // dev/QA: jump straight into a campaign for screenshots
     $('#start').classList.remove('open'); startNew();
   }
+  const HASHH=location.hash.match(/hour=(\d+(?:\.\d+)?)/); if(HASHH){ G.hour=+HASHH[1]; refreshClockUI(); } // QA: hold the sky at an hour
+  if(location.hash.includes('winds=1')) G.showWinds=true; // QA: pin the wind lanes on
+  if(location.hash.includes('realm=1')) setTimeout(()=>{ const b=document.getElementById('btn-realm'); if(b) b.click(); },400);
+  if(location.hash.includes('orders=1')) setTimeout(()=>{ const b=document.getElementById('btn-orders'); if(b) b.click(); },400);
   // gentle first-season guidance
-  setTimeout(()=>{ if(G.turn===1) toast('Tap Lisbon ⚓ — muster regiments, then press ▶'); },600);
+  setTimeout(()=>{ if(G.turn===1) toast('Tap '+(emp('player').capitalName||'Lisbon')+' ⚓ — muster regiments, then press ▶'); },600);
 })();
 </script>
 <script type="module">
@@ -4132,7 +5039,7 @@ try{
   function fitDist(){
     const t = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
     const dv = (WORLD_H/20)/t, dh = (WORLD_W/20)/(t*camera.aspect);
-    return THREE.MathUtils.clamp(Math.max(dv, dh)*1.06, 90, 1150);
+    return THREE.MathUtils.clamp(Math.max(dv, dh)*1.06, 90, 2350);
   }
   function clampTarget(){ target.x = THREE.MathUtils.clamp(target.x, -(WORLD_W/20+60), WORLD_W/20+60); target.z = THREE.MathUtils.clamp(target.z, -(WORLD_H/20+60), WORLD_H/20+60); }
   function updateCamera(){
@@ -4144,7 +5051,7 @@ try{
   let camAnim = null;
   function flyTo(t, d, ms){
     camAnim = {t0: performance.now(), dur: ms||600, fromT: target.clone(), fromD: dist,
-      toT: t.clone(), toD: THREE.MathUtils.clamp(d, 40, 1150)};
+      toT: t.clone(), toD: THREE.MathUtils.clamp(d, 40, 2350)};
   }
   R3.flyWorld = (x, y, dd)=>{ flyTo(new THREE.Vector3(SX(x), 0, SZ(y)), dd||170, 800); }; // world coords → framed flight (army list, clash framing)
   function stepCam(now){
@@ -4164,7 +5071,7 @@ try{
   function zoomAnchored(f, cx, cy){
     camAnim = null; // direct input always wins over a programmed flight
     const before = (cx!==undefined)? groundPoint(cx, cy) : null;
-    dist = THREE.MathUtils.clamp(dist/f, 40, 1150);
+    dist = THREE.MathUtils.clamp(dist/f, 40, 2350);
     updateCamera();
     if(before){ const after = groundPoint(cx, cy);
       if(after){ target.x += before.x-after.x; target.z += before.z-after.z; updateCamera(); } }
@@ -4442,6 +5349,44 @@ try{
     // seasons wash over the land (one tint uniform, lerped so winters creep in)
     { const st=SEASON_TINTS[G.seasonIdx&3]||SEASON_TINTS[0]; _seasonTint.setRGB(st[0],st[1],st[2]);
       if(window.__landMat) window.__landMat.userData.uSeason.value.lerp(_seasonTint, 0.03); }
+    if(windGroup){ // the wind lanes, when the Crown asks to see them
+      const show=!!(G&&G.showWinds); windGroup.visible=show;
+      if(show){ const w=(typeof WINDS!=='undefined'? WINDS[G.seasonIdx&3] : {x:1,y:0}); const L=Math.hypot(w.x,w.y)||1, ux=w.x/L, uy=w.y/L;
+        const anchors=[]; G.seas.forEach(z=>{ anchors.push([z.x,z.y]); z.neighbors.forEach(nid=>{ const n=seaById[nid]; if(n&&z.id<nid) anchors.push([(z.x+n.x)/2,(z.y+n.y)/2]); }); });
+        const rotY=-Math.atan2(uy,ux);
+        const ws=THREE.MathUtils.clamp(dist/110, 1, 9); // arrows grow with the chart, or they vanish at world view
+        windArrows.forEach((m,i)=>{ const a=anchors[i%anchors.length]; const ph=((t*0.55)+(i*0.37))%1;
+          m.position.set(SX(a[0])+ux*(ph-0.5)*46, BASE_Y+3.2, SZ(a[1])+uy*(ph-0.5)*46);
+          m.rotation.y=rotY; m.scale.set(ws,ws,ws); m.material.opacity=0.28+0.3*Math.sin(ph*Math.PI); });
+      }
+    }
+    { // the Second Age sky: the clock is the sun — dawn, noon, gold, dusk, and a lit night
+      const hf=((G&&G.hour)||9), nf=(hf<5.2||hf>=19.2)?1:(hf<6.8?0.55:(hf>=17.8&&hf<19.2)?0.4:0);
+      const dusk=(hf>=17&&hf<19.5)?1:0;
+      const bgHex=nf>0.7? 0x0e1a28 : (dusk? 0x51606e : 0x274b5e);
+      sun.intensity=THREE.MathUtils.lerp(1.95, 0.1, nf);
+      sun.color.setHex(nf>0.7? 0x8fb2e8 : (dusk? 0xff9a4d : 0xffbe78));
+      hemi.intensity=THREE.MathUtils.lerp(0.95, 0.3, nf);
+      fill.intensity=THREE.MathUtils.lerp(0.3, 0.1, nf);
+      if(scene.background&&scene.background.setHex) scene.background.setHex(bgHex);
+      if(scene.fog&&scene.fog.color) scene.fog.color.setHex(nf>0.7? 0x16222f : (dusk? 0xd98f57 : 0xe3c298));
+      if(scene.environmentIntensity!==undefined) scene.environmentIntensity=THREE.MathUtils.lerp(1, 0.12, nf); // the PMREM sky obeys the hour too
+      renderer.setClearColor(bgHex);
+      // the sea is shader-lit: grade its palette directly
+      if(!waterUniforms._base) waterUniforms._base={deep:waterUniforms.uDeep.value.clone(), shallow:waterUniforms.uShallow.value.clone(), sky:waterUniforms.uSky.value.clone()};
+      const wb=waterUniforms._base, _nc=new THREE.Color();
+      waterUniforms.uDeep.value.copy(wb.deep).lerp(_nc.set(0x0a2438), nf);
+      waterUniforms.uShallow.value.copy(wb.shallow).lerp(_nc.set(0x17455e), nf);
+      waterUniforms.uSky.value.copy(wb.sky).lerp(_nc.set(0x8ba3c0), nf);
+      if(waterUniforms.fogColor) waterUniforms.fogColor.value.setHex(nf>0.7? 0x16222f : (dusk? 0xd98f57 : 0xe3c298));
+      // land: the season tint also carries the night grade (deep blue, IBL hushed)
+      if(window.__landMat){ __landMat.envMapIntensity=THREE.MathUtils.lerp(0.4, 0.05, nf);
+        const st2=SEASON_TINTS[G.seasonIdx&3]||SEASON_TINTS[0];
+        _seasonTint.setRGB(st2[0]*(1-0.52*nf), st2[1]*(1-0.46*nf), st2[2]*(1-0.12*nf)+0.10*nf); }
+      if(lanterns) lanterns.material.opacity=nf*0.95;
+      gwReg.forEach(en=>{ if(en.beam&&en.beam.children[0]) en.beam.children[0].material.opacity=0.1+nf*0.24; });
+      stormVis.forEach((m,i)=>{ const s=(G.storms||[])[i]; if(!s){ m.visible=false; return; } m.visible=true; m.position.set(SX(s.x), BASE_Y+5.5, SZ(s.y)); m.rotation.y=t*0.22+s.seed; m.material.opacity=0.82+nf*0.1; });
+    }
     // the single shadow caster rides with the camera target, frustum fitted to the view
     sun.position.set(target.x+205, 95, target.z+55); sun.target.position.copy(target); // low amber key rides with the camera
     { const ext=THREE.MathUtils.clamp(dist*0.45, 70, 260), sc=sun.shadow.camera;
@@ -4466,11 +5411,37 @@ try{
     renderer.render(scene, camera);
   }
 
+  /* ---------- the Second Age sky: harbour lanterns + travelling tempests ---------- */
+  let lanterns=null; const stormVis=[];
+  function buildLanterns(){ const pts=[]; G.regions.filter(r=>r.isPort).forEach(r=>{ pts.push(SX(r.x), BASE_Y+2.4, SZ(r.y)); if(r.greatWork==='light') pts.push(SX(r.x), BASE_Y+9.5, SZ(r.y)); });
+    const g=new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(pts),3));
+    lanterns=new THREE.Points(g, new THREE.PointsMaterial({color:0xffc873, size:3.2, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true}));
+    lanterns.frustumCulled=false; scene.add(lanterns); }
+  function stormTexture(){ // a tempest drawn, not borrowed: dark heart, spiral arms, soft ragged edge
+    const c=document.createElement('canvas'); c.width=c.height=160; const g=c.getContext('2d');
+    const gr=g.createRadialGradient(80,80,6,80,80,78); gr.addColorStop(0,'rgba(20,28,36,0.95)'); gr.addColorStop(0.6,'rgba(26,36,46,0.72)'); gr.addColorStop(1,'rgba(26,36,46,0)');
+    g.fillStyle=gr; g.fillRect(0,0,160,160);
+    g.globalCompositeOperation='destination-out'; // carve three spiral channels — the heart stays black
+    for(let k=0;k<3;k++){ g.beginPath(); for(let a=0;a<=6.3;a+=0.12){ const r=26+a*8.4, x=80+Math.cos(a+k*2.1)*r, y=80+Math.sin(a+k*2.1)*r*0.66; if(a===0) g.moveTo(x,y); else g.lineTo(x,y); } g.lineWidth=8; g.strokeStyle='rgba(0,0,0,0.55)'; g.stroke(); }
+    g.globalCompositeOperation='source-over';
+    for(let i=0;i<46;i++){ const a=i*2.4, r=12+(i%9)*7; g.beginPath(); g.arc(80+Math.cos(a)*r, 80+Math.sin(a)*r*0.62, 2.0, 0, 6.3); g.fillStyle='rgba(8,13,18,0.55)'; g.fill(); }
+    return new THREE.CanvasTexture(c); }
+  function buildStorms(){ const tex=stormTexture(); window.__stormVis=stormVis; const cg=new THREE.CircleGeometry(47, 44); cg.rotateX(-Math.PI/2);
+    for(let i=0;i<5;i++){ const m=new THREE.Mesh(cg, new THREE.MeshBasicMaterial({map:tex, transparent:true, opacity:0.88, depthWrite:false, fog:false})); m.renderOrder=6; scene.add(m); stormVis.push(m); } }
+
+  /* wind lanes made visible: pale arrows riding the season's wind over every sea road */
+  let windGroup=null; const windArrows=[];
+  function buildWindArrows(){ windGroup=new THREE.Group();
+    const mat=new THREE.MeshBasicMaterial({color:0xfff2cf, transparent:true, opacity:0.5});
+    const cg=new THREE.ConeGeometry(1.1, 3.6, 6); cg.rotateZ(-Math.PI/2); // the point rides +X
+    for(let i=0;i<42;i++){ const m=new THREE.Mesh(cg, mat); windGroup.add(m); windArrows.push(m); }
+    windGroup.visible=false; scene.add(windGroup); }
+
   /* ---------- public API + activation ---------- */
   R3.active = true;
   R3.zoomBy = f => zoomAnchored(f, innerWidth/2, innerHeight/2);
   R3.home = () => { // Home frames the EMPIRE, not the empty middle of the chart — the capital in frame even on a phone
-    const cap=G.regions.find(r=>r.name===EMPIRES[0].capital && r.owner==='player') || G.regions.find(r=>r.owner==='player');
+    const cap=G.regions.find(r=>r.name===((G.empires.player||{}).capitalName||EMPIRES[0].capital) && r.owner==='player') || G.regions.find(r=>r.owner==='player');
     if(cap) flyTo(new THREE.Vector3(SX(cap.x), 0, SZ(cap.y)), Math.min(fitDist(), innerWidth<620? 620 : 880), 800);
     else flyTo(new THREE.Vector3(0,0,0), fitDist(), 700); };
   R3.pick = pick;
@@ -4572,7 +5543,7 @@ try{
   container.style.display='block';
   document.getElementById('map').style.display='none';
   refreshSettlements(); refreshLanes(); refreshFleets();
-  initGulls();
+  initGulls(); buildLanterns(); buildStorms(); buildWindArrows();
   const CAMH = location.hash.match(/cam=(-?[\d.]+),(-?[\d.]+),(\d+(?:\.\d+)?)/); // QA hook: frame world coords directly
   if(CAMH){ target.set(SX(+CAMH[1]), 0, SZ(+CAMH[2])); dist=+CAMH[3]; camAnim=null; }
   updateCamera(); frame();
