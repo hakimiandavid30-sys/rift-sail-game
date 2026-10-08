@@ -1455,6 +1455,103 @@ function tradeIncome(id){
   }));
   return sum;
 }
+/* WAVE 20 — what the painters may draw is now answered in ONE place. A lane exists on the
+   chart only where coin actually moves: the two harbours under one crown (or allied crowns)
+   on the same or neighbouring water, neither shut by a blockade. Exactly one connection
+   per pair, valued at the season's coin (the same figure tradeIncome banks), its arc bent
+   around the coast by the fleet's own curveLegs. What does not carry is not drawn. */
+function laneSet(){
+  const ports=G.regions.filter(r=>r.isPort), out=[];
+  for(let i=0;i<ports.length;i++) for(let j=i+1;j<ports.length;j++){
+    const a=ports[i], b=ports[j];
+    const own = a.owner && a.owner===b.owner? a.owner : (a.owner && b.owner && allied(a.owner,b.owner)? a.owner : (b.owner && a.owner && allied(b.owner,a.owner)? b.owner : null));
+    if(!own || !lanePays(a,b,own)) continue;
+    const blocked = isBlockaded(a)||isBlockaded(b); // lanePays already refuses shut harbours: a blockaded lane is a dead lane, never drawn
+    const legs=curveLegs({x:a.x, y:a.y}, {x:b.x, y:b.y});
+    const mid=legs[Math.floor(legs.length/2)] || legs[0];
+    out.push({ a, b, own, vol:18 + a.tier*8 + b.tier*8, blocked,
+      curve:{ v0:{x:a.x, y:a.y}, v1:{x:mid.ctrl.x, y:mid.ctrl.y}, v2:{x:b.x, y:b.y} } });
+  }
+  return out;
+}
+/* WAVE 20 — the mooring answer, shared by paint and probe alike. A hull tied up at a port
+   lies in the water alongside the quay — never on the town disc, never on dry shore. The
+   drawn coastline is bulkier than the straight zone-to-quay line (that line crosses drawn
+   land for 60 of 67 ports), so the mooring is read off the very approach the fleet sails
+   in on: the coast-bent curveLegs arc from the zone's heart to the quay, sampled fine, and
+   the berth is the LAST water on that arc before the town — with further berths stepped
+   seaward along the same approach, so a full roadstead never stacks two hulls on one
+   patch of sea. The set is walked once per port and kept. */
+const _moorCache={};
+function waterNear(x, y){ // the nearest honest water to a point that only thinks it floats
+  if(!onLandWorld(x, y)) return {x, y};
+  for(let r=24; r<=520; r+=24) for(let k=0;k<16;k++){
+    const a=k/16*Math.PI*2, qx=x+Math.cos(a)*r, qy=y+Math.sin(a)*r;
+    if(!onLandWorld(qx, qy)) return {x:qx, y:qy};
+  }
+  return null;
+}
+function mooringSet(port){
+  const hit=_moorCache[port.id]; if(hit) return hit;
+  const z=seaById[port.seaZone];
+  let out;
+  // even a sea zone's published heart can sit on the drawn land (zones 2 & 14 never took
+  // their Wave-19 re-seat) — so the walk primes from the nearest water that truly floats
+  const anchor=z? (waterNear(z.x, z.y) || waterNear(port.x, port.y)) : waterNear(port.x, port.y);
+  if(!anchor){ out=[{x:port.x, y:port.y}]; } // a chart with no water at all — the town itself, honestly labelled nowhere else to go
+  else{
+    const pts=[];
+    curveLegs(anchor, {x:port.x, y:port.y}).forEach(leg=>{
+      for(let s=0;s<1;s+=0.04){ const p=s, q=1-p;
+        pts.push({x:q*q*leg.a.x + 2*q*p*leg.ctrl.x + p*p*leg.b.x, y:q*q*leg.a.y + 2*q*p*leg.ctrl.y + p*p*leg.b.y}); }
+    });
+    pts.push({x:port.x, y:port.y});
+    const cum=[0]; for(let i=1;i<pts.length;i++) cum.push(cum[i-1] + Math.hypot(pts[i].x-pts[i-1].x, pts[i].y-pts[i-1].y));
+    // only proven-water samples may ever be chosen — an arc that crosses a spit and finds a
+    // pocket again must not berth a hull on the spit
+    const wet=[]; for(let i=0;i<pts.length;i++) if(!onLandWorld(pts[i].x, pts[i].y)) wet.push(i);
+    if(!wet.length) out=[{x:anchor.x, y:anchor.y}];
+    else{
+      out=[]; const wi=wet[wet.length-1], total=cum[wi]; // paces of water between the beach and the berth line
+      for(let k=0;k<6;k++){
+        const want=Math.max(0, total - (16 + k*30));
+        let bi=wi, bd=1e18; for(const i of wet){ const d=Math.abs(cum[i]-want); if(d<bd){ bd=d; bi=i; } }
+        let cand=pts[bi];
+        if(out.some(o=>Math.hypot(o.x-cand.x, o.y-cand.y)<8)){
+          cand=null;
+          for(let i=bi-1;i>=0;i--){ if(wet.includes(i) && !out.some(o=>Math.hypot(o.x-pts[i].x, o.y-pts[i].y)<8)){ cand=pts[i]; break; } }
+          if(!cand) break;
+        }
+        out.push({x:cand.x, y:cand.y});
+      }
+      if(!out.length) out=[pts[wi]];
+    }
+  }
+  _moorCache[port.id]=out; return out;
+}
+function dockPoint(port, slot, seed){
+  const set=mooringSet(port); if(!set.length) return {x:port.x, y:port.y};
+  const k=Math.abs(((slot||0) + ((seed||0)%3)) ) % set.length;
+  return set[k];
+}
+/* WAVE 20 — where a berthed squadron is actually DRAWN. A fleet lying at a harbour (node
+   'r<port>') moors at the quay row; a blockading squadron keeps its roadstead (the two-thirds
+   point its guns already command); anything else rides where the sim holds it. The renderer
+   and the probes read this one function — one truth for hulls at rest. */
+function berthPos(f){
+  if(f.at) return fPos(f);
+  const m=f.node && /^r(\d+)$/.exec(f.node);
+  const r=m? rById[+m[1]] : null;
+  if(f.stance==='blockade'){ const bp=fPos(f);
+    if(!r || !r.isPort || !onLandWorld(bp.x, bp.y)) return bp;
+    // a strangler's roadstead must still float: walk seaward until the water test blesses her
+    const z=seaById[r.seaZone];
+    for(let k=1;k<=14;k++){ const x=bp.x+(z.x-bp.x)*k/14, y=bp.y+(z.y-bp.y)*k/14; if(!onLandWorld(x,y)) return {x, y}; }
+    return waterNear(bp.x, bp.y) || bp;
+  }
+  if(r && r.isPort){ const berthed=G.fleets.filter(o=>!o.at && o.stance!=='blockade' && o.node===f.node); return dockPoint(r, Math.max(0, berthed.indexOf(f)), f.id); }
+  return fPos(f);
+}
 function regionIncome(r){
   let v = 14 + r.tier*10 + Math.round(r.pop/900);
   if(r.hasMarket) v+=10;
@@ -1739,21 +1836,18 @@ function merchantPos(m, dayF){
 }
 
 function drawLanes(){
-  const drawn=new Set();
-  const ports=G.regions.filter(r=>r.isPort);
-  ports.forEach(a=>ports.forEach(b=>{
-    if(a.id>=b.id)return; const key=a.id+'-'+b.id; if(drawn.has(key))return; drawn.add(key);
-    const own=a.owner&&a.owner===b.owner? a.owner : (a.owner&&allied(a.owner,b.owner)?a.owner:null);
-    const pays=own&&lanePays(a,b,own);
-    if(a.seaZone!==b.seaZone && !seaById[a.seaZone].neighbors.includes(b.seaZone)) return;
-    ctx.beginPath(); ctx.moveTo(a.x,a.y);
-    const za=seaById[a.seaZone], zb=seaById[b.seaZone];
-    ctx.quadraticCurveTo((za.x+zb.x)/2,(za.y+zb.y)/2, b.x,b.y);
-    if(pays){ ctx.strokeStyle=emp(own).color+'cc'; ctx.lineWidth=(3+ (a.tier+b.tier))*WS; ctx.setLineDash([10*WS,7*WS]); }
-    else if(own){ ctx.strokeStyle='rgba(230,220,190,.35)'; ctx.lineWidth=1.6*WS; ctx.setLineDash([4*WS,7*WS]); }
-    else return;
-    ctx.stroke(); ctx.setLineDash([]);
-  }));
+  // WAVE 20: the fallback chart swears the same oath as the diorama — one clean sea-bent
+  // line per connection that is truly carrying, in parchment and gold; what does not
+  // carry is not drawn; a lane under blockade is a dead lane and not drawn at all.
+  laneSet().forEach(L=>{
+    ctx.beginPath(); ctx.moveTo(L.a.x, L.a.y);
+    ctx.quadraticCurveTo(L.curve.v1.x, L.curve.v1.y, L.b.x, L.b.y);
+    ctx.strokeStyle='rgba(212,175,105,0.55)'; ctx.lineWidth=(1.6 + (L.vol-26)/8)*WS;
+    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(L.a.x, L.a.y);
+    ctx.quadraticCurveTo(L.curve.v1.x, L.curve.v1.y, L.b.x, L.b.y);
+    ctx.strokeStyle=emp(L.own).color+'66'; ctx.lineWidth=3.4*WS; ctx.stroke();
+  });
 }
 </script>
 <script>
@@ -7499,6 +7593,59 @@ try{
   /* ---------- dynamic layers ---------- */
   const discs = new Map(), settlements = new Map(), fleetVis = new Map();
   let laneGroup = null, laneCurves = [], laneSig = '';
+  /* WAVE 20 — the lane painter's kit. One flow clock feeds every lane material; the
+     ribbons are gold thread laid on the sailing lanes themselves (the very curveLegs
+     arcs the hulls ride), so line and ship can never disagree. Materials are cached
+     and shared; geometries alone are per-lane and die with the rebuild. */
+  const LANE_U = { value: 0 };
+  const _laneMats = new Map();
+  // (lane endpoints dive under the towns' harbour discs — no caps needed, the quay swallows the thread)
+  function laneMat(colHex, base, dash, rep){
+    const key = colHex+'|'+base+'|'+(dash?1:0);
+    let m = _laneMats.get(key);
+    if(!m){
+      m = new THREE.MeshBasicMaterial({ color: colHex, transparent: true, opacity: base, depthWrite: false });
+      m.userData.base = base;
+      m.onBeforeCompile = sh=>{
+        sh.uniforms.uLaneTime = LANE_U;
+        sh.uniforms.uRep = { value: rep||10 };
+        sh.uniforms.uDash = { value: dash? 1 : 0 };
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying float vLaneU;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLaneU = uv.x;');
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying float vLaneU;\nuniform float uLaneTime;\nuniform float uRep;\nuniform float uDash;')
+          .replace('#include <color_fragment>', `#include <color_fragment>
+            if(uDash > 0.5){ if(fract(vLaneU * uRep) > 0.52) discard; }
+            else { diffuseColor.a *= 0.86 + 0.22 * sin((vLaneU * uRep - uLaneTime * 0.045) * 6.28318); }`);
+      };
+      m.customProgramCacheKey = ()=>'laneflow'+(dash?'d':'s');
+      _laneMats.set(key, m);
+    }
+    return m;
+  }
+  const toV3 = (w, y)=> new THREE.Vector3(SX(w.x), y, SZ(w.y));
+  function lanePath3(L){ // one gentle spline through the sailing legs' own bends — the union of the arcs, not a ruler line
+    const legs = curveLegs({x:L.a.x, y:L.a.y}, {x:L.b.x, y:L.b.y});
+    const pts = [ toV3(legs[0].a, BASE_Y+0.35) ];
+    legs.forEach(leg=>{
+      for(let s=0.25; s<1.001; s+=0.25){ const p=Math.min(1,s), q=1-p;
+        pts.push(new THREE.Vector3(SX(q*q*leg.a.x + 2*q*p*leg.ctrl.x + p*p*leg.b.x), BASE_Y+0.45, SZ(q*q*leg.a.y + 2*q*p*leg.ctrl.y + p*p*leg.b.y))); }
+    });
+    pts.push(toV3(legs[legs.length-1].b, BASE_Y+0.35));
+    return new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  }
+  function laneMesh(L, colHex, base, dash, fat){
+    const curve = lanePath3(L);
+    const len3 = Math.max(20, curve.getLength());
+    const r = (0.34 + 0.55*Math.min(1.1, L.vol/52)) * (fat||1);
+    const geo = new THREE.TubeGeometry(curve, Math.max(16, Math.min(64, Math.round(len3/7))), r, 7, false);
+    return new THREE.Mesh(geo, laneMat(colHex, base, dash, Math.max(3, Math.round(len3/(dash? 9 : 15)))));
+  }
+  /* the painter's books: the sim's lanes, their trunks, and the dead ones — kept beside
+     the group so the frame loop and the selection brush read the same ledger */
+  let laneBook = [], deadBook = [], laneTrunks = new Set();
+  let laneSelGroup = null, laneSelKey = '';
   const dots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.78, 8, 6), new THREE.MeshBasicMaterial({color:0xffe9a8}), 400);
   dots.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(dots);
   const ringGeo = new THREE.RingGeometry(12.1, 13.3, 44); ringGeo.rotateX(-Math.PI/2);
@@ -7607,28 +7754,48 @@ try{
   function refreshLanes(){
     const sig = laneSignature(); if(sig===laneSig && laneGroup) return; laneSig = sig;
     if(laneGroup){ scene.remove(laneGroup); laneGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
+    /* WAVE 20: one clean line per connection that is truly carrying. laneSet() is the only
+       authority — pairs that merely COULD trade are no longer drawn at all, an end shut by
+       a blockade turns its lane to broken rust, and the cargo dots run on the mid leg's own
+       coast-bent arc so the thread and the hulls that ply it agree bend for bend. */
+    const lanes = laneSet();
+    laneBook = lanes; deadBook = [];
+    { // the dead lanes: obligations the ledger would keep if either harbour were not shut —
+      // enumerated exactly as laneSet enumerates, minus the pays test, flagged blocked
+      const ports = G.regions.filter(r=>r.isPort);
+      for(let i=0;i<ports.length;i++) for(let j=i+1;j<ports.length;j++){
+        const a=ports[i], b=ports[j];
+        const own = a.owner && a.owner===b.owner? a.owner : (a.owner && b.owner && allied(a.owner,b.owner)? a.owner : (b.owner && a.owner && allied(b.owner,a.owner)? b.owner : null));
+        if(!own) continue;
+        if(a.seaZone!==b.seaZone && !seaById[a.seaZone].neighbors.includes(b.seaZone)) continue;
+        if(!(isBlockaded(a)||isBlockaded(b)) || lanePays(a,b,own)) continue;
+        deadBook.push({ a, b, own });
+      }
+    }
+    // the trunk set: the few roads that carry most of the coin, read at a glance from orbit
+    const totalVol = lanes.reduce((s,L)=>s+L.vol, 0) || 1;
+    laneTrunks = new Set(); { let acc=0;
+      lanes.slice().sort((x,y)=>y.vol-x.vol).forEach(L=>{ if(!laneTrunks.size || acc+L.vol<=totalVol*0.55){ laneTrunks.add(L); acc+=L.vol; } }); }
     laneGroup = new THREE.Group(); laneCurves = [];
-    const ports = G.regions.filter(r=>r.isPort);
-    ports.forEach(a=>ports.forEach(b=>{
-      if(a.id>=b.id) return;
-      const own = a.owner && a.owner===b.owner? a.owner : (a.owner && allied(a.owner,b.owner)? a.owner : null);
-      if(a.seaZone!==b.seaZone && !seaById[a.seaZone].neighbors.includes(b.seaZone)) return;
-      const pays = own && lanePays(a,b,own);
-      if(!own && !pays) return;
-      const za=seaById[a.seaZone], zb=seaById[b.seaZone];
-      const p0=new THREE.Vector3(SX(a.x), BASE_Y+0.7, SZ(a.y));
-      const p2=new THREE.Vector3(SX(b.x), BASE_Y+0.7, SZ(b.y));
-      const p1=new THREE.Vector3((SX(za.x)+SX(zb.x))/2, 13.5, (SZ(za.y)+SZ(zb.y))/2);
-      const curve = new THREE.QuadraticBezierCurve3(p0,p1,p2);
-      const geo = new THREE.TubeGeometry(curve, 22, pays?0.55:0.3, 6, false);
-      const blocked = isBlockaded(a)||isBlockaded(b);
-      const mat = new THREE.MeshBasicMaterial({ color: blocked? 0x8a3a28 : (pays? new THREE.Color(emp(own).color) : 0xe6dcbe),
-        transparent:true, opacity: pays? 1.0 : 0.5 });
-      mat.userData.base = pays? 1.0 : 0.5; // LOOK-TO-9: the frame loop fades ribbons to hairlines at world zoom
-      laneGroup.add(new THREE.Mesh(geo, mat));
-      if(pays && !blocked) laneCurves.push(curve);
-    }));
+    const addMesh = (m, rest)=>{ m.userData.rest = !!rest; m.renderOrder = 3; laneGroup.add(m); };
+    lanes.forEach(L=>{
+      const legs = curveLegs({x:L.a.x, y:L.a.y}, {x:L.b.x, y:L.b.y});
+      legs.forEach(leg=> laneCurves.push(new THREE.QuadraticBezierCurve3(
+        toV3(leg.a, BASE_Y+0.55), toV3(leg.ctrl, BASE_Y+0.95), toV3(leg.b, BASE_Y+0.55))));
+      if(!L.own) return;
+      const eCol = new THREE.Color(emp(L.own).color);
+      const isMine = L.own==='player';
+      // the owner's wash runs under the gold: a rival's lanes stay faint, the Crown's own read stronger
+      addMesh(laneMesh(L, eCol.getHex(), isMine? 0.30 : 0.13, false, 2.05), !laneTrunks.has(L));
+      addMesh(laneMesh(L, 0xd9b06a, isMine? 0.95 : 0.68, false, 1), !laneTrunks.has(L)); // the gold thread itself
+    });
+    deadBook.forEach(L=> addMesh(laneMesh({...L, vol:30}, 0x9c4a34, 0.85, true, 1.05), false)); // muted rust, broken tread
     scene.add(laneGroup);
+    laneSelKey = '__dirty__'; // the selection brush repaints against the new ledger on the next frame
+    // QA: the painter's ledger, read straight off the chart
+    window.__laneDbg = { drawn: lanes.length, dead: deadBook.length, trunks: laneTrunks.size,
+      drawnIds: lanes.map(L=>L.a.id+'-'+L.b.id), deadIds: deadBook.map(L=>L.a.id+'-'+L.b.id),
+      meshes: laneGroup.children.length };
   }
   /* ---------- kit ships: modeled hulls, owner ensign, sails that furl in harbour ---------- */
   const KIT_SHIP_ROT = -Math.PI/2; // the kit's bow rides −Z; turn it onto the fleet's +X bow line
@@ -8256,10 +8423,13 @@ try{
     // fleets LIVE at their true positions — sailing ships glide, anchored ones bob
     G.fleets.forEach((f,i)=>{
       const v=fleetVis.get(f.id); if(!v) return;
-      const p=fPos(f);
+      // WAVE 20: a berthed squadron lies at her quay (berthPos is the one truth — the sim
+      // still holds her roadstead anchor for every blockade and sea-rule that reads fPos)
+      const berthed = !f.at && f.stance!=='blockade' && f.node && f.node[0] === 'r';
+      const p = berthed? berthPos(f) : fPos(f);
       const z=seaById[f.zone];
-      const peers=G.fleets.filter(o=>!o.at && o.zone===f.zone); const slot=f.at? 0 : peers.indexOf(f)-(peers.length-1)/2;
-      const tx=SX(p.x)+ (f.at? 0 : slot*10), tz=SZ(p.y)+ (f.at? 0 : (i%2)*4);
+      const peers=G.fleets.filter(o=>!o.at && o.zone===f.zone); const slot=f.at || berthed ? 0 : peers.indexOf(f)-(peers.length-1)/2;
+      const tx=SX(p.x)+ slot*10, tz=SZ(p.y)+ ((f.at || berthed)? 0 : (i%2)*4);
       const k=1-Math.exp(-dt*3.2);
       const dx=tx-v.group.position.x, dz=tz-v.group.position.z;
       v.group.position.x += dx*k;
@@ -8288,7 +8458,8 @@ try{
     updateArmyBodies(t);
     updateSqnPennants(t);
     updateClashVis(t);
-    // cargo dots stream along paying lanes
+    // cargo dots stream along carrying lanes — on the very arcs the hulls sail
+    LANE_U.value = t; // the flow clock: every lane ribbon drinks from this one spring
     if(laneCurves.length){
       const n=Math.min(380, laneCurves.length*4);
       const m4=new THREE.Matrix4();
@@ -8300,6 +8471,33 @@ try{
       }
       dots.count=n; dots.instanceMatrix.needsUpdate=true;
     } else dots.count=0;
+    /* WAVE 20 — the lane brush: zoom discipline and the selection spotlight. From orbit only
+       the trunk roads show; closer in, every carrying lane; a picked port lifts its own
+       lanes bright while the rest of the chart's thread falls back. */
+    if(laneGroup){
+      const farBand = dist>900;
+      const selId = (selected && selected.type==='region')? selected.id : null;
+      laneGroup.children.forEach(m=>{ m.visible = !(m.userData.rest && farBand); }); // opacity is one writer: the fade below
+      const skey = selId!=null? 'r'+selId : '';
+      if(skey!==laneSelKey){
+        laneSelKey = skey;
+        if(laneSelGroup){ scene.remove(laneSelGroup); laneSelGroup.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); laneSelGroup=null; }
+        if(selId!=null){
+          const mine = laneBook.filter(L=>L.a.id===selId || L.b.id===selId);
+          const dead = deadBook.filter(L=>L.a.id===selId || L.b.id===selId);
+          if(mine.length || dead.length){
+            laneSelGroup = new THREE.Group();
+            mine.forEach(L=>{
+              const eCol = new THREE.Color(emp(L.own).color);
+              const w = laneMesh(L, eCol.getHex(), 0.5, false, 2.3); w.renderOrder = 4; laneSelGroup.add(w);
+              const c = laneMesh(L, 0xe8c476, 1.0, false, 1.12); c.renderOrder = 4; laneSelGroup.add(c);
+            });
+            dead.forEach(L=>{ const d = laneMesh({...L, vol:30}, 0xb0523c, 1.0, true, 1.18); d.renderOrder = 4; laneSelGroup.add(d); });
+            scene.add(laneSelGroup);
+          }
+        }
+      }
+    }
     // selection + coach rings
     if(selected && selected.type==='region'){ const r=rById[selected.id];
       selRing.visible=true; selRing.position.set(SX(r.x), BASE_Y+0.22, SZ(r.y));
@@ -8316,9 +8514,9 @@ try{
     const showSats = dist < 480; // spreads further on the big chart, so hamlets earn their keep from further out
     const showDec = dist < 560; // zoom-band LOD: ground glyphs fade out before the world view (towns read by silhouette there)
     discs.forEach(d=>{ if(d.owner) d.fill.material.opacity = dist>330? 0.56 : 0.42; }); // the wash deepens as you pull back
-    if(laneGroup){ // LOOK-TO-9: ribbons near, hairlines far — the ticker and arrows carry the story at world zoom
-      const lf=THREE.MathUtils.clamp(1.18-dist*0.0005, 0.30, 1);
-      laneGroup.children.forEach(m=>{ m.material.opacity=(m.material.userData.base||0.5)*lf; });
+    if(laneGroup){ // WAVE 20 keeps the far hairline fade for the lane thread
+      const lf=THREE.MathUtils.clamp(1.18-dist*0.0005, 0.55, 1);
+      laneGroup.children.forEach(m=>{ m.material.opacity=(m.material.userData.base||0.5)*lf*(laneSelKey? 0.35 : 1); });
     }
     settlements.forEach(v=>{ if(v.sat && v.sat.visible !== showSats) v.sat.visible = showSats;
       if(v.dec && v.dec.visible !== showDec) v.dec.visible = showDec;
