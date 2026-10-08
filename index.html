@@ -2596,6 +2596,7 @@ function selectRegion(r){
     (r.isPort? ' · on the '+seaById[r.seaZone].name : '')+
     (isNewWorld(r)? (r.sighted? ' · 🗺 sighted by your sails' : ' · 🗺 uncharted shore') : '');
   const sgSheet=siegeAt(r.id);
+  const refSrc=refugeeSource(r); // a same-crown neighbour under the ring: its people are on our roads
   const armiesHere=(G.armies||[]).filter(a=>a.atRegion===r.id && a.owner===r.owner);
   $('#sheet-stats').innerHTML=statRow([
     ['🏘 Settlement',['Hamlet','Town','City','Great Port'][r.tier]],
@@ -2610,6 +2611,8 @@ function selectRegion(r){
     ...(r.isPort?[['🌾 Grain stores',daysOfSupply(r,'grain')+' days · '+goodPrice(r,'grain')+'g/unit'],['📦 '+GOODS[r.specialty]+' price',goodPrice(r,r.specialty)+'g — '+priceWhy(r,r.specialty)]]:[]),
     ...(blockadeStage(r)?[['⛓ Blockade',blockadeStage(r)+' — the pressure deepens daily']]:[]),
     ...(sgSheet?[['🎇 Siege', SIEGE_STAGES[sgSheet.stage]+' — '+(sgSheet.stage<4? 'next rung in ~'+Math.max(0, Math.ceil(sgSheet.stageDays-(G.day-sgSheet.stageDay)))+' days' : 'the end is here')+' · besieged by '+emp(sgSheet.atkOwner).name]]:[]),
+    ...(sgSheet?[['🎇 The ring presses','besieged — the market starves: stores drain ~'+Math.round((0.35+0.15*Math.min(4,sgSheet.stage))*100)+'% faster than the bakers bake'+(sgSheet.stage>=1?' · refugees clog the roads to friendly towns':'')]]:[]),
+    ...(refSrc?[['🚶 Refugees','out of '+refSrc.name+' — more mouths at the mill; grain runs dear while the ring stands']]:[]),
   ]);
   const acts=$('#sheet-acts'); acts.innerHTML='';
   // while a ring stands, the ladder rules this sheet — besieger and besieged read the same page
@@ -2997,6 +3000,10 @@ function checkCapitalLoss(ownerId){
 const SIEGE_STAGES=['Invested','Batteries Raised','Walls Breached','Starving','Storm or Surrender'];
 const SIEGE_STAGE_LEN=[6,7,6,0,0]; // stage 4 (Starving) is timed by the granary, not the calendar
 function siegeAt(regionId){ if(!G||!Array.isArray(G.sieges)||regionId==null) return null; return G.sieges.find(s=>s.regionId===regionId)||null; }
+function refugeeSource(r){ // WAVE 12: is a same-crown neighbour of this town under the ring? its people walk to us
+  if(!r||!r.owner||!Array.isArray(G.sieges)) return null;
+  return G.sieges.map(s2=>rById[s2.regionId]).find(b=>b&&b.owner===r.owner&&b.id!==r.id&&b.neighbors.includes(r.id))||null;
+}
 function isBesieged(r){ return !!siegeAt(r&&r.id); }
 function siegeArmy(sg){ return (G.armies||[]).find(a=>a.id===sg.armyId)||null; }
 function siegeBreachDiv(r){ // stage 3+: the breach means the wall and the Citadel ring count for halves, not wholes
@@ -3043,8 +3050,22 @@ function startSiege(a, r, quiet){
 }
 function endSiege(sg, how){
   if(!sg) return;
+  const rEnd=rById[sg.regionId];
   G.sieges=(G.sieges||[]).filter(s=>s!==sg&&s.id!==sg.id);
   const a=siegeArmy(sg); if(a&&a.siegeId===sg.id) a.siegeId=null;
+  /* CHRONICLER FOLLOW-THROUGH (WAVE 12): every siege earns its closing line in the Gazette —
+     a fall by storm names the new holder; a ring raised or broken from outside is closed in
+     print too. Surrenders already speak for themselves inside surrenderTown, so they are
+     left alone here. The ceremony gate keeps one ending per siege, by name, forever. */
+  if(rEnd && ceremony('sgclose:'+sg.id)){
+    const atkName=(emp(sg.atkOwner)||{}).name;
+    if(how==='stormed' && atkName)
+      gazette('🎇 <b>The siege of '+rEnd.name+' is closed in thunder</b> — the storm takes the walls, and '+atkName+' holds the town. The ladders come down; the camp folds its tents.');
+    else if(how==='raised' && sg.atkOwner==='player')
+      gazette('🎇 <b>The siege of '+rEnd.name+' is raised at your order</b> — the host strikes its tents and marches off. The walls stand unbowed, and so, for now, do their holders.');
+    else if(how==='relieved' && sg.atkOwner==='player')
+      gazette('🎇 <b>Your siege of '+rEnd.name+' is broken from outside</b> — relief rides in over the hills and the ring dissolves before it. The camp is a memory by vespers.');
+  }
 }
 function advanceStage(sg){
   const r=rById[sg.regionId]; if(!r||!G.sieges.includes(sg)) return;
@@ -3194,6 +3215,23 @@ function siegesDaily(){
         'The camp surgeons bury more than the gunners do, these weeks. '+loss+' gone to the flux before '+r.name+' — the men bear it, but it writes the calendar for us.',
         'Rain in the trenches and bad water: '+loss+' struck off the strength. If the breach does not open soon, Majesty, the camp will vote with its feet.'])); }
     }
+    /* BESIEGER PRESSURE (WAVE 12): a ringed town bleeds stores every single day, long before
+       the granary formally fails — smugglers charge triple, the mills stand idle under the
+       batteries, and mouths panic-buy what bread remains. The drain deepens with the rung,
+       which is exactly what the price line confesses ("besieged — the market starves") and
+       what the defender's granary clock (aiSiegeDefend's endure/surrender math) now feels. */
+    initSupply(r);
+    r.supply.grain=Math.max(0,(r.supply.grain||0)-dailyUse(r)*(0.35+0.15*Math.min(4,sg.stage)));
+    if(r.supply[r.specialty]!=null) r.supply[r.specialty]=Math.max(0,r.supply[r.specialty]-dailyUse(r)*0.2);
+    if(sg.stage>=1&&r.owner&&rnd()<0.5){ // once the batteries open, the roads fill with the fleeing
+      const flow=Math.min(45, Math.max(6, Math.round(r.pop*0.0006)));
+      r.pop=Math.max(600, r.pop-Math.round(flow*0.6));
+      r.neighbors.map(id=>rById[id]).filter(nb=>nb&&nb.owner===r.owner).forEach(nb=>{
+        initSupply(nb);
+        nb.pop+=flow; // a friendly hearth takes them in…
+        nb.supply.grain=Math.max(0,(nb.supply.grain||0)-dailyUse(nb)*0.3); // …and one more mouth queues at the mill
+      });
+    }
     if(sg.stage>=3){ // Starving (and the last rung): the granary is the real fortress now
       const rate=sg.defChoice==='endure'? 0.008 : 0.014;
       r.troops=Math.max(0, r.troops-Math.max(1, Math.round(sg.garrison0*rate)));
@@ -3215,7 +3253,8 @@ function siegeSheetActs(r, sg, acts){ // both crowns read the same page: the lad
     'Stage '+(sg.stage+1)+' of 5: <b>'+SIEGE_STAGES[sg.stage]+'</b>'+(sg.stage<4? ' · next rung in ~'+daysLeft+' days':'')+
     '<br>'+siegeLadderText(sg)+
     '<br>Besiegers: '+fmt(a? a.men:0)+' men · Garrison: '+fmt(r.troops)+' men (was '+fmt(sg.garrison0)+')'+
-    (r.isPort? ' · 🌾 granary: '+daysOfSupply(r,'grain')+' days of grain':''),
+    (r.isPort? ' · 🌾 granary: '+daysOfSupply(r,'grain')+' days of grain':'')+
+    '<br>🎇 The ring presses: the market starves — stores bleed ~'+Math.round((0.35+0.15*Math.min(4,sg.stage))*100)+'% faster than in peace'+(sg.stage>=1?', and the roads to friendly towns fill with the fleeing':'')+'. Storm, relieve, or endure — delay itself is a weapon now.',
     ()=>{},'',true));
   if(sg.atkOwner==='player'&&a){
     acts.appendChild(actBtn('💥 Assault the Walls Now','Skip the ladder and storm them today — '+siegeChanceText(a, r),
@@ -3641,10 +3680,10 @@ function cheapestGood(r){ let bg='grain', bf=Infinity, bp=Infinity;
 function awningTint(r){ return (r&&r.isPort)? (GOOD_TINT[cheapestGood(r)]||'#d9903f') : '#d9903f'; }
 function priceWhy(r,g){
 initSupply(r); const have=r.supply[g]||0, st=blockadeStage(r);
-if(g===r.specialty) return have>90? 'the quays groan with unsold '+GOODS[g]+' — a glut': have>50? GOODS[g]+' plentiful after a fat season': have>20? GOODS[g]+' moving briskly': 'the last of the '+GOODS[g]+' — merchants bid hard';
 const d=daysOfSupply(r,g);
 const sgP=siegeAt(r.id);
-if(sgP) return 'besieged — '+SIEGE_STAGES[sgP.stage].toLowerCase()+' at the walls, and only '+d+' days of '+GOODS[g]+' inside them';
+if(sgP) return 'besieged — the market starves: '+SIEGE_STAGES[sgP.stage].toLowerCase()+' at the walls, stores bleeding daily — only '+d+' days of '+GOODS[g]+' inside them';
+if(g===r.specialty) return have>90? 'the quays groan with unsold '+GOODS[g]+' — a glut': have>50? GOODS[g]+' plentiful after a fat season': have>20? GOODS[g]+' moving briskly': 'the last of the '+GOODS[g]+' — merchants bid hard';
 if(st) return st.toLowerCase()+' by blockade — only '+d+' days of '+GOODS[g]+' inside the walls';
 return d<20? 'grain short — '+d+' days left and two harvests missed': d<45? 'stores thin ('+d+' days) — prices firm up': d<=90? 'bread secure for '+d+' days': 'granaries brim ('+d+' days) — sellers beg buyers';
 }
@@ -7123,8 +7162,23 @@ try{
      costs ~3 draw calls however long the ladder climbs. Laid out only when the siege set
      changes; per-frame work is the smoke drift and a distance gate. ----- ----- ----- */
   const CAMP_MAX=8, CAMP_TENTS=7, CAMP_STAKES=14, CAMP_PUFFS=3;
+  const SG_TRENCH=8, SG_RUBBLE=10, SG_SCORCH=5; // WAVE 12 stage-dressing counts, per siege
   let campTentIM=null, campStakeIM=null, campPuffs=[], campKey='__none__', campCenters=[];
+  let siegeRamIM=null, siegeTrenchIM=null, siegeRubbleIM=null, siegeScorchIM=null, siegeDust=[], breachPts=[];
   const _cmM=new THREE.Matrix4(), _cmQ=new THREE.Quaternion(), _cmE=new THREE.Euler(), _cmV=new THREE.Vector3(), _cmS=new THREE.Vector3(), _cmC=new THREE.Color();
+  function ramGeometry(){ // a battering ram under its timber hut: slung log, iron head, pitched roof, four wheels
+    try{
+      const parts=[];
+      const hut=new THREE.BoxGeometry(2.3, 1.5, 4.6); hut.translate(0, 1.2, 0); parts.push(hut);
+      [-1,1].forEach(s2=>{ const roof=new THREE.BoxGeometry(1.6, 0.18, 4.9); roof.rotateZ(s2*0.62); roof.translate(-s2*0.6, 2.2, 0); parts.push(roof); });
+      const log=new THREE.CylinderGeometry(0.34, 0.44, 4.6, 7); log.rotateX(Math.PI/2); log.translate(0, 0.6, 0.3); parts.push(log);
+      const head=new THREE.ConeGeometry(0.46, 1.15, 7); head.rotateX(Math.PI/2); head.translate(0, 0.6, 3.1); parts.push(head);
+      [[-1.14,-1.3],[1.14,-1.3],[-1.14,1.3],[1.14,1.3]].forEach(w=>{ const wh=new THREE.CylinderGeometry(0.46,0.46,0.18,8); wh.rotateZ(Math.PI/2); wh.translate(w[0], 0.46, w[1]); parts.push(wh); });
+      const mg=window.__mergeGeometries? window.__mergeGeometries(parts, false) : null;
+      if(mg) return mg;
+    }catch(e){ /* fall through to the plain hut */ }
+    return new THREE.BoxGeometry(2.3, 1.9, 4.6);
+  }
   function initSiegeCamps(){
     const tg=new THREE.ConeGeometry(1.2, 2.1, 4); tg.rotateY(Math.PI/4); // a four-panel campaign tent
     campTentIM=new THREE.InstancedMesh(tg, new THREE.MeshLambertMaterial({color:0xffffff}), CAMP_MAX*CAMP_TENTS);
@@ -7135,9 +7189,26 @@ try{
       const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:makeSmokeTex(), color:0xd8cfc2, transparent:true, opacity:0, depthWrite:false}));
       sp.visible=false; scene.add(sp); campPuffs.push(sp);
     }
+    /* WAVE 12 stage dressing — the ladder reads from the map: at Batteries Raised a ram
+       rolls out and sap trenches zigzag from camp to palisade; at Walls Breached the wall
+       itself wears rubble, scorch and a slow dust smudge. Four more instanced pools + a
+       sprite shelf: the whole ladder still costs single-digit draw calls. */
+    siegeRamIM=new THREE.InstancedMesh(ramGeometry(), new THREE.MeshLambertMaterial({color:0x7d5c36}), CAMP_MAX);
+    siegeRamIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage); siegeRamIM.frustumCulled=false; siegeRamIM.count=0; scene.add(siegeRamIM);
+    const trenchG=new THREE.PlaneGeometry(2.6, 0.9); trenchG.rotateX(-Math.PI/2);
+    siegeTrenchIM=new THREE.InstancedMesh(trenchG, new THREE.MeshLambertMaterial({color:0x38281a, side:THREE.DoubleSide}), CAMP_MAX*SG_TRENCH);
+    siegeTrenchIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage); siegeTrenchIM.frustumCulled=false; siegeTrenchIM.count=0; scene.add(siegeTrenchIM);
+    siegeRubbleIM=new THREE.InstancedMesh(new THREE.TetrahedronGeometry(0.62), new THREE.MeshLambertMaterial({color:0x8d8175}), CAMP_MAX*SG_RUBBLE);
+    siegeRubbleIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage); siegeRubbleIM.frustumCulled=false; siegeRubbleIM.count=0; scene.add(siegeRubbleIM);
+    siegeScorchIM=new THREE.InstancedMesh(new THREE.BoxGeometry(2.0, 2.4, 0.12), new THREE.MeshLambertMaterial({color:0x14100c}), CAMP_MAX*SG_SCORCH);
+    siegeScorchIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage); siegeScorchIM.frustumCulled=false; siegeScorchIM.count=0; scene.add(siegeScorchIM);
+    for(let i=0;i<CAMP_MAX;i++){
+      const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:makeSmokeTex(), color:0x6b5d4c, transparent:true, opacity:0, depthWrite:false}));
+      sp.visible=false; scene.add(sp); siegeDust.push(sp);
+    }
   }
   function layoutSiegeCamps(list){
-    campCenters=[]; let ti=0, si=0;
+    campCenters=[]; breachPts=[]; let ti=0, si=0, ri=0, tri=0, rui=0, sci=0;
     list.forEach(sg=>{
       const r=rById[sg.regionId]; if(!r) return;
       const bx=SX(r.x), bz=SZ(r.y), fr=rById[sg.fromRegionId];
@@ -7162,19 +7233,57 @@ try{
         _cmV.set(bx+Math.cos(th)*(R+4.4), BASE_Y+0.8, bz+Math.sin(th)*(R+4.4)); _cmS.set(1,1,1); _cmM.compose(_cmV,_cmQ,_cmS);
         campStakeIM.setMatrixAt(si,_cmM); si++;
       }
+      /* WAVE 12 stage dressing — appears and disappears with the ladder itself. */
+      if(sg.stage>=1){ // Batteries Raised: the ram rolls out; saps zigzag camp → palisade
+        _cmE.set(0, Math.atan2(dx,dz)+Math.PI, 0); _cmQ.setFromEuler(_cmE); // iron head toward the wall
+        _cmV.set(bx+dx*(R+5.4), BASE_Y, bz+dz*(R+5.4)); _cmS.set(1.25,1.25,1.25); _cmM.compose(_cmV,_cmQ,_cmS);
+        siegeRamIM.setMatrixAt(ri,_cmM); ri++;
+        for(let k=0;k<SG_TRENCH;k++){ // earthwork lines: alternate shoulders, closing on the palisade
+          const dd=R+7.3-k*0.42, off=(k%2? 0.85 : -0.85);
+          _cmE.set(0, Math.atan2(dx,dz)+(k%2? 0.62 : -0.62), 0); _cmQ.setFromEuler(_cmE);
+          _cmV.set(bx+dx*dd+px*off, BASE_Y+0.07, bz+dz*dd+pz*off); _cmS.set(1,1,1); _cmM.compose(_cmV,_cmQ,_cmS);
+          siegeTrenchIM.setMatrixAt(tri,_cmM); tri++;
+        }
+      }
+      if(sg.stage>=2){ // Walls Breached: rubble at the foot, scorch up the face, dust over all
+        const bAng=Math.atan2(dz,dx), wx=bx+Math.cos(bAng)*R, wz=bz+Math.sin(bAng)*R;
+        breachPts.push({x:wx, z:wz});
+        for(let k=0;k<SG_RUBBLE;k++){
+          const ro=(hash(sg.regionId*23.9+k*5.7)-0.5)*2.6, rd=(hash(sg.regionId*41.3+k*9.1)-0.5)*1.5;
+          _cmE.set(hash(sg.regionId*7.1+k)*3.1, hash(sg.regionId*11.3+k)*6.28, hash(sg.regionId*17.9+k)*3.1); _cmQ.setFromEuler(_cmE);
+          _cmV.set(wx+dx*rd+px*ro, BASE_Y+0.22, wz+dz*rd+pz*ro);
+          const ss=0.55+hash(sg.regionId*31.7+k*3.3)*0.65; _cmS.set(ss,ss*0.8,ss); _cmM.compose(_cmV,_cmQ,_cmS);
+          siegeRubbleIM.setMatrixAt(rui,_cmM); rui++;
+        }
+        for(let k=0;k<SG_SCORCH;k++){ // dark scorch boards hug the wall face around the breach
+          const a2=bAng+(k-(SG_SCORCH-1)/2)*0.06;
+          _cmE.set(0, -a2, 0); _cmQ.setFromEuler(_cmE);
+          _cmV.set(bx+Math.cos(a2)*(R+0.16), BASE_Y+1.3, bz+Math.sin(a2)*(R+0.16)); _cmS.set(1,1,1); _cmM.compose(_cmV,_cmQ,_cmS);
+          siegeScorchIM.setMatrixAt(sci,_cmM); sci++;
+        }
+      }
     });
     campTentIM.count=ti; campStakeIM.count=si;
+    siegeRamIM.count=ri; siegeTrenchIM.count=tri; siegeRubbleIM.count=rui; siegeScorchIM.count=sci;
     campTentIM.instanceMatrix.needsUpdate=true; campStakeIM.instanceMatrix.needsUpdate=true;
+    siegeRamIM.instanceMatrix.needsUpdate=true; siegeTrenchIM.instanceMatrix.needsUpdate=true;
+    siegeRubbleIM.instanceMatrix.needsUpdate=true; siegeScorchIM.instanceMatrix.needsUpdate=true;
     if(campTentIM.instanceColor) campTentIM.instanceColor.needsUpdate=true;
     campTentIM.visible = campStakeIM.visible = ti>0;
+    siegeRamIM.visible = ri>0; siegeTrenchIM.visible = tri>0; siegeRubbleIM.visible = rui>0; siegeScorchIM.visible = sci>0;
+    window.__siegeStageVis={rams:ri, trenches:tri, rubble:rui, scorch:sci};
   }
   function updateSiegeCamps(t){
     if(!campTentIM) initSiegeCamps();
     const list=(G&&G.sieges)? G.sieges.slice(0, CAMP_MAX) : [];
-    const key=list.map(s=>s.id).join('|');
+    const key=list.map(s=>s.id+':'+s.stage).join('|'); // WAVE 12: the ladder's rung is part of the layout
     const near=dist<1300; // the camps are mid-zoom storytelling; the chart view stays clean
     if(key!==campKey){ campKey=key; layoutSiegeCamps(list); }
     campTentIM.visible = campStakeIM.visible = near && campCenters.length>0;
+    siegeRamIM.visible = near && siegeRamIM.count>0;
+    siegeTrenchIM.visible = near && siegeTrenchIM.count>0;
+    siegeRubbleIM.visible = near && siegeRubbleIM.count>0;
+    siegeScorchIM.visible = near && siegeScorchIM.count>0;
     campPuffs.forEach((sp,i)=>{ const ci=Math.floor(i/CAMP_PUFFS), j=i%CAMP_PUFFS, c=campCenters[ci];
       if(!c || !near){ sp.visible=false; return; }
       const ph=hash(ci*31.7+j*7.9), p=((t*0.11)+ph+(j/CAMP_PUFFS))%1;
@@ -7182,6 +7291,13 @@ try{
       sp.position.set(c.x + Math.sin(t*0.4+ph*6.28)*0.5 + p*2.2, BASE_Y+2.6+p*5.5, c.z + Math.cos(t*0.33+ph*4.1)*0.4);
       const sc=2.2+p*4.5; sp.scale.set(sc,sc,1);
       sp.material.opacity=0.30*(1-p)*Math.min(1, p*5+0.2); });
+    siegeDust.forEach((sp,i)=>{ const b=breachPts[i]; // breach dust: one slow smudge hanging over the gap
+      if(!b || !near){ sp.visible=false; return; }
+      const ph=hash(i*47.3+3.7), p=((t*0.045)+ph)%1;
+      sp.visible=true;
+      sp.position.set(b.x + Math.sin(t*0.22+ph*6.28)*0.8 + p*1.6, BASE_Y+2.4+p*4.2, b.z + Math.cos(t*0.18+ph*4.4)*0.7);
+      const sc=5.5+p*6.5; sp.scale.set(sc,sc*0.8,1);
+      sp.material.opacity=0.16*(1-p)*Math.min(1, p*4+0.25); });
     window.__campSieges=campCenters.length; window.__campKey=key;
   }
 
