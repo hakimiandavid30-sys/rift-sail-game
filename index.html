@@ -4171,13 +4171,49 @@ refreshHUD(); save();
    the rare crown with no enemies left to bill it — its own court demanding to be seen.
    Every road is priced in print before the choice; a prepared realm pays in coin, an
    unprepared one pays in notes and goodwill. Never a hard fail. */
+const CRISIS_TITLES=['Remonstrance','Ultimatum','Demands a Progress'];
+function crisisPending(){ return (G.crownQueue||[]).some(c=>CRISIS_TITLES.some(t=>(c.title||'').includes(t))); }
 function lateCrisis(){
 const co=G.coldopen||(G.coldopen={stage:0,done:{}});
 if(co.done.crisis) return;
+fireLateCrisis();
+}
+/* the bill comes back (WAVE 11): a long reign is never done being tested. Years after
+   the first reckoning is answered, the world presents another — wearing a DIFFERENT face
+   than last time, whichever of the three the realm you built invites now — and never
+   while the previous bill still waits unanswered on the desk. Cooldown first, variety
+   second, nagging never. All of it still runs through the one Crown queue. */
+function fireLateCrisis(){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}});
+if(crisisPending()) return;
 const governed=myRegions().filter(r=>r.gov);
-if(governed.length>=2){ crisisGovernors(governed); return; }
 const rivals=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!allied(id,'player'));
-if(rivals.length) crisisEmbargo(rivals); else crisisCourt();
+const fits=[]; if(governed.length>=2) fits.push('gov'); if(rivals.length) fits.push('emb'); fits.push('court');
+const face=fits.find(f=>f!==co.crisisFace)||fits[0];
+co.done.crisis=1; co.crisisDay=G.day; co.crisisFace=face; co.crisisCount=(co.crisisCount||0)+1;
+if(face==='gov') crisisGovernors(governed); else if(face==='emb') crisisEmbargo(rivals); else crisisCourt();
+}
+/* rival courts write their own news (WAVE 11): sieges opened beyond your writ and the
+   slow race of borders, chronicled at the season seam from the realm's real counts —
+   the world does not happen only to the Crown. */
+function rivalChronicle(){
+const seen=G.siegeNews||(G.siegeNews={});
+(G.sieges||[]).forEach(sg=>{
+  if(sg.atkOwner==='player') return;
+  const r=rById[sg.regionId]; if(!r||r.owner==='player') return;
+  const key=sg.atkOwner+':'+sg.regionId+':'+sg.stageDay;
+  if(seen[key]) return; seen[key]=1;
+  gazette('🎇 <b>War beyond your borders:</b> the '+emp(sg.atkOwner).name+' sits down before <b>'+r.name+'</b>'+(r.owner? ' of the '+emp(r.owner).name : ', a free town')+' — the ladder climbs where your writ does not run.');
+});
+const now={}; ['aurelia','meridian','sable'].forEach(id=>{ if(G.empires[id]) now[id]=G.regions.filter(r=>r.owner===id).length; });
+const prev=G.rivalCounts;
+if(prev){ const moved=['aurelia','meridian','sable'].filter(id=>now[id]!=null&&prev[id]!=null)
+    .map(id=>({id, d:now[id]-prev[id]})).filter(m=>Math.abs(m.d)>=2).sort((a,b)=>Math.abs(b.d)-Math.abs(a.d))[0];
+  if(moved&&(G.lastRivalNote==null||G.turn-G.lastRivalNote>=2)){ G.lastRivalNote=G.turn;
+    gazette(moved.d>0
+      ? '🗺 <b>The '+emp(moved.id).name+' widens.</b> '+moved.d+' more towns fly their colours than last season — the chart beyond your borders redraws itself without asking you.'
+      : '🗺 <b>The '+emp(moved.id).name+' shrinks.</b> '+(-moved.d)+' towns have slipped their grasp since last season — somewhere, a rival court reads its own bad news tonight.'); } }
+G.rivalCounts=now;
 }
 function crisisGovernors(governed){
 const co=G.coldopen||(G.coldopen={stage:0,done:{}}); co.done.crisis=1;
@@ -4296,6 +4332,7 @@ econSeason();
 undertakingCheck();
 incidentSeason();
 coldSeason();
+rivalChronicle(); // WAVE 11: the other crowns make news too
 }
 /* the daily heartbeat: storms wander, blockades bite, courts sit, deadlines die */
 function dayTick2(){
@@ -4314,6 +4351,11 @@ realmBreathesDaily();
   if(!co.done.prize && G.day>=186 && G.day<=370 && co.done.pirates) prizeBeat();
   // the late-reign reckoning: once, when the reign carries weight — year 3, or sooner for the fat
   if(!co.done.crisis && (G.turn>=9 || myRegions().length>=10 || totalMen('player')>=22000)) lateCrisis();
+  // and years later it comes back in another face — a long peace is a loan, not a gift (WAVE 11)
+  else if(co.done.crisis && !crisisPending()){
+    if(co.crisisDay==null) co.crisisDay=G.day; // a reign older than the clock: the quiet years start today
+    else if(G.day-co.crisisDay>=1095 && (myRegions().length>=8 || totalMen('player')>=20000)) fireLateCrisis();
+  }
   // the visiting squadron sails home when its leave day passes; an unanswered card goes with it
   const gone=G.fleets.filter(f=>(f.debut||f.prize) && G.day>(f.leaveDay||1e9));
   if(gone.length){ G.fleets=G.fleets.filter(f=>!gone.includes(f));
@@ -5174,28 +5216,34 @@ try{
       if(KIT.geo.wallwood && KIT.geo.roofpoint) KIT.houses.push(houseFrom(KIT.geo.wallwood, KIT.geo.roofpoint, 1, null));
       if(KIT.geo.wall && KIT.geo.roof && KIT.geo.door) KIT.houses.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 2, KIT.geo.door));
       // one full variant ladder per biome: [stone gable, wood point, two-storey, warehouse shed]
-      const ladderFor=(bk, roofCol)=>{ const h=[];
-        if(KIT.geo.wall && KIT.geo.roof) h.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 1, null, WALL_PAL[bk], roofCol));
-        if(KIT.geo.wallwood && KIT.geo.roofpoint) h.push(houseFrom(KIT.geo.wallwood, KIT.geo.roofpoint, 1, null, WALL_PAL[bk], roofCol));
-        if(KIT.geo.wall && KIT.geo.roof && KIT.geo.door) h.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 2, KIT.geo.door, WALL_PAL[bk], roofCol));
-        if(KIT.geo.wallwood && KIT.geo.roof) h.push(houseFrom(KIT.geo.wallwood, KIT.geo.roof, 1, null, WALL_PAL[bk], roofCol)); // warehouses: broad wood shed under a full roof
+      const ladderFor=(bk, roofCol, wallCol)=>{ const h=[]; const wc=wallCol||WALL_PAL[bk];
+        if(KIT.geo.wall && KIT.geo.roof) h.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 1, null, wc, roofCol));
+        if(KIT.geo.wallwood && KIT.geo.roofpoint) h.push(houseFrom(KIT.geo.wallwood, KIT.geo.roofpoint, 1, null, wc, roofCol));
+        if(KIT.geo.wall && KIT.geo.roof && KIT.geo.door) h.push(houseFrom(KIT.geo.wall, KIT.geo.roof, 2, KIT.geo.door, wc, roofCol));
+        if(KIT.geo.wallwood && KIT.geo.roof) h.push(houseFrom(KIT.geo.wallwood, KIT.geo.roof, 1, null, wc, roofCol)); // warehouses: broad wood shed under a full roof
         return h; };
       KIT.housesByBiome={};
       Object.keys(ROOF_PAL).forEach(bk=>{ KIT.housesByBiome[bk]=ladderFor(bk, ROOF_PAL[bk]); });
       /* per-lot roof variety: three more ladders per biome with the ROOF tone nudged —
          a shade off, warmer, cooler — strictly inside the palette row (the PixPal row is
-         the law; the jitter is its weather). Walls keep the biome's exact plaster, and
-         the crown's colour stays off the roofline as ever. The town builder picks a
-         ladder per lot, seeded from the region hash, so a town keeps ITS tiling. */
+         the law; the jitter is its weather). WAVE 11: the walls weather too — the same
+         seeded drift, gentler, so plaster sun-bleaches or rain-cools lot by lot and a
+         wall run no longer reads as one flat colour at mid zoom. The crown's colour
+         stays off the roofline as ever (owner shows on walls' accents, banners, domes —
+         unchanged). The town builder picks a ladder per lot, seeded from the region
+         hash, so a town keeps ITS tiling AND its weathering. */
       const jitRoof=(pal, seed)=>{ const rn=mulberry(seed);
         const b=0.8+rn()*0.42, w=0.88+rn()*0.26; // brightness drift + warm/cool lean
         return [ pal[0]*b*w, pal[1]*b*(1+(w-1)*0.55), pal[2]*b*(2-w)*0.96 ]; };
+      const jitWall=(pal, seed)=>{ const rn=mulberry(seed); const c=new THREE.Color(pal);
+        const b=0.93+rn()*0.13, w=0.95+rn()*0.10; // plaster weather is subtler than tile: bleached warm or rained cool, never out of the biome
+        return [ Math.min(1.15,c.r*b*w), Math.min(1.15,c.g*b*(1+(w-1)*0.5)), Math.min(1.15,c.b*b*(2-w)) ]; };
       KIT.houseVariants={};
       Object.keys(ROOF_PAL).forEach((bk,bi)=>{
         KIT.houseVariants[bk]=[ KIT.housesByBiome[bk],
-          ladderFor(bk, jitRoof(ROOF_PAL[bk], 4211+bi*97+1)),
-          ladderFor(bk, jitRoof(ROOF_PAL[bk], 4211+bi*97+2)),
-          ladderFor(bk, jitRoof(ROOF_PAL[bk], 4211+bi*97+3)) ];
+          ladderFor(bk, jitRoof(ROOF_PAL[bk], 4211+bi*97+1), jitWall(WALL_PAL[bk], 977+bi*131+1)),
+          ladderFor(bk, jitRoof(ROOF_PAL[bk], 4211+bi*97+2), jitWall(WALL_PAL[bk], 977+bi*131+2)),
+          ladderFor(bk, jitRoof(ROOF_PAL[bk], 4211+bi*97+3), jitWall(WALL_PAL[bk], 977+bi*131+3)) ];
       });
       KIT.sailMat = windify(lambert(famTex.pirate), 0.055, 0.8); // sailcloth breathes on the shared wind clock
       // smoke sprite + terrain detail (optional garnish — failure just skips them)
@@ -6887,6 +6935,7 @@ try{
       if(Math.abs(sc.right-ext)>4){ sc.left=-ext; sc.right=ext; sc.top=ext; sc.bottom=-ext; sc.updateProjectionMatrix(); } }
     if(sun.castShadow) sun.target.updateMatrixWorld();
     updateSmoke(t);
+    updateSiegeCamps(t);
     // ---- town life on the shared wind clock: flutter, turning beams, bobbing boats, harbour gulls ----
     WIND_U.value = t;
     gwReg.forEach(en=>{ if(en.beam) en.beam.rotation.y = t*0.5 + en.ph; });
@@ -7027,6 +7076,7 @@ try{
 
   /* chimney smoke — the cheapest "someone lives here" signal: one Points cloud, tier scales the count */
   let smokePts=null, smokeSrc=[];
+  const _smokeCol=new THREE.Color(0xf2ede2), _smokeWarm=new THREE.Color(0xffbe78), _smokeCold=new THREE.Color(0x9fb2c8); // WAVE 11: smoke-by-hour scratch tints
   function buildSmoke(){
     if(!KIT.smokeTex) return;
     if(smokePts){ scene.remove(smokePts); smokePts.geometry.dispose(); smokePts.material.dispose(); smokePts=null; }
@@ -7049,10 +7099,90 @@ try{
     smokePts.visible = dist < 1500 && quality < 3;
     if(!smokePts.visible) return;
     smokePts.material.opacity = dist>950? 0.15 : dist>620? 0.24 : 0.34;
+    // SMOKE BY HOUR (WAVE 11): the chimney breath takes the sun's colour off the same
+    // clock-hour the sky grades by — gold at dawn and dusk, blue-grey at midnight, plain
+    // off-white at noon. One colour pass on the shared material; no new draw calls.
+    { const hf=(G&&typeof G.hour==='number')? G.hour : 12;
+      const warmth=Math.min(1, Math.max(0, 1-Math.abs(hf-6.3)/1.7) + Math.max(0, 1-Math.abs(hf-18.4)/1.6));
+      const night=(hf<4.8||hf>=20)? 1 : (hf<6||hf>19)? 0.4 : 0;
+      _smokeCol.setHex(0xf2ede2);
+      if(night>0) _smokeCol.lerp(_smokeCold, night*0.55);
+      if(warmth>0) _smokeCol.lerp(_smokeWarm, warmth*0.8);
+      smokePts.material.color.copy(_smokeCol);
+      window.__smokeWarm=warmth; window.__smokeCol='#'+_smokeCol.getHexString(); }
     const pos=smokePts.geometry.attributes.position;
     for(let i=0;i<smokeSrc.length;i++){ const s=smokeSrc[i]; const hf=s[4]||0;
       pos.setXYZ(i, s[0] + Math.sin(t*0.5+s[3])*0.55 + Math.sin(t*0.34+s[3]*1.7)*1.15*hf, s[1] + Math.sin(t*0.35+s[3]*2)*0.3, s[2] + Math.cos(t*0.4+s[3])*0.3*hf); }
     pos.needsUpdate=true;
+  }
+
+  /* ---------- besieger camps (WAVE 11): a siege you can SEE from the map — a crescent of
+     tents in the attacker's own colours outside the walls, a palisade arc between camp and
+     town, and one thin smoke column over the cook-fires. All tents in the world share ONE
+     InstancedMesh, all stakes another, all cook-smoke a pooled shelf of sprites: a siege
+     costs ~3 draw calls however long the ladder climbs. Laid out only when the siege set
+     changes; per-frame work is the smoke drift and a distance gate. ----- ----- ----- */
+  const CAMP_MAX=8, CAMP_TENTS=7, CAMP_STAKES=14, CAMP_PUFFS=3;
+  let campTentIM=null, campStakeIM=null, campPuffs=[], campKey='__none__', campCenters=[];
+  const _cmM=new THREE.Matrix4(), _cmQ=new THREE.Quaternion(), _cmE=new THREE.Euler(), _cmV=new THREE.Vector3(), _cmS=new THREE.Vector3(), _cmC=new THREE.Color();
+  function initSiegeCamps(){
+    const tg=new THREE.ConeGeometry(1.2, 2.1, 4); tg.rotateY(Math.PI/4); // a four-panel campaign tent
+    campTentIM=new THREE.InstancedMesh(tg, new THREE.MeshLambertMaterial({color:0xffffff}), CAMP_MAX*CAMP_TENTS);
+    campTentIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage); campTentIM.frustumCulled=false; campTentIM.count=0; scene.add(campTentIM);
+    campStakeIM=new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 1.7, 0.2), new THREE.MeshLambertMaterial({color:0x6e5136}), CAMP_MAX*CAMP_STAKES);
+    campStakeIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage); campStakeIM.frustumCulled=false; campStakeIM.count=0; scene.add(campStakeIM);
+    for(let i=0;i<CAMP_MAX*CAMP_PUFFS;i++){
+      const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:makeSmokeTex(), color:0xd8cfc2, transparent:true, opacity:0, depthWrite:false}));
+      sp.visible=false; scene.add(sp); campPuffs.push(sp);
+    }
+  }
+  function layoutSiegeCamps(list){
+    campCenters=[]; let ti=0, si=0;
+    list.forEach(sg=>{
+      const r=rById[sg.regionId]; if(!r) return;
+      const bx=SX(r.x), bz=SZ(r.y), fr=rById[sg.fromRegionId];
+      let dx=hash(sg.regionId*3.71)-0.5, dz=hash(sg.regionId*9.13)-0.5;
+      if(fr){ dx=SX(fr.x)-bx; dz=SZ(fr.y)-bz; } // the camp faces the way the host came
+      const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
+      const px=-dz, pz=dx;
+      const R=[7.5,11,15,19][r.tier]*(isCapitalOf(r)? 1.12 : 1);
+      const cx=bx+dx*(R+8), cz=bz+dz*(R+8);
+      campCenters.push({x:cx, z:cz});
+      const e=emp(sg.atkOwner); _cmC.set(e&&e.color? e.color : '#8a6d3b'); // tents fly the besieger's colour
+      for(let k=0;k<CAMP_TENTS;k++){
+        const tx=cx + px*(((k%4)-1.5)*2.1) + dx*((Math.floor(k/4)-0.5)*2.6) + (hash(sg.regionId*13.7+k*7.3)-0.5)*0.9;
+        const tz=cz + pz*(((k%4)-1.5)*2.1) + dz*((Math.floor(k/4)-0.5)*2.6) + (hash(sg.regionId*29.3+k*3.1)-0.5)*0.9;
+        _cmE.set(0, Math.atan2(dx,dz)+(hash(sg.regionId*7.9+k*11.7)-0.5)*0.5, 0); _cmQ.setFromEuler(_cmE);
+        _cmV.set(tx, BASE_Y+1.02, tz); _cmS.set(1.3,1.3,1.3); _cmM.compose(_cmV,_cmQ,_cmS);
+        campTentIM.setMatrixAt(ti,_cmM); campTentIM.setColorAt(ti,_cmC); ti++;
+      }
+      for(let k=0;k<CAMP_STAKES;k++){ // the palisade: a rough arc on the town side of the camp
+        const th=Math.atan2(dz,dx) + (k/(CAMP_STAKES-1)-0.5)*1.45;
+        _cmE.set((hash(sg.regionId*5.3+k*13.1)-0.5)*0.22, 0, (hash(sg.regionId*17.7+k*3.7)-0.5)*0.22); _cmQ.setFromEuler(_cmE);
+        _cmV.set(bx+Math.cos(th)*(R+4.4), BASE_Y+0.8, bz+Math.sin(th)*(R+4.4)); _cmS.set(1,1,1); _cmM.compose(_cmV,_cmQ,_cmS);
+        campStakeIM.setMatrixAt(si,_cmM); si++;
+      }
+    });
+    campTentIM.count=ti; campStakeIM.count=si;
+    campTentIM.instanceMatrix.needsUpdate=true; campStakeIM.instanceMatrix.needsUpdate=true;
+    if(campTentIM.instanceColor) campTentIM.instanceColor.needsUpdate=true;
+    campTentIM.visible = campStakeIM.visible = ti>0;
+  }
+  function updateSiegeCamps(t){
+    if(!campTentIM) initSiegeCamps();
+    const list=(G&&G.sieges)? G.sieges.slice(0, CAMP_MAX) : [];
+    const key=list.map(s=>s.id).join('|');
+    const near=dist<1300; // the camps are mid-zoom storytelling; the chart view stays clean
+    if(key!==campKey){ campKey=key; layoutSiegeCamps(list); }
+    campTentIM.visible = campStakeIM.visible = near && campCenters.length>0;
+    campPuffs.forEach((sp,i)=>{ const ci=Math.floor(i/CAMP_PUFFS), j=i%CAMP_PUFFS, c=campCenters[ci];
+      if(!c || !near){ sp.visible=false; return; }
+      const ph=hash(ci*31.7+j*7.9), p=((t*0.11)+ph+(j/CAMP_PUFFS))%1;
+      sp.visible=true;
+      sp.position.set(c.x + Math.sin(t*0.4+ph*6.28)*0.5 + p*2.2, BASE_Y+2.6+p*5.5, c.z + Math.cos(t*0.33+ph*4.1)*0.4);
+      const sc=2.2+p*4.5; sp.scale.set(sc,sc,1);
+      sp.material.opacity=0.30*(1-p)*Math.min(1, p*5+0.2); });
+    window.__campSieges=campCenters.length; window.__campKey=key;
   }
 
   /* harbour gulls — ONE instanced mesh, eighteen paper darts circling the harbour mouths */
