@@ -398,6 +398,7 @@
     <button class="big-btn secondary" id="menu-orders"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v3M12 6c-1.2-1.8-3-2.4-4.6-1.8.2 1.7 1.3 2.9 3 3.2C9 8.6 8.6 10 9.2 11.4M12 6c1.2-1.8 3-2.4 4.6-1.8-.2 1.7-1.3 2.9-3 3.2 1.4 1.2 1.8 2.6 1.2 4M7 13.5h10M9.5 17.5c.8-1 1.6-1.4 2.5-1.4s1.7.4 2.5 1.4M10 21h4"/></svg> Give Orders (typed)</button>
     <button class="big-btn secondary" id="menu-winds"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 7l2.2 5L12 17l-2.2-5z"/></svg> Wind Lanes: Off</button>
     <button class="big-btn secondary" id="menu-how">How to Play</button>
+    <div id="menu-install-hint" style="display:none;margin-top:10px;padding:8px 10px;border:1px solid rgba(217,185,106,.45);border-radius:8px;font-size:12.5px;line-height:1.45;color:#e8dcc0">📱 Playing on a phone? Use your browser's <b>Share → Add to Home Screen</b> — Rift &amp; Sail then opens full-chart, like a native game. <a href="#" id="menu-install-dismiss" style="color:#e9c96e;float:right;text-decoration:none" aria-label="Dismiss">✕</a></div>
     <button class="big-btn secondary" id="menu-close">Close</button>
   </div></div>
 
@@ -786,16 +787,25 @@ const REGION_DEFS=[
 ];
 const SEA_DEFS=[
  // name, x, y, adjacent zone indices (filled below)
+ // WAVE 19: eleven centres (Channel, North Sea, Atlantic Deep, The Rift, Baltic,
+ // Caribbean, American Coast, Newfound Banks, Windward Passage, Southern Reach, Spice
+ // Sea) sat INSIDE the traced continent polygons — squadrons berthed on dry land, sea
+ // labels floated over hills, and every lane touching them crossed the slab. Each is
+ // re-seated to the nearest genuinely open water (350–920 world units; strait seas take
+ // a slimmer 130-unit clearance — a channel is narrow water by definition). Port-to-zone
+ // flips were audited one by one (all neutral or more sensible), capitals unmoved, and
+ // the sea graph stays fully connected. Zone IDS never change: old saves keep their
+ // own chart untouched.
  ['Lusitanian Sea',  180, 820],['Bay of Biscay',  300, 560],
- ['The Channel',     520, 290],['North Sea',      760, 160],
- ['Atlantic Deep',   700, 700],['The Rift',      1050, 850],
+ ['The Channel',     462, 286],['North Sea',      814, 105],
+ ['Atlantic Deep',   776, 883],['The Rift',      1112, 912],
  ['Gibraltar Strait',640,1170],['Western Med',  1250,1080],
  ['Eastern Med',    1850,1120],['Aegean',       1850, 960],
- ['Baltic Sea',     1750, 120],['Black Sea',    2150, 700],
- ['Caribbean',       900, 620],['American Coast',1050, 330],
+ ['Baltic Sea',     1779,  49],['Black Sea',    2150, 700],
+ ['Caribbean',      1037, 757],['American Coast',1193, 330],
  // Second Age seas
- ['Newfound Banks',  400, 150],['Windward Passage', 700, 640],
- ['Southern Reach',  720,1300],['Spice Sea',      2240,1260],
+ ['Newfound Banks',  400, 299],['Windward Passage', 752, 835],
+ ['Southern Reach',  629,1262],['Spice Sea',      2381,1260],
  ['Pillars Straits', 430,1255],
 ];
 // ---------- grandeur scale ----------
@@ -925,6 +935,7 @@ function freshState(){
   });
   seas.forEach(a=>{ seas.forEach(b=>{ if(a!==b && Math.hypot(a.x-b.x,a.y-b.y)<560*WS) a.neighbors.push(b.id); }); });
   weldSeaNeighbors(seas); // two straits sit just beyond the distance rule — no crown's fleet may be landlocked by arithmetic
+  pruneSeaEdges(seas); // WAVE 19: lanes that mostly cross land are cut, over water the long way round
   // empires
   const empires={};
   DEFS.forEach(e=>{
@@ -1046,6 +1057,40 @@ function weldSeaNeighbors(seas){
     if(!B.neighbors.includes(a)) B.neighbors.push(a);
   });
 }
+/* WAVE 19: a sea lane whose best coastal curve still spends >25% of its run on drawn
+   land is not a lane — it is a rumour. Such neighbour pairs are CUT (the graph sails
+   the long way round, over water), but never when the cut would split the chart or
+   leave a sea with fewer than three roads. Measured against the same land the player
+   sees (nonzero-winding over the traced coastlines), not the routing heuristic. */
+function seaEdgeLandPct(A, B){
+  const wn=(x,y)=>{ let w=0; for(const poly of LAND_PATHS){ for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const xi=poly[i][0], yi=poly[i][1], xj=poly[j][0], yj=poly[j][1];
+    const cross=(xj-xi)*(y-yi)-(x-xi)*(yj-yi);
+    if(yi<=y){ if(yj>y && cross>0) w++; } else { if(yj<=y && cross<0) w--; } } } return w!==0; };
+  let land=0, tot=0;
+  curveLegs({x:A.x, y:A.y}, {x:B.x, y:B.y}).forEach(l=>{ for(let s=0;s<=16;s++){ const p=s/16, q=1-p; tot++;
+    if(wn(q*q*l.a.x+2*q*p*l.ctrl.x+p*p*l.b.x, q*q*l.a.y+2*q*p*l.ctrl.y+p*p*l.b.y)) land++; } });
+  return tot? land/tot : 0;
+}
+function pruneSeaEdges(seas){
+  if(!seas || seas.length<4) return;
+  const pairs=[];
+  seas.forEach(a=>(a.neighbors||[]).forEach(bid=>{ if(a.id<bid) pairs.push([a.id, bid]); }));
+  const connectedWithout=(dropA, dropB)=>{
+    const seen=new Set([seas[0].id]), q=[seas[0].id];
+    while(q.length){ const c=q.pop(), cz=seas[c]; if(!cz) continue;
+      (cz.neighbors||[]).forEach(n=>{ if((c===dropA && n===dropB) || (c===dropB && n===dropA)) return;
+        if(!seen.has(n)){ seen.add(n); q.push(n); } }); }
+    return seen.size===seas.length;
+  };
+  pairs.forEach(([ai, bi])=>{
+    const A=seas[ai], B=seas[bi]; if(!A || !B) return;
+    if(A.neighbors.length<=2 || B.neighbors.length<=2) return; // never strand a sea
+    if(seaEdgeLandPct(A, B) <= 0.25) return;
+    if(!connectedWithout(ai, bi)) return;
+    A.neighbors=A.neighbors.filter(n=>n!==bi); B.neighbors=B.neighbors.filter(n=>n!==ai);
+  });
+}
 function buildGraph(){
   if(!G||!G.regions||!G.seas){ WORLD_GRAPH=null; return; }
   const nodes={}, edges=[], adj={};
@@ -1078,7 +1123,7 @@ function fPos(f){ return (f.at && f.at.pos)? f.at.pos : f.pos; }
    and 'sea'+'harbour' edges when making for a port. All Dijkstra over
    per-edge day costs. (Islands stay island kingdoms: armies cannot
    cross water; fleets blockade their harbours instead.) */
-function graphPath(start, target, ok){
+function graphPath(start, target, ok, blocked){
   const dist={}, prev={}, seen=new Set();
   dist[start]=0;
   while(true){
@@ -1090,6 +1135,7 @@ function graphPath(start, target, ok){
     (WORLD_GRAPH.adj[cur]||[]).forEach(e=>{
       if(!ok(e.kind)) return;
       const nxt=e.a===cur? e.b : e.a;
+      if(blocked && nxt!==target && blocked(nxt)) return; // a shut strait is a wall to through-traffic (the target itself stays reachable)
       const nd=cd+e.days;
       if(dist[nxt]===undefined||nd<dist[nxt]){ dist[nxt]=nd; prev[nxt]=cur; }
     });
@@ -1104,13 +1150,26 @@ function findLandPath(fromId, toId){
   if(fromId===toId) return {nodes:['r'+fromId], days:0};
   return graphPath('r'+fromId, 'r'+toId, k=>k==='land');
 }
-function findSeaPath(fromZone, toPortRegion){
-  // route from a fleet's sea zone ('s<zone>') to a port region ('r<id>') over sea+harbour edges
-  return graphPath('s'+fromZone, 'r'+toPortRegion, k=>k!=='land');
+/* WAVE 19: a denied strait is shut in fact, not only in the Gazette. When the Crown holds a
+   port on a strait's shores and sets Deny, rival (non-allied) hulls may not TRANSIT that
+   water: their sailing roads bend around it or fail honestly. Their own ports inside the
+   strait stay reachable — the door shuts to through-traffic, not to homecoming. */
+function deniedStraitsFor(owner){
+  if(!owner || owner==='player' || allied(owner,'player') || !G || !G.seas) return null;
+  const set=new Set();
+  G.seas.forEach(z=>{ if(z.strait && (G.chokePolicies||{})[z.id]==='deny' && z.ports.some(pid=>{ const p=rById[pid]; return p && p.owner==='player'; })) set.add('s'+z.id); });
+  return set.size? set : null;
 }
-function findSeaZonePath(fromZone, toZone){
+function findSeaPath(fromZone, toPortRegion, owner){
+  // route from a fleet's sea zone ('s<zone>') to a port region ('r<id>') over sea+harbour edges
+  const denied=deniedStraitsFor(owner), homeZone=(rById[toPortRegion]||{}).seaZone;
+  return graphPath('s'+fromZone, 'r'+toPortRegion, k=>k!=='land',
+    denied? (nk=>denied.has(nk) && nk!=='s'+homeZone) : null);
+}
+function findSeaZonePath(fromZone, toZone, owner){
   if(fromZone===toZone) return {nodes:['s'+fromZone], days:0};
-  return graphPath('s'+fromZone, 's'+toZone, k=>k==='sea');
+  const denied=deniedStraitsFor(owner);
+  return graphPath('s'+fromZone, 's'+toZone, k=>k==='sea', denied? (nk=>denied.has(nk)) : null);
 }
 
 /* ================= THE SECOND AGE — world meta =================
@@ -1172,6 +1231,7 @@ function computeSeas(regions, seas){
   });
   seas.forEach(a=>{ seas.forEach(b=>{ if(a!==b && Math.hypot(a.x-b.x,a.y-b.y)<560*WS) a.neighbors.push(b.id); }); });
   weldSeaNeighbors(seas);
+  pruneSeaEdges(seas); // WAVE 19: migrated charts take the same honest lanes
 }
 function ensureEmpireMeta(s){
   if(!s.empires) return;
@@ -1383,8 +1443,8 @@ function isBlockaded(port){
   // point is two-thirds of the way from the zone centre to the quay.
   const z=seaById[port.seaZone]; if(!z) return false;
   const bx=z.x+(port.x-z.x)*0.66, by=z.y+(port.y-z.y)*0.66;
-  return G.fleets.some(f=>f.stance==='blockade' && f.owner!==port.owner && atWar(f.owner,port.owner) && !allied(f.owner,port.owner) &&
-    Math.hypot(f.pos.x-bx, f.pos.y-by) < 150);
+  return G.fleets.some(f=>!f.at && f.stance==='blockade' && f.owner!==port.owner && atWar(f.owner,port.owner) && !allied(f.owner,port.owner) &&
+    Math.hypot(fPos(f).x-bx, fPos(f).y-by) < 150); // WAVE 19: a blockade lives only ON STATION — a squadron under sail (fPos, not its old berth) strangles nothing
 }
 function tradeIncome(id){
   const ports=G.regions.filter(r=>r.isPort && (r.owner===id||allied(r.owner,id)));
@@ -1649,22 +1709,33 @@ function merchantRoutes(){
     const A=ports[(i*3)%ports.length];
     let B=ports[(i*3+11)%ports.length]; if(B.id===A.id) B=ports[(i*3+12)%ports.length];
     if(!B||B.id===A.id) continue;
-    const za=seaById[A.seaZone], zb=seaById[B.seaZone]; if(!za||!zb) continue;
-    const pts=[[A.x,A.y],[za.x,za.y]]; if(zb.id!==za.id) pts.push([zb.x,zb.y]); pts.push([B.x,B.y]);
-    let total=0; const cum=[0];
-    for(let k=1;k<pts.length;k++){ total+=Math.hypot(pts[k][0]-pts[k-1][0], pts[k][1]-pts[k-1][1]); cum.push(total); }
-    if(total<50) continue;
-    _merchants.push({pts, cum, total, days:Math.max(6, total/TRAVEL.sailPerDay), ph:(i*0.173)%1});
+    /* WAVE 19: merchantmen once sailed ruler-straight port→zone-centre→port lines — over
+       hills, towns and whole peninsulas (58% of sampled positions on drawn land). They now
+       sail the same sea graph as the squadrons: harbour edge out, zone to zone, harbour
+       edge in, every leg bent around the coast by seaCtrl. */
+    const path=findSeaPath(A.seaZone, B.id, null); if(!path || !path.nodes) continue;
+    const nodeIds=['r'+A.id].concat(path.nodes);
+    const legs=[]; let total=0;
+    for(let k=1;k<nodeIds.length;k++){
+      const NA=WORLD_GRAPH.nodes[nodeIds[k-1]], NB=WORLD_GRAPH.nodes[nodeIds[k]]; if(!NA||!NB) continue;
+      curveLegs({x:NA.x, y:NA.y}, {x:NB.x, y:NB.y}).forEach(cl=>{ legs.push(cl); total+=cl.len; });
+    }
+    if(!legs.length || total<50) continue;
+    const cum=[0]; legs.forEach(l=>cum.push(cum[cum.length-1]+l.len));
+    _merchants.push({legs, cum, total, days:Math.max(6, total/TRAVEL.sailPerDay), ph:(i*0.173)%1});
   }
   return _merchants;
 }
 function merchantPos(m, dayF){
   const per=m.days*2, tt=((dayF + m.ph*per) % per + per) % per, fwd=tt<m.days, u=(fwd? tt : per-tt)/m.days;
   const target=u*m.total; let k=1; while(k<m.cum.length-1 && m.cum[k]<target) k++;
-  const segLen=(m.cum[k]-m.cum[k-1])||1, f=(target-m.cum[k-1])/segLen;
-  return { x:m.pts[k-1][0]+(m.pts[k][0]-m.pts[k-1][0])*f,
-           y:m.pts[k-1][1]+(m.pts[k][1]-m.pts[k-1][1])*f,
-           ang:Math.atan2((m.pts[k][1]-m.pts[k-1][1])*(fwd?1:-1), (m.pts[k][0]-m.pts[k-1][0])*(fwd?1:-1)) };
+  const leg=m.legs[k-1]; if(!leg) return { x:0, y:0, ang:0 };
+  const p=((target-m.cum[k-1])/(leg.len||1)), q=1-p;
+  const x=q*q*leg.a.x + 2*q*p*leg.ctrl.x + p*p*leg.b.x;
+  const y=q*q*leg.a.y + 2*q*p*leg.ctrl.y + p*p*leg.b.y;
+  const dx=2*q*(leg.ctrl.x-leg.a.x) + 2*p*(leg.b.x-leg.ctrl.x);
+  const dy=2*q*(leg.ctrl.y-leg.a.y) + 2*p*(leg.b.y-leg.ctrl.y);
+  return { x, y, ang:Math.atan2(dy*(fwd?1:-1), dx*(fwd?1:-1)) };
 }
 
 function drawLanes(){
@@ -1919,7 +1990,8 @@ function splitArmy(a){
 
 function orderSailZone(f, destZone){
   if(f.zone===destZone.id && !f.at){ toast(f.name+' is already on the '+destZone.name+'.'); return false; }
-  const path=findSeaZonePath(f.zone, destZone.id);
+  if(f.at && f.at.destZone===destZone.id && f.at.destPort==null) return false; // already bound for that water under these very orders — re-issuing would snap her back to her port of departure
+  const path=findSeaZonePath(f.zone, destZone.id, f.owner);
   if(!path || !path.days){ toast('No sailing road to the '+destZone.name+'.'); return false; }
   startFleetSail(f, path);
   if(f.owner==='player'){ toast('⛵ '+f.name+' makes sail for the '+destZone.name); pushEvent('⛵ <b>'+f.name+'</b> sails for the '+destZone.name+'.'); }
@@ -1927,9 +1999,10 @@ function orderSailZone(f, destZone){
 }
 function orderSailPort(f, port){
   if(!port.isPort) return false;
+  if(f.at && f.at.destPort===port.id) return false; // already making for that quay under these very orders
   // a blockade is an act of war — peacetime squadrons anchor, they do not strangle
   const hostile = port.owner && port.owner!==f.owner && !allied(f.owner, port.owner) && atWar(f.owner, port.owner);
-  const path=findSeaPath(f.zone, port.id);
+  const path=findSeaPath(f.zone, port.id, f.owner);
   if(!path){ toast('No sailing road to '+port.name+'.'); return false; }
   startFleetSail(f, path, port.id);
   if(f.owner==='player'){
@@ -1954,18 +2027,18 @@ function onLandWorld(x, y){
     }
     if(inside) return true;
   }
-  return G.regions.some(r=>r.group==='I' && ((x-r.x)/(95*WS))**2 + ((y-r.y)/(70*WS))**2 < 1);
+  return !!(G && G.regions) && G.regions.some(r=>r.group==='I' && ((x-r.x)/(95*WS))**2 + ((y-r.y)/(70*WS))**2 < 1); // G is null while the world itself is being born (WAVE 19 pruning asks early)
 }
 function seaCtrl(A, B){
   // choose a curve control point whose sampled arc stays off land — ships round coasts, they don't cross them
   const mx=(A.x+B.x)/2, my=(A.y+B.y)/2;
   const len=Math.hypot(B.x-A.x, B.y-A.y)||1;
   const px=-(B.y-A.y)/len, py=(B.x-A.x)/len; // perpendicular
-  const hits=(cx,cy)=>{ let h=0; for(let i=0;i<=8;i++){ const p=i/8, q=1-p;
+  const hits=(cx,cy)=>{ let h=0; for(let i=0;i<=16;i++){ const p=i/16, q=1-p;
     const x=q*q*A.x + 2*q*p*cx + p*p*B.x, y=q*q*A.y + 2*q*p*cy + p*p*B.y; if(onLandWorld(x,y)) h++; } return h; };
   let best={x:mx, y:my}, bestH=hits(mx,my);
   if(bestH===0) return best;
-  [0.18, 0.34, 0.5].forEach(mag=>{
+  [0.18, 0.34, 0.5, 0.68, 0.85].forEach(mag=>{
     [1,-1].forEach(sgn=>{
       const cx=mx+px*len*mag*sgn, cy=my+py*len*mag*sgn;
       const h=hits(cx,cy);
@@ -1974,13 +2047,36 @@ function seaCtrl(A, B){
   });
   return best;
 }
+/* WAVE 19: how a hull actually gets from A to B over water — one shared answer for
+   squadrons, recalls and merchantmen alike. seaCtrl bends the arc; if the bent arc still
+   clips land (a slab neck between two water pockets), the leg SPLITS at its midpoint
+   and each half bends again, twice deep at most. What remains after that is a shore so
+   narrow the chart itself argues about it. */
+function curveLegs(a, b, depth){
+  const ctrl=seaCtrl(a, b);
+  let hits=0, len=0, px=a.x, py=a.y;
+  for(let s=1;s<=16;s++){ const p=s/16, q=1-p, x=q*q*a.x+2*q*p*ctrl.x+p*p*b.x, y=q*q*a.y+2*q*p*ctrl.y+p*p*b.y;
+    len+=Math.hypot(x-px, y-py); px=x; py=y; if(onLandWorld(x, y)) hits++; }
+  if(hits>0 && (depth||0)<2){
+    const m={ x:0.25*a.x+0.5*ctrl.x+0.25*b.x, y:0.25*a.y+0.5*ctrl.y+0.25*b.y };
+    return curveLegs(a, m, (depth||0)+1).concat(curveLegs(m, b, (depth||0)+1));
+  }
+  return [{a, b, ctrl, len}];
+}
 function startFleetSail(f, path, destPortId){
   if(f.clashLocked){ if(f.owner==='player') toast('⚔ '+f.name+' is engaged — she cannot answer new orders until the action is decided.'); return false; }
   const legs=[];
+  // WAVE 19: the first leg starts where the hull actually IS. Legs once always began at the
+  // departure node, so any fresh order mid-voyage (a re-tap, a recall, a theatre homecoming)
+  // teleported the squadron back to where she had started before sailing her on again.
+  const startP=fPos(f);
   for(let i=1;i<path.nodes.length;i++){
     const A=WORLD_GRAPH.nodes[path.nodes[i-1]], B=WORLD_GRAPH.nodes[path.nodes[i]];
-    const edgeDays=Math.max(0.4, Math.hypot(A.x-B.x, A.y-B.y)/TRAVEL.sailPerDay*windFactor(A,B));
-    legs.push({to:path.nodes[i], days:edgeDays, fromPos:{x:A.x,y:A.y}, toPos:{x:B.x,y:B.y}, ctrl:seaCtrl(A,B)});
+    const fromP=(i===1 && startP)? startP : A;
+    const wf=windFactor(A,B);
+    curveLegs(fromP, {x:B.x, y:B.y}).forEach(cl=>{
+      legs.push({to:path.nodes[i], days:Math.max(0.25, cl.len/TRAVEL.sailPerDay*wf), fromPos:{x:cl.a.x,y:cl.a.y}, toPos:{x:cl.b.x,y:cl.b.y}, ctrl:cl.ctrl});
+    });
   }
   const total=legs.reduce((s,l)=>s+l.days,0);
   const z=seaById[f.zone];
@@ -2128,7 +2224,9 @@ function resolveArmyBattleFX(a, dest){
 function resolveArmyBattleApply(a, dest, res, atkBefore, defBefore, prevOwner){
   const survivors=a.men-res.aLoss;
   const sgMaybe=siegeAt(dest.id); // if this storm was the end of a formal siege, close the ladder behind it
-  if(sgMaybe&&sgMaybe.armyId===a.id){ endSiege(sgMaybe, res.win? 'stormed':'repelled'); G.siegeDone=(G.siegeDone||0)+1; }
+  if(sgMaybe&&sgMaybe.armyId===a.id){ endSiege(sgMaybe, res.win? 'stormed':'repelled'); G.siegeDone=(G.siegeDone||0)+1;
+    if(res.win){ (window.__stormFxQ=window.__stormFxQ||[]).push({regionId:dest.id, fromRegionId:sgMaybe.fromRegionId, owner:a.owner}); } // WAVE 19: the storm's moment — dust and a planted flag at the breach (render layer, transient only)
+  }
   else if(sgMaybe){ endSiege(sgMaybe,'taken'); }
   const story=' '+afterAction('land', {win:res.win, fort:dest.hasFort, wall:dest.hasWall, terrain:dest.terrain, a0:atkBefore, d0:defBefore,
     close:Math.abs(atkBefore-defBefore)<(atkBefore+defBefore)*0.2});
@@ -2143,7 +2241,7 @@ function resolveArmyBattleApply(a, dest, res, atkBefore, defBefore, prevOwner){
     noteSeasonTown(dest, prevOwner, a.owner); // WAVE 15: a flag changed over this town
     if(survivors-garrisonTake>=1000){ a.men=survivors-garrisonTake; a.atRegion=dest.id; a.destRegion=null; }
     else G.armies=G.armies.filter(x=>x.id!==a.id);
-    if(prevOwner && prevOwner!==a.owner) checkCapitalLoss(prevOwner);
+    if(prevOwner && prevOwner!==a.owner) checkCapitalLoss(prevOwner, a.owner);
     armyHonours(a, res); // the winning host hardens: chevrons rise, and its general learns
     if(prevOwner&&prevOwner!==a.owner) warLedger(a.owner, prevOwner);
     if(a.owner==='player' && prevOwner!=='player') noteConquest(dest);
@@ -2225,7 +2323,7 @@ function navalBattle(a, d, port){
       const ownPorts=G.regions.filter(r=>r.isPort && r.owner===loser.owner);
       const homeZone=ownPorts.length? ownPorts[0].seaZone : null;
       if(homeZone!=null && homeZone!==loser.zone){
-        const p=findSeaZonePath(loser.zone, homeZone);
+        const p=findSeaZonePath(loser.zone, homeZone, loser.owner);
         if(p){ startFleetSail(loser, p); loser.stance='patrol'; }
       }
     }
@@ -2245,7 +2343,7 @@ function navalBattle(a, d, port){
 }
 /* ---- arrival resolution: fleets ---- */
 function fleetArrive(f){
-  const destPortId=f.at.destPort;
+  const destPortId=f.at.destPort, destZoneId=f.at.destZone;
   f.at=null;
   if(destPortId!=null){
     const port=rById[destPortId];
@@ -2274,8 +2372,11 @@ function fleetArrive(f){
       if(f.owner==='player'){ if(port.owner && port.owner!=='player'){ toast('⚓ '+f.name+' anchors off '+port.name+' — at peace, no blockade (declare war in Realm to strangle it)'); pushEvent('⚓ <b>'+f.name+'</b> anchors off '+port.name+', colours friendly.'); } else { toast('⚓ '+f.name+' anchors off '+port.name); pushEvent('⚓ <b>'+f.name+'</b> anchors off '+port.name+'.'); } }
     }
   } else {
-    // arrived at a sea zone: apply remembered stance intent
-    if(f.stance!=='blockade') f.stance=f.stance;
+    // arrived at a sea zone: TAKE THE WATER (WAVE 19 — before this, the squadron's zone
+    // and berth never changed: she glided to the new sea, then snapped home on arrival
+    // day, and every zone-reading system — blockade, theatre, Orders — chased a ghost)
+    if(destZoneId!=null && seaById[destZoneId]){ f.zone=destZoneId; const dz=seaById[destZoneId]; f.node='s'+dz.id; f.pos={x:dz.x, y:dz.y}; }
+    if(f.stance==='blockade') f.stance='patrol'; // a blockade lives off a harbour mouth; in open water the squadron simply rides patrol
   }
   syncUnits(); refreshHUD();
 }
@@ -2463,8 +2564,20 @@ function aiMonthlyOps(){
     const armyCap = mine.length<10? 4 : 3;
     if((G.armies||[]).filter(a=>a.owner===id).length<armyCap){
       const fat=mine.filter(r=>r.troops>=(mine.length<10? 2300 : 2600) && !(G.armies||[]).some(a=>a.atRegion===r.id && a.owner===id)).sort((a,b)=>b.troops-a.troops)[0];
-      if(fat) formArmySilent(fat, Math.min(2200, fat.troops-900));
+      // WAVE 19: a great crown fields a GRAND host. The old 2,200 cap sat below the siege
+      // threshold of any grown fortress garrison (3,000 behind wall+fort ≈ 7,000 defence),
+      // so late-game AI could never crack a walled town it did not already dwarf — wars
+      // fossilised. 3,400 with army tech puts the ladder back within reach; small crowns
+      // keep the old cap, so laggards still catch up rather than compound.
+      if(fat) formArmySilent(fat, Math.min(mine.length>=10? 3400 : 2200, fat.troops-900));
     }
+    // WAVE 19: a held host re-reads its frontier monthly. Holds were once written
+    // holdUntil=1e9 — forever — and never reconsidered: whole AI militaries fossilised
+    // into statues that never marched, besieged or answered again (a 20-year soak saw
+    // zero completed AI sieges behind rich, fat, motionless crowns). A dig-in is a
+    // posture with a term now; when the term ends the staff looks again, and only a
+    // still-standing threat renews it. The player's own Hold orders are untouched.
+    (G.armies||[]).filter(a=>a.owner===id && a.stance==='hold' && !a.at).forEach(a=>aiHoldReconsider(a));
     // order idle armies: expand into the weakest reachable neighbour first
     (G.armies||[]).filter(a=>a.owner===id && !a.at && a.stance!=='hold').forEach(a=>{
       if(a.siegeId) return; // the host is busy tightening a ring — sieges are not abandoned mid-ladder
@@ -2484,7 +2597,7 @@ function aiMonthlyOps(){
         if(startSiege(a, target, true)) return;
       }
       if(target.owner && myPower<defPower*0.95) { // too strong — dig in instead of dying
-        if(target.owner==='player' && rnd()<0.4) a.stance='hold', a.holdUntil=1e9;
+        if(target.owner==='player' && rnd()<0.4) a.stance='hold', a.holdUntil=G.day+60; // dig in facing the Crown — reconsidered in two months (WAVE 19)
         return;
       }
       orderMarchSilent(a, target);
@@ -2512,8 +2625,11 @@ function aiMonthlyOps(){
     (G.armies||[]).filter(a=>a.owner===id && !a.at && a.stance!=='hold').forEach(a=>{
       const home=rById[a.atRegion]; if(!home) return;
       const threat=home.neighbors.some(nid=>{ const n=rById[nid]; return n.owner && n.owner!==id && (e.relations[n.owner]||{}).war && n.troops>a.men*0.9; });
-      if(threat && rnd()<0.5){ a.stance='hold'; a.holdUntil=1e9; }
+      if(threat && rnd()<0.5){ a.stance='hold'; a.holdUntil=G.day+60; } // a posture with a term, not a pension (WAVE 19)
     });
+    // WAVE 19 GOVERNOR INITIATIVE: every crown's towns are governed, not just the player's
+    mine.forEach(r=>{ if(!r.gov && r.name!==e.capitalName) postAiGovernor(r, id); });
+    mine.forEach(r=>{ if(r.gov) govThinkCrown(r); });
   });
 }
 /* ---- border tension: a crown that masses spears at your marches gets NAMED for it ----
@@ -2548,6 +2664,17 @@ function borderWatch(){
       pushEvent('🛡 <b>'+en+' masses near '+r.name+'</b> — '+fmt(mass)+' men at your border. The Crown has been told.');
     }
   });
+}
+function aiHoldReconsider(a){
+  if(!a || a.owner==='player' || a.at || a.siegeId) return; // the Crown's own holds stand until countermanded
+  if((a.holdUntil||0)<1e8 && G.day<(a.holdUntil||0)) return; // the term still runs
+  const F=G.flags||{};
+  if(F.successionTest && F.successionTest.armyId===a.id) return; // a probe on the marches answers to the play, not the staff rota
+  if(typeof aiTheatreState==='function'){ const T=aiTheatreState(); if(T && T.active && T.active.armyId===a.id) return; }
+  const home=rById[a.atRegion], e=emp(a.owner); if(!home || !e){ a.stance='field'; a.holdUntil=null; return; }
+  const threat=home.neighbors.some(nid=>{ const n=rById[nid]; return n && n.owner && n.owner!==a.owner && (e.relations[n.owner]||{}).war && n.troops>a.men*0.9; });
+  if(threat) a.holdUntil=G.day+60; // still watched — dig in another two months, then look again
+  else { a.stance='field'; a.holdUntil=null; } // the frontier has gone quiet: spears up, march again
 }
 function formArmySilent(r, men){
   if(r.troops<men+500) return null;
@@ -2682,9 +2809,10 @@ function selectRegion(r){
       const rep=gv.report||{pop:r.pop};
       const arr=r.pop>rep.pop?'↑':(r.pop<rep.pop?'↓':'→');
       const lastJ=(gv.journal&&gv.journal[0])? gv.journal[0].text : 'has yet to lift a finger worth writing down';
+      const worksList=(gv.journal||[]).slice(0,3).map(j=>j.text).join(' · '); // WAVE 19: the governor's recent works, not just the last word
       acts.appendChild(actBtn('🏛 '+gv.name+' — '+GOV_TRAITS[gv.trait].label,
         GOV_TRAITS[gv.trait].blurb.charAt(0).toUpperCase()+GOV_TRAITS[gv.trait].blurb.slice(1)+
-        ' · 👥 '+fmt(r.pop)+' '+arr+' · ⚔ '+fmt(r.troops)+' men · 🪙 +'+inc+'g a season (works '+works+'g · crown '+Math.max(0,inc-works)+'g) · chest '+fmt(gv.purse)+'g. Last act: '+lastJ+'.',
+        ' · 👥 '+fmt(r.pop)+' '+arr+' · ⚔ '+fmt(r.troops)+' men · 🪙 +'+inc+'g a season (works '+works+'g · crown '+Math.max(0,inc-works)+'g) · chest '+fmt(gv.purse)+'g. Last act: '+lastJ+(worksList? '. Recent works: '+worksList : '')+'.',
         ()=>{},'',true));
       GOV_POLICY_LIST.forEach(p=>{
         acts.appendChild(actBtn(p.icon+' Course: '+p.label, p.blurb, ()=>{ setGovPolicy(r, p.id); },'', gv.policy===p.id? 'the present course' : ''));
@@ -2776,6 +2904,12 @@ function selectRegion(r){
     if(r.owner&&r.owner!=='player'){
       acts.appendChild(actBtn('⚔ '+emp(r.owner).name, rel.war? 'You are at WAR. March an army in to attack.' : 'At peace. Declare war from Realm → Diplomacy.',
         ()=>{},'war',true));
+    }
+    if(r.owner!=='player' && r.gov){ // WAVE 19: foreign governors are on the board too — their works are scouts' news
+      const gvF=r.gov, lastF=(gvF.journal&&gvF.journal[0])? gvF.journal[0].text : 'newly sealed, yet to act';
+      acts.appendChild(actBtn('🏛 Governor '+gvF.name+' ('+(GOV_TRAITS[gvF.trait]||{}).label+')',
+        'Steers '+r.name+' by '+((GOV_POLICIES[gvF.policy]||{}).label||gvF.policy)+' for the '+emp(r.owner).name+'. Last act: '+lastF+'.',
+        ()=>{},'',true));
     }
     // march time from your nearest field army — the map answers "how would I take this?"
     const mineA=(G.armies||[]).filter(a=>a.owner==='player' && !a.at);
@@ -2925,7 +3059,7 @@ function selectFleet(f){
         showOrderHint('⛵ <b>'+f.name+'</b> awaits orders — tap a <b>port</b> to sail there, or <b>open sea</b> to patrol those waters.');
       },'sea'));
     z.neighbors.forEach(nid=>{ const nz=seaById[nid];
-      const path=findSeaZonePath(f.zone, nz.id);
+      const path=findSeaZonePath(f.zone, nz.id, f.owner);
       const days=path? Math.max(1,Math.round(path.days)) : seaDays(z,nz);
       acts.appendChild(actBtn('🌊 Sail to '+nz.name,'Open water · ~'+days+' days at sea',()=>{ const ff=G.fleets.find(x=>x.id===f.id); orderSailZone(ff, nz); closeSheet(); },'sea')); });
     // enemy ports in THIS water: blockade without a voyage
@@ -2945,9 +3079,10 @@ function selectFleet(f){
 function recallFleet(f){
   const z=seaById[f.zone]; if(!f.at) return;
   const pos=fPos(f);
-  const days=Math.max(0.4, Math.hypot(pos.x-z.x, pos.y-z.y)/TRAVEL.sailPerDay);
-  f.at={ pos:{x:pos.x, y:pos.y}, legs:[{to:'s'+z.id, days, fromPos:{x:pos.x,y:pos.y}, toPos:{x:z.x,y:z.y}}],
-    legIndex:0, legDepart:G.day, legArrive:G.day+days, departDay:G.day, arriveDay:G.day+days, daysTotal:days, destPort:null, destZone:z.id };
+  const legs=curveLegs({x:pos.x, y:pos.y}, {x:z.x, y:z.y}).map(cl=>({to:'s'+z.id, days:Math.max(0.25, cl.len/TRAVEL.sailPerDay), fromPos:{x:cl.a.x,y:cl.a.y}, toPos:{x:cl.b.x,y:cl.b.y}, ctrl:cl.ctrl}));
+  const days=legs.reduce((s,l)=>s+l.days,0);
+  f.at={ pos:{x:pos.x, y:pos.y}, legs,
+    legIndex:0, legDepart:G.day, legArrive:G.day+legs[0].days, departDay:G.day, arriveDay:G.day+days, daysTotal:days, destPort:null, destZone:z.id };
   toast('⚓ '+f.name+' turns for the '+z.name);
 }
 function selectSea(z){
@@ -2965,8 +3100,9 @@ function selectSea(z){
   }
   if(z.strait){
     const pol=(G.chokePolicies||{})[z.id]||'open';
+    const heldShore=z.ports.some(pid=>{ const p=rById[pid]; return p && p.owner==='player'; }); // WAVE 19: a strait is only truly shut from its own shores
     [['open','🌊 Open Passage — free water, no questions'],['toll','🧮 Toll the Strait (+15g/season)'],['deny','⛔ Deny Rivals — shut the door; they will remember']].forEach(row=>{
-      acts.appendChild(actBtn(row[1],'',()=>{ G.chokePolicies=G.chokePolicies||{}; G.chokePolicies[z.id]=row[0]; toast(z.name+': '+row[1]); selectSea(z); save(); },'sea', pol===row[0]? 'the present policy':'')); });
+      acts.appendChild(actBtn(row[1],(row[0]==='deny'&&!heldShore)? 'no port of yours watches these shores — the order would be paper only':'',()=>{ G.chokePolicies=G.chokePolicies||{}; G.chokePolicies[z.id]=row[0]; toast(z.name+': '+row[1]); selectSea(z); save(); },'sea', pol===row[0]? 'the present policy':'')); });
   }
   acts.appendChild(actBtn('🌬 Wind Lanes — '+(G.showWinds?'drawn':'hidden')+' ('+SEASONS[G.seasonIdx]+')','The season’s wind bends every sail — toggle the arrows on the chart',()=>{ G.showWinds=!G.showWinds; selectSea(z); save(); },'sea'));
   openSheet();
@@ -2976,6 +3112,62 @@ function selectSea(z){
 function pay(n){ emp('player').gold-=n; }
 function toast(msg){ const t=$('#tally'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2600); }
 function gazette(line){ G.gazette.push(line); }
+/* ================= THE TAVERN RUMOR MILL (WAVE 19) =================
+   Harbour talk, ground out slow (one tale in three days at most) and drawn ONLY from
+   true state at the moment of printing — a rival squadron's water, a dear market, a
+   governor's chest, a company's render, a tempest's toll. Nothing is invented: every
+   figure in a rumour is read off the living game an eye-beat before the ink. Enemy
+   movement is tavern-hearsay by nature, so it wears the "word is / last seen" dress. */
+let _rumorDay=-99, _rumorIx=0;
+function _seaNear(x, y){ let bz=null, bd=1e18; (G.seas||[]).forEach(z=>{ const d=Math.hypot(z.x-x, z.y-y); if(d<bd){ bd=d; bz=z; } }); return bz; }
+function rumorFleet(){
+  const fs=(G.fleets||[]).filter(f=>f.owner && f.owner!=='player' && f.owner!=='natives' && f.ships>=3 && emp(f.owner));
+  if(!fs.length) return null;
+  const f=fs[_rumorIx % fs.length], e=emp(f.owner), cap=captainName(f);
+  if(f.at){ const p=fPos(f), z=_seaNear(p.x, p.y);
+    const dest=f.at.destPort!=null? (rById[f.at.destPort]||{}).name : (f.at.destZone!=null? (seaById[f.at.destZone]||{}).name : 'open water');
+    return 'word is the '+e.name+' squadron — '+f.ships+' sail under '+cap+' — is making for '+(dest||'open water')+', last seen off the '+(z? z.name : 'open sea')+'. The taverns hold the rest lightly.';
+  }
+  const z=seaById[f.zone];
+  return 'the '+e.name+' squadron rides the '+(z? z.name : 'open sea')+' — '+f.ships+' sail under '+cap+', and the lane-watchers count her guns twice.';
+}
+function rumorPrice(){
+  let best=null;
+  (G.regions||[]).filter(r=>r.isPort && r.supply).forEach(r=>{ [r.specialty, 'grain'].forEach(g=>{ const f=priceFactor(r, g);
+    if(f>=1.45 && (!best || f>best.f)) best={r, g, f}; }); });
+  if(!best) return null;
+  const z=seaById[best.r.seaZone];
+  return GOODS[best.g]+' is dear at '+best.r.name+' — '+goodPrice(best.r, best.g)+'g the unit and only '+daysOfSupply(best.r, best.g)+' days inside the walls. Every coaster on the '+(z? z.name : 'coast')+' is suddenly loading for her.';
+}
+function rumorGovernor(){
+  const gs=(G.regions||[]).filter(r=>r.gov && r.owner);
+  if(!gs.length) return null;
+  const r=gs[_rumorIx % gs.length], g=r.gov, pol=(GOV_POLICIES[g.policy]||{}).label || g.policy;
+  return g.name+' holds '+r.name+' for the '+emp(r.owner).name+' with a '+pol+' — '+fmt(g.purse||0)+'g in the city chest, and the taverns judge him by both.';
+}
+function rumorCompany(){
+  const cs=(G.companies||[]).filter(c=>c && (c.lastPay||0)>0 && seaById[c.seaId]);
+  if(!cs.length) return null;
+  const c=cs[_rumorIx % cs.length], z=seaById[c.seaId];
+  return (c.name || 'a chartered company')+' rendered '+fmt(c.lastPay)+'g last season off the '+z.name+' — '+(c.owner==='player'? 'your seal earns while you sleep. The counting-houses approve. Loudly.' : ' coin that might have flown your seal. The counting-houses mention it. Often.');
+}
+function rumorStorm(){
+  const ss=G.storms||[]; if(!ss.length) return null;
+  const s=ss[_rumorIx % ss.length], z=_seaNear(s.x, s.y), toll=(G.seasonNotes && G.seasonNotes.storms) || 0;
+  if(toll>0) return 'the tempest off the '+(z? z.name : 'the deep')+' has taken '+toll+' hull'+(toll===1? '' : 's')+' this season, and the widows in the taverns are doing the arithmetic out loud.';
+  return 'a tempest spins off the '+(z? z.name : 'the deep')+', and every captain in the taverns is abruptly busy somewhere else.';
+}
+function tavernRumorDaily(){
+  if(!G || G.over || G.day-_rumorDay<3) return; // the mill grinds slow — one tale in three days, never a flood
+  const sources=[rumorFleet, rumorPrice, rumorGovernor, rumorCompany, rumorStorm];
+  for(let k=0;k<sources.length;k++){
+    let line=null; try{ line=sources[(_rumorIx+k)%sources.length](); }catch(err){ line=null; }
+    if(!line) continue;
+    const full='☕ <b>Tavern talk:</b> '+line;
+    if((G.gazette||[]).slice(-8).some(l=>String(l)===full)) continue; // never the same tale twice on the page
+    gazette(full); pushEvent(full); _rumorDay=G.day; _rumorIx++; return;
+  }
+}
 function doMuster(r){
   const me=emp('player'); if(me.gold<MUSTER_COST||r.pop<MUSTER_MEN) return;
   pay(MUSTER_COST); r.pop-=MUSTER_MEN; r.troops+=MUSTER_MEN;
@@ -3013,14 +3205,14 @@ function battle(attacker, atkTroops, defRegion){
   return {win:aPower>dPower, aLoss:Math.min(aLoss,atkTroops), dLoss:Math.min(dLoss,defRegion.troops), rout};
 }
 /* doMoveArmy is GONE — armies move in real time now (orderMarch + armyArrive). */
-function checkCapitalLoss(ownerId){
+function checkCapitalLoss(ownerId, victorId){
   if(!ownerId||ownerId==='player') return;
   const capName=(G.empires[ownerId]||{}).capitalName; if(!capName) return;
   const cap=G.regions.find(r=>r.name===capName);
   if(cap.owner!==ownerId){
     const hasPorts=G.regions.some(r=>r.owner===ownerId&&r.isPort);
     const hasAny=G.regions.some(r=>r.owner===ownerId);
-    if(!hasPorts||!hasAny) gazette('👑 <b>The '+emp(ownerId).name+' has fallen.</b> Its court flees into exile; its remaining banners scatter.');
+    if((!hasPorts||!hasAny) && ceremony('capfall:'+ownerId)) gazette('👑 '+blazonChip(victorId||cap.owner||ownerId)+'<b>The '+emp(ownerId).name+' has fallen.</b> Its court flees into exile; its remaining banners scatter.');
     if(!hasAny){ G.fleets=G.fleets.filter(f=>f.owner!==ownerId); EMPIRES.forEach(e=>{ if(G.empires[e.id]) delete G.empires[e.id].relations[ownerId]; }); }
   }
 }
@@ -3200,7 +3392,7 @@ function surrenderTown(sg, honors){
     if(survivors-garrisonTake>=1000){ a.men=survivors-garrisonTake; a.atRegion=r.id; a.fromRegion=r.id; armyHonours(a,{win:true}); }
     else { a.men=survivors; G.armies=G.armies.filter(x=>x.id!==a.id); }
   }
-  if(prev&&prev!==sg.atkOwner){ checkCapitalLoss(prev); warLedger(sg.atkOwner, prev); }
+  if(prev&&prev!==sg.atkOwner){ checkCapitalLoss(prev, sg.atkOwner); warLedger(sg.atkOwner, prev); }
   G.siegeDone=(G.siegeDone||0)+1;
   if(sg.atkOwner==='player'){
     const spoils=prev? 100+r.tier*50 : 40; emp('player').gold+=spoils;
@@ -3448,11 +3640,12 @@ function govCostMult(gv, kind){
   if(gv.trait==='merchant' && kind==='trade') return 0.8; // a fifth off markets and growth
   return 1;
 }
-function govThreat(r){
-  // 0 calm · 1 watched from the border · 2 danger at the gates
+function govThreat(r, owner){
+  // 0 calm · 1 watched from the border · 2 danger at the gates — measured against the town's OWN crown
+  owner=owner||r.owner||'player';
   let t=0;
-  r.neighbors.map(id=>rById[id]).forEach(n=>{ if(n && n.owner && n.owner!=='player' && atWar(n.owner,'player')){ t=Math.max(t,1); if(n.troops>=r.troops*1.2) t=2; } });
-  (G.armies||[]).forEach(a=>{ if(a.owner && a.owner!=='player' && atWar(a.owner,'player') && ((a.at && a.destRegion===r.id) || a.atRegion===r.id)) t=2; });
+  r.neighbors.map(id=>rById[id]).forEach(n=>{ if(n && n.owner && n.owner!==owner && atWar(n.owner,owner)){ t=Math.max(t,1); if(n.troops>=r.troops*1.2) t=2; } });
+  (G.armies||[]).forEach(a=>{ if(a.owner && a.owner!==owner && atWar(a.owner,owner) && ((a.at && a.destRegion===r.id) || a.atRegion===r.id)) t=2; });
   if(r.isPort && isBlockaded(r)) t=Math.max(t,1);
   return t;
 }
@@ -3464,13 +3657,14 @@ function govMood(r){
   return '🌿 quiet';
 }
 function govBuildShips(r){ // doBuildShips' quiet twin — paid from the city chest, not the Crown
-  let f=G.fleets.find(f=>f.owner==='player' && f.zone===r.seaZone);
-  if(!f){ f={id:newUnitId(), owner:'player', zone:r.seaZone, node:'s'+r.seaZone, pos:{x:seaById[r.seaZone].x, y:seaById[r.seaZone].y}, at:null, ships:0, stance:'patrol', name:'Home Squadron'}; G.fleets.push(f); }
+  const owner=r.owner||'player';
+  let f=G.fleets.find(f=>f.owner===owner && f.zone===r.seaZone);
+  if(!f){ f={id:newUnitId(), owner, zone:r.seaZone, node:'s'+r.seaZone, pos:{x:seaById[r.seaZone].x, y:seaById[r.seaZone].y}, at:null, ships:0, stance:'patrol', name:owner==='player'? 'Home Squadron' : emp(owner).name.split(' ')[0]+' Squadron'}; G.fleets.push(f); }
   f.ships+=2;
 }
 function govPlan(r){
   const gv=r.gov; if(!gv) return null;
-  const pol=gv.policy, threat=govThreat(r);
+  const pol=gv.policy, threat=govThreat(r, r.owner);
   const raidHurt = gv.lastPop && r.pop < gv.lastPop*0.72;
   const cands=[];
   const push=(pri,kind,cost,run,text)=>cands.push({pri,kind,cost,run,text});
@@ -3508,7 +3702,7 @@ function govPlan(r){
   if(!cands.length) return null;
   cands.sort((a,b)=>b.pri-a.pri);
   const reserve=gv.trait==='hoarder'?60:10; // the hoarder never empties the chest
-  for(const c of cands){ const cost=Math.round(c.cost*govCostMult(gv, c.kind)); if(gv.purse-cost>=reserve) return {pri:c.pri, cost, run:c.run, text:c.text}; }
+  for(const c of cands){ const cost=Math.round(c.cost*govCostMult(gv, c.kind)); if(gv.purse-cost>=reserve) return {pri:c.pri, kind:c.kind, cost, run:c.run, text:c.text}; } // kind rides home now — the Captain's Log dispatch on builds was dead without it
   return null;
 }
 function govQueue(item){ // the Crown hears only what matters — and never the same matter twice
@@ -3559,12 +3753,87 @@ function govEscalate(r){
         {label:'Deny', fn:null}]});
   }
 }
+function govExecutePlan(r){
+  const gv=r.gov, plan=govPlan(r);
+  if(!plan) return null;
+  gv.purse-=plan.cost; plan.run(); govJournal(r, plan.text);
+  return plan;
+}
+/* ================= GOVERNOR INITIATIVE (WAVE 19) =================
+   A governor with a war or growth course, a fat garrison and quiet gates may reach for
+   the next town over — free shores and shore-peoples under honest odds, marched and
+   fought through the same roads and battles as any crown host. Crown-held ground is
+   NEVER a governor's to take: your governors petition the Crown (and the war, if you
+   bless it, is declared by your word); a rival's governors simply do not — their
+   crowns make their own wars. Every man marched is a real garrison man, every coin
+   a real chest coin. */
+function govExpansion(r){
+  const gv=r.gov, owner=r.owner; if(!gv || !owner) return;
+  const pol=gv.policy;
+  if(pol!=='war' && pol!=='growth') return;              // only these courses reach for ground
+  if(isBesieged(r) || siegeAt(r.id)) return;             // no adventures with a ring on the town
+  if(G.day-(gv.lastMarch||-999)<45) return;              // one venture at a time, not a drumbeat
+  if((G.armies||[]).some(a=>a.owner===owner && a.atRegion===r.id && !a.at)) return; // a field host already stands here — its orders are higher than a governor's
+  const spare=r.troops-700; if(spare<500) return;        // the town keeps 700 spears at home, always
+  const men=Math.min(spare, 2400);
+  const tech=(emp(owner).armyTech||0);
+  const myPower=men*(1+tech*0.35);
+  const defP=t=>t.troops*(1+((t.owner&&emp(t.owner))? emp(t.owner).armyTech:0)*0.3)*(t.greatWork==='citadel'?1.3:1);
+  const neighbours=r.neighbors.map(id=>rById[id]).filter(t=>t && t.owner!==owner && !allied(owner, t.owner));
+  const free=neighbours.filter(t=>!t.owner || t.owner==='natives')
+    .filter(t=>pol==='war' || !t.owner)                  // growth plants flags on empty shores; war may also face the shore-peoples
+    .sort((a,b)=>defP(a)-defP(b));
+  const target=free.find(t=>myPower>=defP(t)*1.3);        // honest odds or no venture
+  if(target){
+    const a=formArmySilent(r, men); if(!a) return;
+    gv.lastMarch=G.day;
+    orderMarchSilent(a, target);
+    govJournal(r, 'marched '+fmt(men)+' men on '+target.name+' — the course allows it and the odds were honest');
+    if(owner==='player'){ gazette('🏛 <b>Governor '+gv.name+'</b> of '+r.name+' marches '+fmt(men)+' men on '+target.name+'.'); pushEvent('🏛 <b>Gov. '+gv.name+'</b> marches on '+target.name+'.'); }
+    else gazette('🏛 '+emp(owner).name+': Governor '+gv.name+' of '+r.name+' marches on '+target.name+'.');
+    return;
+  }
+  // no lawful prey: a crown-held neighbour at decent odds is the CROWN's business, not a governor's
+  if(pol!=='war' || owner!=='player') return;
+  const crownT=neighbours.filter(t=>t.owner && t.owner!=='natives').sort((a,b)=>defP(a)-defP(b))[0];
+  if(crownT && myPower>=defP(crownT)*1.05){
+    const seasonNo=Math.floor(G.day/90);
+    govQueue({key:'govtake'+r.id+'t'+crownT.id+'s'+seasonNo, icon:'🏛', urgent:false,
+      title:gv.name+' asks leave to take '+crownT.name,
+      body:'Governor '+gv.name+' of '+r.name+' counts '+fmt(Math.min(spare,2400))+' spears to spare and '+crownT.name+' held by the '+emp(crownT.owner).name+' with '+fmt(crownT.troops)+' — a fair fight, and a war if you bless it. Governors do not declare wars; crowns do.',
+      choices:[
+        {label:'Let '+gv.name.split(' ').slice(-1)[0]+' march — declare the war', fn:()=>{
+          const t2=rById[crownT.id]; if(!t2 || t2.owner===owner){ toast('The moment has passed — '+crownT.name+' has changed hands.'); return; }
+          emp('player').relations[t2.owner].war=true; emp(t2.owner).relations['player'].war=true;
+          gazette('⚔ <b>War.</b> At Governor '+gv.name+'’s urging the Crown gives the word — '+t2.name+' is to be taken from the '+emp(t2.owner).name+'.');
+          const a2=formArmySilent(r, Math.min(Math.max(500, r.troops-700), 2400));
+          if(a2){ gv.lastMarch=G.day; orderMarchSilent(a2, t2); govJournal(r, 'won the Crown’s leave and marched on '+t2.name); }
+          else toast(r.name+' cannot spare the spears any longer.'); }},
+        {label:'Not while I reign', fn:null}]});
+  }
+}
+function govThinkCrown(r){ // a rival crown's governor: same plans, same chest, same law — no Crown queue, no dispatches
+  const gv=r.gov; if(!gv || !r.owner || r.owner==='player') return;
+  govExecutePlan(r);
+  govExpansion(r);
+  gv.lastPop=r.pop;
+}
+function postAiGovernor(r, ownerId){
+  const d=GOV_POOL_DEFS[Math.abs(r.id*7+ownerId.length*3)%GOV_POOL_DEFS.length];
+  const traits=['farmer','merchant','builder','hoarder','hawk','mariner'];
+  const frontier=r.neighbors.some(nid=>{ const n=rById[nid]; return n && n.owner && n.owner!==ownerId; });
+  const policy=r.isPort? (rnd()<0.45? 'harbor' : pick(['balanced','wealth','growth']))
+    : frontier? (rnd()<0.4? 'war' : pick(['balanced','growth','wealth','war']))
+    : pick(['balanced','growth','wealth']);
+  r.gov={ name:d[0], trait:traits[Math.abs(r.id*3+ownerId.length)%traits.length], policy, since:G.day, purse:40,
+    journal:[{day:G.day, text:'took up the seals of '+r.name}], report:{pop:r.pop, troops:r.troops, income:regionIncome(r)}, esc:{}, lastPop:r.pop };
+}
 function govThink(r){
   const gv=r.gov; if(!gv || r.owner!=='player' || isPlayerCapital(r)) return;
   govEscalate(r);
-  const plan=govPlan(r);
-  if(plan){ gv.purse-=plan.cost; plan.run(); govJournal(r, plan.text);
-    if(plan.kind==='build') dispatch('Gov. '+gv.name.split(' ').slice(-1)[0]+' of '+r.name, plan.text.replace(/^[a-z]/, c=>c.toUpperCase())+' The town feels it within the month, Majesty.'); }
+  const plan=govExecutePlan(r);
+  if(plan && plan.kind==='build') dispatch('Gov. '+gv.name.split(' ').slice(-1)[0]+' of '+r.name, plan.text.charAt(0).toUpperCase()+plan.text.slice(1)+' The town feels it within the month, Majesty.');
+  govExpansion(r);
   gv.lastPop=r.pop;
 }
 function governorMonthly(){
@@ -3904,7 +4173,7 @@ else toast(emp(other).name+' spurns your coin — they smell a longer war.');
 } else if(mode==='land'){
 const cede=myRegions().filter(r=>r.neighbors.some(n=>rById[n]&&rById[n].owner===other)).sort((a,b)=>a.troops-b.troops)[0];
 if(!cede){ toast('You share no border to cede along.'); return;}
-if(rnd()*100<ch+10){ cede.owner=other; cede.troops=Math.max(400,cede.troops); settle(); gazette('🕊 '+cede.name+' is ceded to '+emp(other).name+' — the price of quiet.');}
+if(rnd()*100<ch+10){ cede.owner=other; cede.troops=Math.max(400,cede.troops); settle(); gazette('🕊 '+blazonChip(other)+cede.name+' is ceded to '+emp(other).name+' — the price of quiet.');}
 else toast(emp(other).name+' wants more than '+cede.name+'.');
 } else { // treaty: peace + non-privateering pledge
 if(rnd()*100<ch+6){ settle(); G.privateers=(G.privateers||[]).filter(p=>p.target!==other); ledger(other,'trust',6,'the non-privateering pledge'); toast('🕊 Peace — and the privateers stand down.');}
@@ -4952,6 +5221,7 @@ siegesDaily();
 blockadeDaily();
 diplomacyDaily();
 realmBreathesDaily();
+tavernRumorDaily(); // WAVE 19: the taverns grind their one tale in three days, from true state only
 // the cold-open crisis keeps a young reign honest: pirates by the fourth dawn, not the first season
 { const co=G.coldopen||(G.coldopen={stage:0,done:{}});
   if(G.day>=4 && !co.done.pirates){ co.done.pirates=1; spawnFreebooters(); }
@@ -5147,7 +5417,7 @@ ordReply('🕯 I heard '+heard+' but found no hand to move. Name an army, fleet,
 function collectIncome(id){
   const e=emp(id); if(!e) return {gold:0,trade:0,upkeep:0,interest:0};
   let gold=0; G.regions.filter(r=>r.owner===id).forEach(r=>{ gold+=regionIncome(r);
-    if(id==='player' && r.gov){ const w=govWorksShare(r); r.gov.purse=(r.gov.purse||0)+w; gold-=w; } }); // a governed city keeps its works share in its own chest; the Crown taxes the rest
+    if(r.gov){ const w=govWorksShare(r); r.gov.purse=(r.gov.purse||0)+w; gold-=w; } }); // a governed city keeps its works share in its own chest; the Crown taxes the rest — WAVE 19: every crown's governed cities, the player's rule for all
   const trade=tradeIncome(id);
   const upkeep=Math.round((totalMen(id)/1000)*2.2 + totalShips(id)*3);
   const interest=Math.round(e.debt*0.06);
@@ -5472,7 +5742,14 @@ $('#clock-1').onclick=()=>{ simResumeFromEvent(); setClock(2); };
 $('#clock-2').onclick=()=>{ simResumeFromEvent(); setClock(4); };
 $('#clock-4').onclick=()=>{ simResumeFromEvent(); setClock(8); };
 $('#clock-autopause').onchange=e=>toggleEventPause(e.target.checked);
-$('#btn-menu').onclick=()=>{ syncWindsBtn(); openVeil('menu'); };
+$('#btn-menu').onclick=()=>{ syncWindsBtn(); openVeil('menu');
+  // WAVE 19 (PWA): the Add-to-Home-Screen hint surfaces exactly once, from the Menu — dismissed means gone for good
+  try{ const hint=$('#menu-install-hint');
+    const standalone=(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true;
+    if(hint) hint.style.display=(!standalone && !localStorage.getItem('riftsail-homehint'))? 'block':'none';
+  }catch(e){}
+};
+{ const md=$('#menu-install-dismiss'); if(md) md.onclick=(ev)=>{ ev.preventDefault(); try{ localStorage.setItem('riftsail-homehint','1'); }catch(e){} const h=$('#menu-install-hint'); if(h) h.style.display='none'; }; }
 $('#menu-close').onclick=()=>$('#menu').classList.remove('open');
 $('#menu-continue').onclick=()=>$('#menu').classList.remove('open');
 $('#menu-how').onclick=()=>{ openVeil('howto'); };
@@ -5803,6 +6080,15 @@ try{
       const col=new THREE.Color((G.empires[r.owner]||{}).color||'#e9c96e').lerp(_lift, 0.22).multiplyScalar(1.45); // only a breath of candlelight lift — the hue must keep its name from orbit
       const H=150, R0=Math.max(9, P.R*0.85);
       gb.add(new THREE.CylinderGeometry(R0*0.42, R0, H, 12, 1, true), M4(SX(r.x), BASE_Y+H/2, SZ(r.y)), col);
+      /* WAVE 19: the pillar gets feet — a pool of the same candlelight spilled at its base, so
+         the tint anchors over bright noon land instead of floating. Same mesh, same single
+         draw; the radial fade is baked into the disc's uvs, where the shader reads its fall. */
+      const pool=new THREE.CircleGeometry(R0*1.7, 20); pool.rotateX(-Math.PI/2);
+      { const uv=pool.attributes.uv;
+        for(let i=0;i<uv.count;i++){ const du=uv.getX(i)-0.5, dv=uv.getY(i)-0.5, d=Math.min(1, Math.hypot(du, dv)*2);
+          uv.setXY(i, 0.5, 1-Math.pow(1-d, 0.74)); }
+        uv.needsUpdate=true; }
+      gb.add(pool, M4(SX(r.x), BASE_Y+0.22, SZ(r.y)), col);
     });
     _capGlowMesh=gb.mesh(capGlowMat());
     _capGlowMesh.castShadow=false; _capGlowMesh.receiveShadow=false;
@@ -6439,6 +6725,62 @@ try{
     else _penn(bx+P.R*0.2, by+H+2.3, bz-P.R*0.18);
   }
 
+  /* ---------- WAVE 19 land dressing: the country's trade written on its fields ----------
+     Seeded per region from what it sells — wheat-gold plots and plough lines in grain
+     country, log stacks in timber land, a mine headgear over iron, vine rows for wine,
+     herd specks in cloth-wool country, cane and drying racks in the south. Sparse on
+     purpose: a farm you notice, not a diorama you trip over. */
+  function landDressing(r, bx, bz, B, D){
+    const seed=(r.id*17.31)%6.28;
+    const spots=[[13,0.5],[19,2.2],[24,3.9],[16,5.3],[27,1.4]];
+    const put=(fn)=>{ spots.forEach(([rad,ang],i)=>{ const wx=bx+Math.cos(seed+ang)*rad, wz=bz+Math.sin(seed+ang)*rad*0.78; if(onLand(wx, wz, r)) fn(wx, wz, i); }); };
+    switch(r.specialty){
+      case 'grain':
+        put((x,z,i)=>{ if(i>1) return;
+          D.add(new THREE.PlaneGeometry(4.6,3.0).rotateX(-Math.PI/2), M4(x, BASE_Y+0.07, z, 0, seed+i, 0), '#c8a84b');
+          for(let s2=0;s2<3;s2++) D.add(new THREE.PlaneGeometry(3.6,0.32).rotateX(-Math.PI/2), M4(x-1+s2, BASE_Y+0.075, z, 0, seed+i, 0), '#8a6f35'); });
+        break;
+      case 'timber':
+        put((x,z,i)=>{ if(i>2) return;
+          for(let l=0;l<3;l++) B.add(new THREE.CylinderGeometry(0.22,0.22,2.6,6).rotateZ(Math.PI/2), M4(x+(l%2)*0.5, BASE_Y+0.25+Math.floor(l/2)*0.4, z, 0, seed, 0), '#6e5233');
+          B.add(new THREE.CylinderGeometry(0.3,0.36,0.5,6), M4(x+1.4, BASE_Y+0.25, z+0.8), '#7d6242'); });
+        break;
+      case 'iron':
+        put((x,z,i)=>{ if(i>0) return;
+          B.add(new THREE.BoxGeometry(0.22,2.6,0.22), M4(x-0.8, BASE_Y+1.3, z), '#3f3a33');
+          B.add(new THREE.BoxGeometry(0.22,2.6,0.22), M4(x+0.8, BASE_Y+1.3, z), '#3f3a33');
+          B.add(new THREE.BoxGeometry(2.2,0.24,0.24), M4(x, BASE_Y+2.6, z), '#3f3a33');
+          B.add(new THREE.ConeGeometry(1.5,1.1,7), M4(x+2.4, BASE_Y+0.55, z+0.6), '#5c554c'); });
+        break;
+      case 'wine':
+        put((x,z,i)=>{ if(i>1) return;
+          for(let row=0;row<3;row++) for(let vI=0;vI<4;vI++)
+            B.add(new THREE.BoxGeometry(0.5,0.55,0.5), M4(x+(vI-1.5)*0.9, BASE_Y+0.28, z+(row-1)*1.1, 0, seed, 0), '#4a6b2f'); });
+        break;
+      case 'cloth':
+        put((x,z,i)=>{ if(i>2) return;
+          for(let s2=0;s2<4;s2++) B.add(new THREE.BoxGeometry(0.55,0.35,0.4), M4(x+hash(r.id+s2*3)-0.5, BASE_Y+0.2, z+hash(r.id*2+s2)-0.5), s2%2? '#ddd6c4':'#9a958a');
+          B.add(new THREE.BoxGeometry(3.0,0.09,0.09), M4(x, BASE_Y+0.5, z-1.2, 0, seed, 0), '#6b543a'); });
+        break;
+      case 'sugar':
+        put((x,z,i)=>{ if(i>1) return;
+          D.add(new THREE.PlaneGeometry(4.2,2.8).rotateX(-Math.PI/2), M4(x, BASE_Y+0.07, z, 0, seed, 0), '#7fae4c');
+          for(let cI=0;cI<5;cI++) B.add(new THREE.CylinderGeometry(0.05,0.07,1.15,5), M4(x-1.2+cI*0.6, BASE_Y+0.55, z+hash(r.id+cI)*0.8-0.4), '#6f9e3f'); });
+        break;
+      case 'spices':
+        put((x,z,i)=>{ if(i>1) return;
+          B.add(new THREE.BoxGeometry(2.2,0.12,0.9), M4(x, BASE_Y+0.75, z), i? '#c9862b':'#b84a39');
+          B.add(new THREE.BoxGeometry(0.12,0.75,0.12), M4(x-0.9, BASE_Y+0.37, z), '#4a3826');
+          B.add(new THREE.BoxGeometry(0.12,0.75,0.12), M4(x+0.9, BASE_Y+0.37, z), '#4a3826'); });
+        break;
+      case 'naval':
+        put((x,z,i)=>{ if(i>1) return;
+          for(let bI=0;bI<3;bI++) B.add(new THREE.CylinderGeometry(0.26,0.26,0.62,7), M4(x+bI*0.6-0.6, BASE_Y+0.31, z), '#5d4630');
+          B.add(new THREE.CylinderGeometry(0.09,0.09,3.4,5).rotateZ(Math.PI/2), M4(x, BASE_Y+0.35, z+1.1, 0, seed, 0), '#8a6f42'); });
+        break;
+    }
+  }
+
   function buildKitSettlement(r){
     const P=planTown(r), bx=P.bx, bz=P.bz, by=BASE_Y;
     const e = r.owner? emp(r.owner) : null;
@@ -6605,6 +6947,29 @@ try{
         b.add(new THREE.BoxGeometry(0.09,1.8,0.09), M4(bx+dx*(qd+0.9)-dz*1.8, by+2.6, bz+dz*(qd+0.9)+dx*1.8), '#2e1f0a'); // the fall of rope
         b.add(new THREE.BoxGeometry(0.95,0.8,0.95), M4(bx+dx*(qd+0.9)-dz*1.8, by+1.35, bz+dz*(qd+0.9)+dx*1.8, 0, hash(r.id*3)*0.8, 0), '#7a5a2c'); // the load, mid-swing forever
       }
+      if(r.tier>=3){ // WAVE 19: a great port works TWO cranes — the second rig stands down the quay, same honest timber
+        b.add(new THREE.BoxGeometry(0.4,3.6,0.4), M4(bx+dx*(qd-1.2)+dz*3.4, by+1.8, bz+dz*(qd-1.2)-dx*3.4), '#453012');
+        b.add(new THREE.BoxGeometry(3.2,0.35,0.35), M4(bx+dx*(qd-0.3)+dz*3.4, by+3.5, bz+dz*(qd-0.3)-dx*3.4, 0, -ang, 0), '#453012');
+        b.add(new THREE.BoxGeometry(0.09,1.8,0.09), M4(bx+dx*(qd+0.9)+dz*3.4, by+2.6, bz+dz*(qd+0.9)-dx*3.4), '#2e1f0a');
+        b.add(new THREE.BoxGeometry(0.95,0.8,0.95), M4(bx+dx*(qd+0.9)+dz*3.4, by+1.35, bz+dz*(qd+0.9)-dx*3.4, 0, hash(r.id*7)*0.8, 0), '#7a5a2c');
+      }
+      { // WAVE 19: the quay's clutter is the trade made visible — crates and barrels pile with the
+        // town's tier and its market; a blockaded harbour works half gangs and tips its cargo
+        const blockaded=isBlockaded(r);
+        const crates=(r.tier+1)+(r.hasMarket? 2:0);
+        for(let i=0;i<crates;i++){
+          if(blockaded && i>2) break; // the rest never made it off the ships
+          const tip=blockaded && i===2;
+          b.add(new THREE.BoxGeometry(0.85,0.7,0.85), M4(bx+dx*(qd+2.2)-dz*(i*1.25-2.4), by+0.35, bz+dz*(qd+2.2)+dx*(i*1.25-2.4), 0, hash(r.id*13+i)*0.9, tip? 0.7:0), i%2? '#7a5a2c':'#8a6a3a');
+          if(i%2===0) b.add(new THREE.CylinderGeometry(0.24,0.24,0.6,7), M4(bx+dx*(qd+3.1)-dz*(i*1.25-2.0), by+0.3, bz+dz*(qd+3.1)+dx*(i*1.25-2.0)), '#5d4630');
+        }
+        if(r.hasMarket){ // market stalls lean against the quay wall, awnings in the town's own colour
+          for(let i=0;i<3;i++){
+            b.add(new THREE.BoxGeometry(1.1,0.75,0.9), M4(bx+dx*(qd+3.9)-dz*(i*1.7-1.6), by+0.37, bz+dz*(qd+3.9)+dx*(i*1.7-1.6), 0, -ang, 0), '#6e5844');
+            b.add(new THREE.BoxGeometry(1.3,0.08,1.1), M4(bx+dx*(qd+3.9)-dz*(i*1.7-1.6), by+0.95, bz+dz*(qd+3.9)+dx*(i*1.7-1.6), 0, -ang, 0), awningTint(r));
+          }
+        }
+      }
       if(r.tier>=2) for(let i=-2;i<=2;i++)
         b.add(new THREE.BoxGeometry(2.3,0.85,1.15), M4(bx+dx*(qd+8)-dz*i*2.7, 0.5, bz+dz*(qd+8)+dx*i*2.7, 0, -ang, 0), '#7d7466');
       if(r.tier>=2 && (r.name==='Gibraltar'||r.name==='London'||r.name==='Havana')){
@@ -6624,9 +6989,10 @@ try{
         ship.rotation.y = Math.atan2(-dx, -dz) + hash(r.id*31+i)*0.3;
         harbor.add(ship);
       }
-      if(KIT.ships[0]){ // rowboats — small life riding the same wave function the fleets ride
+      if(KIT.ships[0]){ // rowboats — small life riding the same wave function the fleets ride; busier quays work more boats (WAVE 19)
         const list=[];
-        for(let i=0;i<2;i++){
+        const nBoats=2+(r.tier>=2?1:0)+(r.tier>=3?1:0);
+        for(let i=0;i<nBoats;i++){
           const boat=kitShipGroup(0, true, null); boat.scale.multiplyScalar(0.52);
           const bxx=bx+dx*(P.shoreD+1.3)-dz*(5-i*9), bzz=bz+dz*(P.shoreD+1.3)+dx*(5-i*9);
           boat.position.set(bxx, 0.5, bzz); boat.rotation.y=Math.atan2(-dx,-dz)+0.4*i-0.2;
@@ -6640,6 +7006,7 @@ try{
       b.add(new THREE.CylinderGeometry(0.11,0.13,6.4,5), M4(bx+2.2, by+3.2, bz-5.6), '#3a2812');
       b.add(new THREE.BoxGeometry(3.1,1.85,0.16), M4(bx+3.75, by+5.35, bz-5.6), ownerCol);
     }
+    landDressing(r, bx, bz, b, dec); // WAVE 19: the fields around town tell its trade
     // satellite hamlets spread WIDER on the big chart (spread is the point)
     const sb=new TB(KIT.mats.town);
     const sats=Math.min(r.towns,2);
@@ -6778,7 +7145,12 @@ try{
         b.add(new THREE.CylinderGeometry(0.75,1.0,4.8,7), M4(bx-dx*5.5, by+2.4, bz-dz*5.5), '#efe6cc');
         b.add(new THREE.SphereGeometry(0.62,8,6), M4(bx-dx*5.5, by+5.1, bz-dz*5.5), '#ffd97a');
       }
+      // WAVE 19: quay clutter, mirrored plainly — crates pile with tier and market
+      const nCr=(r.tier+1)+(r.hasMarket? 2:0), blkP=isBlockaded(r);
+      for(let i=0;i<nCr;i++){ if(blkP && i>2) break;
+        b.add(new THREE.BoxGeometry(0.85,0.7,0.85), M4(bx+dx*8.6-dz*(i*1.25-2.4), by+0.35, bz+dz*8.6+dx*(i*1.25-2.4), 0, hash(r.id*13+i)*0.9, (blkP&&i===2)? 0.7:0), i%2? '#7a5a2c':'#8a6a3a'); }
     }
+    landDressing(r, bx, bz, b, b); // WAVE 19: the fields around town tell its trade (fallback painter too)
     // army standard — flag in owner colours when a real garrison stands here
     if(r.troops>=500){
       b.add(new THREE.CylinderGeometry(0.11,0.13,6.4,5), M4(bx+2.2, by+3.2, bz-5.6), '#3a2812');
@@ -7347,9 +7719,8 @@ try{
       }
       const p = a.at? a.at.pos : (rById[a.atRegion]? {x:rById[a.atRegion].x, y:rById[a.atRegion].y} : null);
       if(p){ v.group.position.set(SX(p.x), BASE_Y+0.15, SZ(p.y)); }
-      // banner bobs as it marches
+      // banner bobs as it marches (heading and stance come from updateArmyBodies — the old slow SPIN is gone: a standard faces its enemy, not the compass rose)
       v.group.position.y = BASE_Y+0.15 + (a.at? Math.abs(Math.sin(t*6+a.id))*0.22 : 0);
-      v.group.rotation.y = t*0.12 + a.id;
     });
     [...armyVis.keys()].forEach(id=>{ if(!seen.has(id)){ scene.remove(armyVis.get(id).group); armyVis.delete(id); } });
     // marching route ribbon — origin → now → destination (throttled: markers move daily, not per frame)
@@ -7425,6 +7796,161 @@ try{
     }
     if(marchRingGroup){ const s=1+Math.sin(t*3.4)*0.06; marchRingGroup.scale.set(s,1,s); }
   }
+  /* ================= WAVE 19: ARMIES WITH BODIES =================
+     A banner alone is a signpost; an army is a body of men. Every field host now stands
+     as ranked instanced figures in owner-colour coats — a column on the march (three
+     files, wagons at the tail, dust behind), a formed block at rest facing its enemy,
+     the standard-bearer (the old banner group) planted at the head. Figure count
+     follows the muster roll: men you can count teach the eye what 2,000 spears means.
+     Two instanced draws for every army on the chart; far band keeps banner + mass. */
+  let armyFigMesh=null, armyFigCap=0, wagonMesh=null, dustPts=null, dustPos=null;
+  const _figDummy = (typeof THREE!=='undefined')? new THREE.Object3D() : null;
+  function soldierGeo(){
+    const parts=[];
+    const add=(w,h,d,x,y,z,rz)=>{ const g=new THREE.BoxGeometry(w,h,d); g.applyMatrix4(new THREE.Matrix4().makeRotationZ(rz||0)); g.applyMatrix4(new THREE.Matrix4().makeTranslation(x,y,z)); parts.push(g); };
+    add(0.36,0.66,0.22, 0,0.45,0);            // coat and shoulders
+    add(0.2,0.22,0.2, 0,0.9,0);              // head
+    add(0.045,1.5,0.045, 0.24,0.78,0, 0.1);  // pike, shouldered
+    const mg=window.__mergeGeometries;
+    return mg? mg(parts, false) : parts[0];
+  }
+  function wagonGeo(){
+    const parts=[];
+    const bed=new THREE.BoxGeometry(0.95,0.3,0.6); bed.applyMatrix4(new THREE.Matrix4().makeTranslation(0,0.35,0)); parts.push(bed);
+    const cov=new THREE.BoxGeometry(0.8,0.34,0.5); cov.applyMatrix4(new THREE.Matrix4().makeTranslation(0,0.66,0)); parts.push(cov);
+    const mg=window.__mergeGeometries;
+    return mg? mg(parts, false) : parts[0];
+  }
+  function initArmyBodies(){
+    if(armyFigMesh) return;
+    armyFigCap=1100;
+    armyFigMesh=new THREE.InstancedMesh(soldierGeo(), new THREE.MeshLambertMaterial({color:0xffffff}), armyFigCap);
+    armyFigMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    armyFigMesh.count=0; armyFigMesh.frustumCulled=false; scene.add(armyFigMesh);
+    wagonMesh=new THREE.InstancedMesh(wagonGeo(), new THREE.MeshLambertMaterial({color:0x74582e}), 44);
+    wagonMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    wagonMesh.count=0; wagonMesh.frustumCulled=false; scene.add(wagonMesh);
+    const N=42; dustPos=new Float32Array(N*3);
+    const dg=new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(dustPos, 3).setUsage(THREE.DynamicDrawUsage));
+    dustPts=new THREE.Points(dg, new THREE.PointsMaterial({size:30, map:makeSmokeTex(), transparent:true, opacity:0.15, color:0xd8c9a3, depthWrite:false, sizeAttenuation:true}));
+    dustPts.frustumCulled=false; dustPts.count=N; scene.add(dustPts);
+  }
+  function armyHeading(a, v){
+    if(a.at && a.at.legs && a.at.legs[a.at.legIndex]){
+      const lp=a.at.legs[a.at.legIndex], dx=lp.toPos.x-a.at.pos.x, dy=lp.toPos.y-a.at.pos.y;
+      if(Math.hypot(dx,dy)>4) v.heading=Math.atan2(dy,dx);
+    } else if(a.siegeId){
+      const sg=(G.sieges||[]).find(s=>s.armyId===a.id), tr=sg? rById[sg.regionId] : null, hr=rById[a.atRegion];
+      if(tr && hr) v.heading=Math.atan2(tr.y-hr.y, tr.x-hr.x);
+    } else {
+      const home=rById[a.atRegion];
+      if(home){ let bd=1e18, bh=null;
+        home.neighbors.forEach(nid=>{ const n=rById[nid]; if(!n || !n.owner || n.owner===a.owner || allied(a.owner, n.owner)) return;
+          const d=Math.hypot(n.x-home.x, n.y-home.y); if(d<bd){ bd=d; bh=Math.atan2(n.y-home.y, n.x-home.x); } });
+        v.heading=(bh!=null)? bh : (a.id*2.39996)%(Math.PI*2); }
+      else if(v.heading===undefined) v.heading=(a.id*2.39996)%(Math.PI*2);
+    }
+    return v.heading||0;
+  }
+  function updateArmyBodies(t){
+    initArmyBodies(); if(!armyFigMesh) return;
+    const mid = dist<1050; // bodies sing at conversational range; from orbit the banner + block mass carry it (the pillars' own threshold)
+    let fi=0, wi=0, di=0;
+    const dummy=_figDummy;
+    (G.armies||[]).forEach(a=>{
+      const v=armyVis.get(a.id); if(!v) return;
+      const h=armyHeading(a, v);
+      const gx=v.group.position.x, gz=v.group.position.z;
+      // the standard stands at the head of the body, and the body gives the banner its size
+      const menScale=1.3+Math.min(1.35, a.men/4200);
+      v.group.scale.setScalar(menScale);
+      const figs=mid? Math.max(8, Math.min(60, Math.round(5+Math.sqrt(Math.max(60,a.men))*1.05))) : 0;
+      const marching=!!a.at;
+      const files=marching? 3 : Math.max(3, Math.ceil(Math.sqrt(figs*1.5)));
+      const rows=Math.max(1, Math.ceil(figs/files)), sp=0.8;
+      const headOff=(rows*sp)/2+1.1;
+      const hx=Math.cos(h), hz=Math.sin(h);
+      v.group.position.x=gx+hx*headOff*0.55; v.group.position.z=gz+hz*headOff*0.55;
+      v.group.rotation.y=-h;
+      if(!mid) return;
+      const col=new THREE.Color(emp(a.owner).color);
+      for(let i=0;i<figs && fi<armyFigCap;i++){
+        const fr=Math.floor(i/files), fc=i%files;
+        const lx=(fr-(rows-1)/2)*sp*(marching?1:1.15), lz=(fc-(files-1)/2)*sp;
+        const bob=marching? Math.abs(Math.sin(t*7+i*0.7+fr*0.4))*0.07 : Math.sin(t*1.3+i)*0.012;
+        dummy.position.set(gx+lx*hx-lz*hz, BASE_Y+0.15+bob, gz+lx*hz+lz*hx);
+        dummy.rotation.set(0, -h, 0);
+        dummy.scale.setScalar(2.0);
+        dummy.updateMatrix();
+        armyFigMesh.setMatrixAt(fi, dummy.matrix);
+        armyFigMesh.setColorAt(fi, col);
+        fi++;
+      }
+      if(marching){
+        for(let wI=0;wI<2 && wi<44;wI++){
+          const back=(rows/2+1.4+wI*1.7)*sp;
+          dummy.position.set(gx-hx*back, BASE_Y+0.15, gz-hz*back);
+          dummy.rotation.set(0, -h, 0); dummy.scale.setScalar(1.9); dummy.updateMatrix();
+          wagonMesh.setMatrixAt(wi, dummy.matrix); wi++;
+        }
+        for(let dI=0;dI<2 && di<42;dI++){
+          const back=(rows/2+2.6+dI*2.4)*sp, ph=(t*0.7+a.id*1.3+dI*0.5)%1;
+          dustPos[di*3]=gx-hx*back+Math.sin(t*2+a.id+dI*5)*0.5;
+          dustPos[di*3+1]=BASE_Y+0.7+ph*1.6;
+          dustPos[di*3+2]=gz-hz*back+Math.cos(t*1.7+a.id+dI*3)*0.5;
+          di++;
+        }
+      }
+    });
+    armyFigMesh.count=fi; armyFigMesh.instanceMatrix.needsUpdate=true;
+    if(armyFigMesh.instanceColor) armyFigMesh.instanceColor.needsUpdate=true;
+    wagonMesh.count=wi; wagonMesh.instanceMatrix.needsUpdate=true;
+    for(let i=di;i<42;i++){ dustPos[i*3+1]=-60; }
+    dustPts.geometry.attributes.position.needsUpdate=true;
+    dustPts.visible = di>0;
+  }
+
+  /* ---------- squadron pennants (WAVE 19): one instanced cross-plane per fleet at mid band;
+     merchantmen fly nothing — the navy reads at a glance ---------- */
+  let sqnPennMesh=null;
+  function initSqnPennants(){
+    if(sqnPennMesh) return;
+    const p1=new THREE.PlaneGeometry(1.6,0.5); p1.applyMatrix4(new THREE.Matrix4().makeTranslation(0.8,0,0));
+    const p2=new THREE.PlaneGeometry(1.6,0.5); p2.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI/2)); p2.applyMatrix4(new THREE.Matrix4().makeTranslation(0,0,0.8));
+    const mg=window.__mergeGeometries;
+    const geo=mg? mg([p1,p2], false) : p1;
+    const mat=new THREE.MeshLambertMaterial({color:0xffffff, side:THREE.DoubleSide, emissive:0x222222});
+    mat.onBeforeCompile=sh=>{ sh.uniforms.uTime=WIND_U;
+      sh.vertexShader=sh.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uTime;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n transformed.z += sin(position.x*4.0 - uTime*5.0) * 0.13 * (position.x/1.3 + 0.5);'); };
+    mat.customProgramCacheKey=()=>'sqnpenn';
+    sqnPennMesh=new THREE.InstancedMesh(geo, mat, 48);
+    sqnPennMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    sqnPennMesh.count=0; sqnPennMesh.frustumCulled=false; scene.add(sqnPennMesh);
+  }
+  function updateSqnPennants(t){
+    initSqnPennants(); if(!sqnPennMesh) return;
+    const on = dist>240 && dist<1500;
+    if(!on){ sqnPennMesh.count=0; sqnPennMesh.visible=false; return; }
+    sqnPennMesh.visible=true;
+    let i=0; const dummy=_figDummy;
+    (G.fleets||[]).forEach(f=>{
+      if(i>=48) return;
+      const v=fleetVis.get(f.id); if(!v) return;
+      dummy.position.set(v.group.position.x, v.group.position.y+3.4+Math.sqrt(f.ships||1)*0.55, v.group.position.z);
+      dummy.rotation.set(0, v.group.rotation.y, 0);
+      const s=1.15+Math.min(1.5, (f.ships||1)*0.13);
+      dummy.scale.set(s, s, s);
+      dummy.updateMatrix();
+      sqnPennMesh.setMatrixAt(i, dummy.matrix);
+      sqnPennMesh.setColorAt(i, new THREE.Color(emp(f.owner).color));
+      i++;
+    });
+    sqnPennMesh.count=i; sqnPennMesh.instanceMatrix.needsUpdate=true;
+    if(sqnPennMesh.instanceColor) sqnPennMesh.instanceColor.needsUpdate=true;
+  }
+
   const TILT = 0.92; // ~53° elevation — always reads as a chart
   const LIS0 = G.regions.find(r=>r.name==='Lisbon');
   let target = new THREE.Vector3(SX(LIS0.x), 0, SZ(LIS0.y)); // open on the player's Lisbon — coast, harbour and hinterland in one frame
@@ -7612,19 +8138,24 @@ try{
       el.textContent=z.name; el.style.display='block';
       el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
     });
-    // armies carry their own chips — a marching host announces itself
+    // armies carry their own chips — a marching host announces itself; hosts sharing one
+    // road or one town stair-step their chips (WAVE 19: the 6k-over-300 blob read as one smear)
+    const chipSlots=new Map();
     (G.armies||[]).forEach(a=>{
       const v=armyVis.get(a.id); if(!v) return;
       if(window.__clashFx && (window.__clashFx.atkArmyId===a.id || window.__clashFx.defArmyId===a.id)) return; // the clash chips speak for it now
       const p=project(v.group.position.x, BASE_Y+9.5, v.group.position.z);
       if(!p) return;
+      let slot=0;
+      chipSlots.forEach((sv,sk)=>{ if(Math.abs(sv[0]-p[0])<90 && Math.abs(sv[1]-p[1])<44) slot++; });
+      chipSlots.set(a.id, p);
       const ak='a'+a.id; used.add(ak); const el=chip(ak,'chip troops');
       el.style.background = emp(a.owner).color;
       if(a.at){
         const dest=rById[a.destRegion];
         el.textContent = '🪖 '+kfmt(a.men)+' → '+dest.name+' · '+Math.max(1,Math.ceil(a.arriveDay-G.day))+'d';
       } else el.textContent='🪖 '+kfmt(a.men)+(a.siegeId?' 🎇':(a.stance==='hold'?' 🛡':''));
-      el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)';
+      el.style.display='block'; el.style.transform='translate(-50%,-100%) translate('+(p[0]+((slot%2)? 46:-46)*(slot?1:0)).toFixed(1)+'px,'+(p[1]-Math.floor(slot/2)*24).toFixed(1)+'px)';
     });
     // clash chips: the two sides bleeding down in step with the spectacle below
     const cfx=window.__clashFx;
@@ -7754,6 +8285,8 @@ try{
         s.rotation.y=-p.ang; s.rotation.z=0.05+Math.sin(t*1.4+i)*0.02; }); }
     // armies march — banners on the roads, standards at rest
     updateArmyVis(t);
+    updateArmyBodies(t);
+    updateSqnPennants(t);
     updateClashVis(t);
     // cargo dots stream along paying lanes
     if(laneCurves.length){
@@ -7977,6 +8510,7 @@ try{
   initKits(); // CC0 kits stream in behind the first frame; the world upgrades itself when they land
   setInterval(()=>{ const ri=renderer.info.render; // QA/readout hook — last completed frame, fps-independent
     window.__renderInfo={calls:ri.calls, tris:ri.triangles, geoms:renderer.info.memory.geometries, textures:renderer.info.memory.textures, quality, emaMs:Math.round(emaMs*10)/10, dist:Math.round(dist),
+      armyFig:(typeof armyFigMesh!=='undefined' && armyFigMesh)? armyFigMesh.count : -1, wagons:(typeof wagonMesh!=='undefined' && wagonMesh)? wagonMesh.count : -1, sqnPenn:(typeof sqnPennMesh!=='undefined' && sqnPennMesh)? sqnPennMesh.count : -1,
       capGlow: _capGlowMesh? { seats: _capGlowSig? _capGlowSig.split('|').length : 0, glow: _capGlowMat? Math.round(_capGlowMat.uniforms.uGlow.value*100)/100 : 0, visible: _capGlowMesh.visible } : null }; }, 1000);
   /* ---------- kit swap-in: once the CC0 models land, towns/fleets/nature rebuild from them ---------- */
   /* ---------- merchantmen on the 3D chart: neutral hulls, sailing from the first morning ---------- */
@@ -8070,6 +8604,10 @@ try{
      the burst shelf fires once when the rung turns; siegeStageSeen remembers last frame's rung
      so a siege loaded mid-breach never fakes its turning moment. */
   let breachPtById={}, breachBurst=[], siegeStageSeen={}, breachBurstTotal=0, caravanIM=null;
+  /* WAVE 19: the storm's moment — when a siege falls by storm, dust bursts at the breach and
+     the attacker's colours are planted in the gap for a few heartbeats, then gone. Transient
+     only: the game layer drops {regionId, fromRegionId, owner} into window.__stormFxQ. */
+  let stormFlag=null, stormFx=null, stormFxFired=0;
   const _cmM=new THREE.Matrix4(), _cmQ=new THREE.Quaternion(), _cmE=new THREE.Euler(), _cmV=new THREE.Vector3(), _cmS=new THREE.Vector3(), _cmC=new THREE.Color();
   function ramGeometry(){ // a battering ram under its timber hut: slung log, iron head, pitched roof, four wheels
     try{
@@ -8114,6 +8652,14 @@ try{
     for(let i=0;i<12;i++){ // WAVE 13: the burst shelf — dust thrown up once, the moment a breach opens; never a loop
       const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:makeSmokeTex(), color:0xa08b6d, transparent:true, opacity:0, depthWrite:false}));
       sp.visible=false; sp.userData.on=false; scene.add(sp); breachBurst.push(sp);
+    }
+    { // WAVE 19: the storm flag — one pole, one pennant on the shared wind clock; planted at the breach, then folded away
+      stormFlag=new THREE.Group();
+      const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.13,5.4,5), new THREE.MeshLambertMaterial({color:0x3a2812}));
+      pole.position.y=2.7; stormFlag.add(pole);
+      const cloth=new THREE.Mesh(new THREE.PlaneGeometry(2.0,1.1), flagMat('#8a6d3b'));
+      cloth.position.set(1.0,4.7,0); cloth.name='stormcloth'; stormFlag.add(cloth);
+      stormFlag.visible=false; scene.add(stormFlag);
     }
     initCaravans();
   }
@@ -8229,8 +8775,43 @@ try{
       siegeStageSeen[sg.id]=sg.stage; });
     for(const id in siegeStageSeen){ if(!list.some(s=>String(s.id)===id)) delete siegeStageSeen[id]; }
     updateCaravans(list, t, near);
+    updateStormFx(t, near);
     window.__campSieges=campCenters.length; window.__campKey=key;
     window.__breachBursts=breachBurstTotal;
+  }
+  /* WAVE 19: consume queued storm moments — burst the dust shelf at the breach point (the
+     same geometry the camp layout uses) and plant the storming crown's colours in the gap. */
+  function updateStormFx(t, near){
+    const q=window.__stormFxQ; if(q&&q.length){
+      const fx=q.shift();
+      const r=rById[fx.regionId];
+      if(r){
+        const bx=SX(r.x), bz=SZ(r.y), fr=rById[fx.fromRegionId];
+        let dx=hash(r.id*3.71)-0.5, dz=hash(r.id*9.13)-0.5;
+        if(fr){ dx=SX(fr.x)-bx; dz=SZ(fr.y)-bz; }
+        const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
+        const R=[7.5,11,15,19][r.tier]*(isCapitalOf(r)? 1.12 : 1);
+        const wx=bx+dx*R, wz=bz+dz*R;
+        let fired=0;
+        for(const sp of breachBurst){ if(fired>=3) break; if(sp.userData.on) continue;
+          sp.userData={on:true, t0:t, x:wx, z:wz, dx, dz, ph:fired*0.87+hash(r.id*1.3)*0.4}; fired++; }
+        if(fired) breachBurstTotal++;
+        const e=emp(fx.owner);
+        stormFx={t0:t, x:wx, z:wz, dx, dz, col:(e&&e.color)||'#8a6d3b'};
+        if(stormFlag){ const cloth=stormFlag.getObjectByName('stormcloth'); if(cloth) cloth.material=flagMat(stormFx.col); }
+        stormFxFired++;
+      }
+    }
+    if(stormFlag){
+      const live=stormFx && near && (t-stormFx.t0)<4.5;
+      stormFlag.visible=!!live;
+      if(live){ const p=(t-stormFx.t0)/4.5;
+        stormFlag.position.set(stormFx.x, BASE_Y, stormFx.z);
+        stormFlag.rotation.y=Math.atan2(stormFx.dx, stormFx.dz)-Math.PI/2;
+        const s=1+0.25*Math.max(0, 1-p*3); stormFlag.scale.set(s,s,s); // planted hard, then settles — then the tents fold it away
+      } else if(stormFx && (t-stormFx.t0)>=4.5) stormFx=null;
+    }
+    window.__stormFxFired=stormFxFired;
   }
   function initCaravans(){
     /* WAVE 13: refugee caravans — one instanced shelf of tiny boxes (souls, and every third a
