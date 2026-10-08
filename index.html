@@ -73,16 +73,25 @@
   #aims .aim{margin:3px 0;display:flex;gap:6px;align-items:baseline;}
   #aims .aim .tick{color:var(--forest);font-weight:bold;}
   #aims .aim .prog{color:#7a6238;font-size:11px;white-space:nowrap;}
-  @media (max-width:600px){ #aims{display:none;} #aims.show{display:block;top:auto;bottom:170px;}
+  @media (max-width:600px){
     /* every control stays reachable on a phone: the crown bar scrolls sideways rather than clipping */
     #topbar{overflow-x:auto; scrollbar-width:none;} #topbar::-webkit-scrollbar{display:none;}
-    #topbar .cell, #topbar .bar-btn{flex:none;} }
+    #topbar .cell, #topbar .bar-btn{flex:none;}
+    /* CLEAN CROWN: the sovereign's aims ride as one small chip — tap to unfold the full list */
+    #aims{top:48px;left:6px;padding:5px 9px;max-width:62vw;cursor:pointer;}
+    #aims h4{margin-bottom:0;font-size:11px;white-space:nowrap;}
+    #aims .aims-sum{font-variant:normal;letter-spacing:0;color:#8a6a35;font-size:11px;margin-left:4px;}
+    #aims #aims-list{display:none;}
+    #aims.open{max-width:250px;}
+    #aims.open #aims-list{display:block;margin-top:4px;}
+  }
 
   /* ---------- second age: next-arrivals + orders ---------- */
-  #nextbar{position:absolute;left:50%;transform:translateX(-50%);bottom:76px;z-index:14;max-width:min(92vw,720px);
+  #nextbar{position:absolute;left:50%;transform:translateX(-50%);bottom:86px;z-index:14;max-width:min(92vw,720px);
     background:linear-gradient(180deg,#f6ecd6,#e8d5ae);border:1.6px solid #7a5c2e;border-radius:10px;
     padding:5px 11px;font-size:12px;color:#3a2a12;box-shadow:0 3px 10px rgba(20,10,2,.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  @media (max-width:640px){ #nextbar{bottom:118px;font-size:11px;max-width:94vw;} }
+  /* CLEAN CROWN: one slim line, riding just clear of the taller clock bar */
+  @media (max-width:640px){ #nextbar{bottom:126px;font-size:11px;max-width:94vw;padding:4px 9px;} }
   .ord-line{background:linear-gradient(180deg,#f8efdc,#eeddbb);border:1.4px solid #8a6a35;border-radius:10px;padding:8px 10px;font-size:13.5px;color:#2a1e0d;box-shadow:0 2px 6px rgba(20,10,2,.25);}
 
   /* ---------- warnings ---------- */
@@ -125,27 +134,53 @@
     box-shadow:0 2px 6px rgba(0,0,0,.35);}
 
   /* ---------- end season (retired — the clock flows now) ---------- */
-  /* ---------- clock ---------- */
-  #clockbar{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:24;display:flex;align-items:center;gap:6px;
+  /* ---------- clock (CLEAN CROWN: the date owns its own ground — no control may sit on it) ---------- */
+  #clockbar{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:24;display:flex;align-items:center;gap:8px;
+    max-width:min(94vw,600px);
     background:linear-gradient(180deg,rgba(30,20,8,.96),rgba(18,11,4,.96));border:2px solid var(--brass-light);border-radius:16px;
     padding:7px 10px;box-shadow:0 8px 24px rgba(0,0,0,.55);color:#f3e6c3;}
-  #clockbar .cdate{font-variant:small-caps;letter-spacing:.5px;font-size:14px;color:var(--brass-light);min-width:118px;text-align:center;}
-  #clockbar .cstate{font-size:11.5px;color:#d8c491;min-width:86px;text-align:center;}
-  .clock-btn{min-width:46px;min-height:46px;border-radius:12px;border:1px solid rgba(217,185,106,.6);cursor:pointer;
-    background:linear-gradient(180deg,#6d5326,#4c3a1a);color:#f7ecd0;font-family:inherit;font-size:17px;padding:4px 8px;
+  #clockbar .cmeta{display:flex;flex-direction:column;align-items:center;gap:0;min-width:176px;line-height:1.25;}
+  #clockbar .cdate{font-variant:small-caps;letter-spacing:.5px;font-size:15px;color:var(--brass-light);text-align:center;white-space:nowrap;}
+  #clockbar .cstate{font-size:11.5px;color:#d8c491;text-align:center;white-space:nowrap;}
+  #clockbar .cctrl{display:flex;align-items:center;gap:6px;}
+  .clock-btn{width:50px;height:50px;flex:none;border-radius:12px;border:1px solid rgba(217,185,106,.6);cursor:pointer;
+    background:linear-gradient(180deg,#6d5326,#4c3a1a);color:#f7ecd0;font-family:inherit;padding:0;
+    display:flex;align-items:center;justify-content:center;
     transition:transform .12s ease, filter .15s ease, box-shadow .15s ease;}
+  .clock-btn .ic{width:22px;height:22px;}
   .clock-btn:active{transform:translateY(1px) scale(.97);}
   .clock-btn.active{background:linear-gradient(180deg,#a67c2e,#6d5326);box-shadow:0 0 0 2px rgba(217,185,106,.8), 0 4px 14px rgba(0,0,0,.45);color:#fff3d0;}
-  #clockbar .cauto{display:flex;align-items:center;gap:4px;font-size:11px;color:#d8c491;margin-left:2px;}
-  #clockbar input{width:18px;height:18px;accent-color:#b08a3e;}
-  @media (max-width:640px){ .clock-btn{min-width:44px;min-height:44px;font-size:15px;} #clockbar .cdate{min-width:92px;font-size:12.5px;} #clockbar .cstate{display:none;} #clockbar{gap:4px;padding:6px 8px;} }
+  #clockbar .cauto{display:flex;align-items:center;gap:5px;font-size:11px;line-height:1.15;color:#d8c491;margin-left:2px;max-width:84px;}
+  #clockbar input{width:18px;height:18px;flex:none;accent-color:#b08a3e;}
+  @media (max-width:640px){
+    #clockbar{flex-wrap:wrap;justify-content:center;gap:5px 8px;padding:8px 10px;}
+    #clockbar .cmeta{order:-1;flex:1 1 100%;min-width:0;}
+    #clockbar .cdate{font-size:14.5px;}
+    #clockbar .cstate{font-size:11px;}
+    .clock-btn{width:48px;height:48px;}
+  }
+
+  /* ---------- the engraved icon kit (CLEAN CROWN: one hand, one gold line, no emoji in chrome) ---------- */
+  .ic{width:1.1em;height:1.1em;flex:none;vertical-align:-.22em;stroke:currentColor;fill:none;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  .ic.lg{width:1.5em;height:1.5em;}
+  .cell .ic,.bar-btn .ic{color:var(--brass-light);}
+  .big-btn .ic,.mini-btn .ic,.act-btn .ic{color:#eec96e;}
+  .act-btn .t .ic{vertical-align:-.14em;margin-right:5px;}
+  .warn .ic{vertical-align:-.16em;margin-right:4px;}
+  .dip-row .who .ic{vertical-align:-.15em;margin-right:4px;}
+  .dip-row .kv{display:inline-flex;align-items:center;gap:3px;margin-right:7px;}
+  .dip-row .kv .ic{width:13px;height:13px;color:#8a6a35;}
+  .trend-up{color:#4d8a45;font-weight:bold;} .trend-dn{color:#b0482f;font-weight:bold;} .trend-fl{color:#9a854f;}
 
   /* ---------- what's happening ticker ---------- */
-  #ticker{position:absolute;left:8px;bottom:76px;z-index:15;display:flex;flex-direction:column;gap:4px;max-width:min(46vw,320px);pointer-events:none;}
+  #ticker{position:absolute;left:8px;bottom:86px;z-index:15;display:flex;flex-direction:column;gap:4px;max-width:min(46vw,320px);pointer-events:none;}
+  /* CLEAN CROWN: never more than two dispatches on screen — the newest lands, the older one fades behind it */
   .tick-line{background:rgba(20,13,5,.82);color:#f3e6c3;border:1px solid rgba(217,185,106,.45);border-left:3px solid var(--brass-light);
     border-radius:8px;padding:5px 8px;font-size:11.5px;line-height:1.35;box-shadow:0 3px 10px rgba(0,0,0,.4);animation:warnin .3s ease-out;}
+  .tick-line.old{opacity:.55;font-size:10.5px;padding:4px 7px;}
   .tick-line b{color:var(--brass-light);}
-  @media (max-width:640px){ #ticker{bottom:70px;max-width:52vw;} .tick-line{font-size:11px;padding:4px 7px;} }
+  @media (max-width:640px){ #ticker{bottom:170px;max-width:54vw;} .tick-line{font-size:11px;padding:4px 7px;} }
   #btn-menu{position:absolute;left:10px;bottom:14px;z-index:24;}
 
   /* ---------- overlays (gazette / sheets / start / end) ---------- */
@@ -177,7 +212,8 @@
 
   /* ---------- start screen ---------- */
   #start .card{text-align:center;max-width:520px;}
-  #start .flag{font-size:40px;letter-spacing:6px;}
+  #start .flag{font-size:40px;letter-spacing:6px;color:var(--brass-light);}
+  #start .flag .ic{width:38px;height:38px;stroke-width:1.4;}
   #start h1{font-size:38px;font-variant:small-caps;letter-spacing:2px;margin:2px 0;}
   #start .tag{font-style:italic;color:#6d5326;font-size:14px;}
   #start .howto{text-align:left;margin:12px auto 4px;max-width:420px;font-size:13.5px;line-height:1.5;}
@@ -213,7 +249,7 @@
     background:linear-gradient(180deg,rgba(46,30,12,.95),rgba(30,19,7,.95));color:#f7ecd0;
     border:1.5px solid var(--brass-light);border-radius:14px;padding:11px 16px;font-size:14.5px;text-align:center;
     box-shadow:0 8px 26px rgba(0,0,0,.55);display:none;cursor:pointer;}
-  @media (max-width:640px){ #hint{bottom:176px;max-width:92vw;font-size:13.5px;} }
+  @media (max-width:640px){ #hint{bottom:224px;max-width:92vw;font-size:13.5px;} }
   #hint.show{display:block;animation:hintin .35s ease-out;}
   #hint b{color:var(--brass-light);}
   @keyframes hintin{from{transform:translateX(-50%) translateY(14px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
@@ -272,15 +308,15 @@
   <div id="hint"></div>
 
   <div id="topbar">
-    <div class="cell" id="title-cell">⚜ Rift &amp; Sail</div>
-    <div class="cell">📅 <b id="tb-season">Spring, Year 1</b></div>
-    <div class="cell">🪙 <b id="tb-gold">0</b> <span id="tb-gold-trend"></span></div>
-    <div class="cell">⚔ <b id="tb-men">0</b></div>
-    <div class="cell">⛵ <b id="tb-ships">0</b></div>
-    <div class="cell" id="tb-debt-cell" style="display:none">🏦 <b id="tb-debt">0</b></div>
+    <div class="cell" id="title-cell"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v3M12 6c-1.2-1.8-3-2.4-4.6-1.8.2 1.7 1.3 2.9 3 3.2C9 8.6 8.6 10 9.2 11.4M12 6c1.2-1.8 3-2.4 4.6-1.8-.2 1.7-1.3 2.9-3 3.2 1.4 1.2 1.8 2.6 1.2 4M7 13.5h10M9.5 17.5c.8-1 1.6-1.4 2.5-1.4s1.7.4 2.5 1.4M10 21h4"/></svg> Rift &amp; Sail</div>
+    <div class="cell"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4M8 14h2M12 14h2M16 14h.01"/></svg> <b id="tb-season">Spring, Year 1</b></div>
+    <div class="cell"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 5.5v.01M12 18.5v.01M5.5 12h.01M18.5 12h.01"/></svg> <b id="tb-gold">0</b> <span id="tb-gold-trend"></span></div>
+    <div class="cell"><svg class="ic" viewBox="0 0 24 24"><path d="M4 4l11 11M20 4L9 15M4 4l-1.2-1.2M4 4l1 3.2L8.2 6M20 4l1.2-1.2M20 4l-1 3.2L15.8 6M6.5 14.5L4 20l5.5-2.5M17.5 14.5L20 20l-5.5-2.5"/></svg> <b id="tb-men">0</b></div>
+    <div class="cell"><svg class="ic" viewBox="0 0 24 24"><path d="M4 16.5c3 1.6 13 1.6 16 0l-1.8 3.8c-4 1-8.4 1-12.4 0zM12 16.5V4M12 4l6.5 7H12M12 8 7 12.5h5"/></svg> <b id="tb-ships">0</b></div>
+    <div class="cell" id="tb-debt-cell" style="display:none"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v2M5 6h14M12 5L6.5 6 4 12a3.4 3.4 0 0 0 7 0L8.5 6M12 5l3.5 1L18 12a3.4 3.4 0 0 1-7 0l2.5-6M8 20h8M12 15v5"/></svg> <b id="tb-debt">0</b></div>
     <div id="spacer"></div>
-    <button class="bar-btn" id="btn-crown">👑 Crown <span id="crown-badge">0</span></button>
-    <button class="bar-btn" id="btn-realm">Realm</button><button class="bar-btn" id="btn-orders">⚜ Orders</button>
+    <button class="bar-btn" id="btn-crown"><svg class="ic" viewBox="0 0 24 24"><path d="M4 18h16M4 18l-1.2-8.5L8.5 13 12 6l3.5 7 5.7-3.5L20 18M8 21h8"/></svg> Crown <span id="crown-badge">0</span></button>
+    <button class="bar-btn" id="btn-realm">Realm</button><button class="bar-btn" id="btn-orders"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v3M12 6c-1.2-1.8-3-2.4-4.6-1.8.2 1.7 1.3 2.9 3 3.2C9 8.6 8.6 10 9.2 11.4M12 6c1.2-1.8 3-2.4 4.6-1.8-.2 1.7-1.3 2.9-3 3.2 1.4 1.2 1.8 2.6 1.2 4M7 13.5h10M9.5 17.5c.8-1 1.6-1.4 2.5-1.4s1.7.4 2.5 1.4M10 21h4"/></svg> Orders</button><button class="bar-btn" id="btn-sound" title="Sound on / off" aria-label="Sound on / off"><svg class="ic" viewBox="0 0 24 24"><path d="M6 10v4H4V10zM6 10l5-4v12l-5-4M14.5 9.5a4 4 0 0 1 0 5M17 7a7.5 7.5 0 0 1 0 10"/></svg></button>
   </div>
 
   <div id="aims"><h4>Sovereign's Aims</h4><div id="aims-list"></div></div>
@@ -292,18 +328,22 @@
   <div id="zoomctl">
     <button id="zoom-in" aria-label="Zoom in">+</button>
     <button id="zoom-out" aria-label="Zoom out">−</button>
-    <button id="zoom-home" aria-label="Show whole world">⌂</button>
+    <button id="zoom-home" aria-label="Show whole world"><svg class="ic lg" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/><circle cx="12" cy="12" r="2.6"/></svg></button>
   </div>
 
-  <button class="bar-btn" id="btn-menu">☰</button>
+  <button class="bar-btn" id="btn-menu" aria-label="Menu"><svg class="ic lg" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   <div id="clockbar">
-    <button class="clock-btn active" id="clock-pause" aria-label="Pause">⏸</button>
-    <button class="clock-btn" id="clock-1" aria-label="Play">▶</button>
-    <button class="clock-btn" id="clock-2" aria-label="Fast">▶▶</button>
-    <button class="clock-btn" id="clock-4" aria-label="Fastest">▶▶▶</button>
-    <span class="cdate" id="clock-date">📅 Spring, Year 1 · Day 1</span>
-    <span class="cstate" id="clock-state">⏸ Paused</span>
-    <label class="cauto"><input type="checkbox" id="clock-autopause" checked> Auto-pause on big news</label>
+    <div class="cctrl">
+      <button class="clock-btn active" id="clock-pause" aria-label="Pause"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button>
+      <button class="clock-btn" id="clock-1" aria-label="Play"><svg class="ic" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg></button>
+      <button class="clock-btn" id="clock-2" aria-label="Fast"><svg class="ic" viewBox="0 0 24 24"><path d="M5 5l7 7-7 7M12.5 5l7 7-7 7"/></svg></button>
+      <button class="clock-btn" id="clock-4" aria-label="Fastest"><svg class="ic" viewBox="0 0 24 24"><path d="M3.5 5l6 7-6 7M10 5l6 7-6 7M16.5 5l6 7-6 7" transform="translate(-2.5 0) scale(.92 1)"/></svg></button>
+    </div>
+    <div class="cmeta">
+      <span class="cdate" id="clock-date">Spring, Year 1 · Day 1</span>
+      <span class="cstate" id="clock-state">Paused</span>
+    </div>
+    <label class="cauto"><input type="checkbox" id="clock-autopause" checked> <span>Auto-pause on big news</span></label>
   </div>
 
   <div id="sheet">
@@ -345,15 +385,15 @@
     <div class="rule"></div>
     <button class="big-btn" id="menu-continue">Continue Campaign</button>
     <button class="big-btn secondary" id="menu-new">New Campaign</button>
-    <button class="big-btn secondary" id="menu-orders">⚜ Give Orders (typed)</button>
-    <button class="big-btn secondary" id="menu-winds">🌬 Wind Lanes: Off</button>
+    <button class="big-btn secondary" id="menu-orders"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v3M12 6c-1.2-1.8-3-2.4-4.6-1.8.2 1.7 1.3 2.9 3 3.2C9 8.6 8.6 10 9.2 11.4M12 6c1.2-1.8 3-2.4 4.6-1.8-.2 1.7-1.3 2.9-3 3.2 1.4 1.2 1.8 2.6 1.2 4M7 13.5h10M9.5 17.5c.8-1 1.6-1.4 2.5-1.4s1.7.4 2.5 1.4M10 21h4"/></svg> Give Orders (typed)</button>
+    <button class="big-btn secondary" id="menu-winds"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 7l2.2 5L12 17l-2.2-5z"/></svg> Wind Lanes: Off</button>
     <button class="big-btn secondary" id="menu-how">How to Play</button>
     <button class="big-btn secondary" id="menu-close">Close</button>
   </div></div>
 
   <!-- How to play -->
   <div class="veil" id="orders"><div class="card">
-    <h2>⚜ Orders of the Crown</h2>
+    <h2><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v3M12 6c-1.2-1.8-3-2.4-4.6-1.8.2 1.7 1.3 2.9 3 3.2C9 8.6 8.6 10 9.2 11.4M12 6c1.2-1.8 3-2.4 4.6-1.8-.2 1.7-1.3 2.9-3 3.2 1.4 1.2 1.8 2.6 1.2 4M7 13.5h10M9.5 17.5c.8-1 1.6-1.4 2.5-1.4s1.7.4 2.5 1.4M10 21h4"/></svg> Orders of the Crown</h2>
     <div class="rule"></div>
     <p style="font-size:12.5px">Speak plainly — name an army, a squadron, a city, a governor. Try: <i>“move my Lisbon army and attack León”</i> · <i>“send my squadron to blockade Algiers”</i> · <i>“put Reyes on Porto for wealth”</i> · <i>“found a colony at Chesdin”</i> · <i>“show the winds”</i>. Say <b>cancel</b> to unwrite the last order — the Contrarian’s Quill holds <span id="ord-quill">2</span> charges a season.</p>
     <div style="display:flex;gap:6px;margin-top:8px">
@@ -368,11 +408,11 @@
     <h2>How to Play</h2>
     <div class="rule"></div>
     <p><b>The goal:</b> hold 60% of the world's regions, <i>or</i> lead all empires in trade income for 5 straight seasons. Lose your capital and every port, and your line ends.</p>
-    <p><b>Time flows:</b> the ⏸ ▶ ▶▶ ▶▶▶ bar sets the world moving. Days pass; seasons (90 days) still bring income and the Gazette. Armies and fleets travel in real time — pause whenever you want to think. Big moments pause the world for you (toggle: Auto-pause).</p>
+    <p><b>Time flows:</b> the speed bar at the foot of the chart sets the world moving. Days pass; seasons (90 days) still bring income and the Gazette. Armies and fleets travel in real time — pause whenever you want to think. Big moments pause the world for you (toggle: Auto-pause).</p>
     <p><b>Armies:</b> muster regiments into a region's garrison, then <b>Form a Field Army</b> and <b>March</b> it — tap any lit region and the army walks the roads there, day by day. Garrisons always stay behind. Park an army with <b>Hold this Ground</b> to block a road. Forts, walls and terrain matter in battle.</p>
     <p><b>Fleets:</b> build warships in ports with shipyards. Sail a squadron to a port or open sea; a blockade only counts when your ships actually sit off the enemy harbour — then its trade dies and the town bleeds.</p>
     <p><b>Trade:</b> lanes between your ports pay every season, thicker lanes pay more. Conquer a port and its lanes become yours. Allies open their ports to your lanes.</p>
-    <p><b>The Crown:</b> momentous matters — war warnings, offers, crises — wait under the 👑 Crown button. Only big decisions reach you.</p>
+    <p><b>The Crown:</b> momentous matters — war warnings, offers, crises — wait under the Crown button. Only big decisions reach you.</p>
     <button class="big-btn" id="howto-close">To the Chart</button>
   </div></div>
 
@@ -382,7 +422,7 @@
     <div class="rule"></div>
     <div class="versus">
       <div class="side"><div id="battle-atk-name">Your army</div><div class="big" id="battle-atk"></div><div id="battle-atk-loss"></div></div>
-      <div class="swords">⚔</div>
+      <div class="swords"><svg class="ic lg" viewBox="0 0 24 24"><path d="M4 4l11 11M20 4L9 15M4 4l-1.2-1.2M4 4l1 3.2L8.2 6M20 4l1.2-1.2M20 4l-1 3.2L15.8 6M6.5 14.5L4 20l5.5-2.5M17.5 14.5L20 20l-5.5-2.5"/></svg></div>
       <div class="side"><div id="battle-def-name">Defenders</div><div class="big" id="battle-def"></div><div id="battle-def-loss"></div></div>
     </div>
     <div class="outcome" id="battle-outcome"></div>
@@ -392,18 +432,18 @@
 
   <!-- Start -->
   <div class="veil open" id="start"><div class="card">
-    <div class="flag">⚜ ⚓ ⚜</div>
+    <div class="flag"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v3M12 6c-1.2-1.8-3-2.4-4.6-1.8.2 1.7 1.3 2.9 3 3.2C9 8.6 8.6 10 9.2 11.4M12 6c1.2-1.8 3-2.4 4.6-1.8-.2 1.7-1.3 2.9-3 3.2 1.4 1.2 1.8 2.6 1.2 4M7 13.5h10M9.5 17.5c.8-1 1.6-1.4 2.5-1.4s1.7.4 2.5 1.4M10 21h4"/></svg> <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v12M5 12.5c0 4.4 3.1 7.5 7 7.5s7-3.1 7-7.5M3.5 10.5L5 12.5l1.5-2M17 10.5l1.5 2 1.5-2M8 15.5h8"/></svg> <svg class="ic" viewBox="0 0 24 24"><path d="M12 3v3M12 6c-1.2-1.8-3-2.4-4.6-1.8.2 1.7 1.3 2.9 3 3.2C9 8.6 8.6 10 9.2 11.4M12 6c1.2-1.8 3-2.4 4.6-1.8-.2 1.7-1.3 2.9-3 3.2 1.4 1.2 1.8 2.6 1.2 4M7 13.5h10M9.5 17.5c.8-1 1.6-1.4 2.5-1.4s1.7.4 2.5 1.4M10 21h4"/></svg></div>
     <h1>Rift &amp; Sail</h1>
     <div class="tag">Traders &amp; Empires — an Age of Sail conquest</div>
     <div class="rule"></div>
     <ul class="howto">
-      <li>🗺 <b>Conquer the chart:</b> muster armies, march, and take regions and ports from rivals and free towns.</li>
-      <li>⛵ <b>Rule the sea:</b> build fleets, steal trade lanes, and blockade enemy ports until they starve.</li>
-      <li>👑 <b>Reign, don't micromanage:</b> your empire earns on its own — you make the big calls.</li>
+      <li><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 7l2.2 5L12 17l-2.2-5z"/></svg> <b>Conquer the chart:</b> muster armies, march, and take regions and ports from rivals and free towns.</li>
+      <li><svg class="ic" viewBox="0 0 24 24"><path d="M4 16.5c3 1.6 13 1.6 16 0l-1.8 3.8c-4 1-8.4 1-12.4 0zM12 16.5V4M12 4l6.5 7H12M12 8 7 12.5h5"/></svg> <b>Rule the sea:</b> build fleets, steal trade lanes, and blockade enemy ports until they starve.</li>
+      <li><svg class="ic" viewBox="0 0 24 24"><path d="M4 18h16M4 18l-1.2-8.5L8.5 13 12 6l3.5 7 5.7-3.5L20 18M8 21h8"/></svg> <b>Reign, don't micromanage:</b> your empire earns on its own — you make the big calls.</li>
     </ul>
-    <button class="big-btn" id="btn-new">🟥 New Campaign — the Crimson Crown of Lisbon</button>
-    <button class="big-btn secondary" id="btn-new-aurelia">🌙 Become the Aurelian Empire — Venice, purse first</button>
-    <button class="big-btn secondary" id="btn-new-meridian">⚖ Become the Meridian League — Holland, the counting-houses</button>
+    <button class="big-btn" id="btn-new"><svg class="ic" viewBox="0 0 24 24"><path d="M6 21V4M6 5c3.5-2 6 1.8 10 0v7c-4 1.8-6.5-2-10 0"/></svg> New Campaign — the Crimson Crown of Lisbon</button>
+    <button class="big-btn secondary" id="btn-new-aurelia"><svg class="ic" viewBox="0 0 24 24"><path d="M19 14.5A8.5 8.5 0 1 1 9.5 5 7 7 0 0 0 19 14.5z"/></svg> Become the Aurelian Empire — Venice, purse first</button>
+    <button class="big-btn secondary" id="btn-new-meridian"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v2M5 6h14M12 5L6.5 6 4 12a3.4 3.4 0 0 0 7 0L8.5 6M12 5l3.5 1L18 12a3.4 3.4 0 0 1-7 0l2.5-6M8 20h8M12 15v5"/></svg> Become the Meridian League — Holland, the counting-houses</button>
     <button class="big-btn secondary" id="btn-continue" style="display:none">Continue Campaign</button>
   </div></div>
 
@@ -430,6 +470,187 @@ const kfmt=n=>n>=1000? (Math.round(n/100)/10)+'k' : ''+Math.round(n);
 let _seed=7; const rnd=()=>{_seed=(_seed*16807)%2147483647; return (_seed-1)/2147483646;};
 const rr=(a,b)=>a+rnd()*(b-a);
 const pick=a=>a[Math.floor(rnd()*a.length)];
+
+/* ================= THE SHIP'S BELL — original procedural WebAudio, zero assets ==========
+   Ship's-bell season peals, a purse of coins when gold lands, UI taps, cannon volleys, and a
+   salt-air ambience loop — every sound synthesised in code, nothing downloaded, no library.
+   Crash-proof by design: any audio failure resolves to SILENCE, never an exception.
+   The bell only rings after the first human touch — browser law, and polite.            */
+const Sound=(()=>{
+  const sane=(v,d)=> (typeof v==='number' && isFinite(v))? v : d;
+  const ACType=(typeof window!=='undefined')? (window.AudioContext||window.webkitAudioContext) : null;
+  let AC=null, master=null, enabled=false, ambNodes=null, started=false;
+  let goldT=0, armT=0, stam=0, stamId=null;
+  function tryStart(){
+    if(started) return true; started=true;
+    if(!ACType) return false;
+    try{
+      AC=new ACType();
+      master=AC.createGain(); master.gain.value=0.9; master.connect(AC.destination);
+      if(AC.state!=='running'){ try{ AC.resume().catch(()=>{}); }catch(_){ } }
+      enabled=true; return true;
+    }catch(_){ AC=null; master=null; enabled=false; return false; }
+  }
+  function ok(){
+    if(!AC || !enabled) return false;
+    if(AC.state==='suspended'){ try{ AC.resume().catch(()=>{ /* still ringing */ }); }catch(_){ } }
+    return AC.state==='running';
+  }
+  function env(t0,a,peak,dec,end){
+    const g=AC.createGain();
+    g.gain.setValueAtTime(0,t0);
+    g.gain.linearRampToValueAtTime(peak,t0+a);
+    g.gain.exponentialRampToValueAtTime(0.0008,end);
+    g.gain.setValueAtTime(0,end+0.02);
+    g.connect(master); return g;
+  }
+  function osc(type,f,t0){ const o=AC.createOscillator(); o.type=type; o.frequency.setValueAtTime(f,t0); return o; }
+  function bell(f,vol,delay,dur){
+    if(!ok()) return;
+    try{
+      const t0=AC.currentTime+sane(delay,0), d=sane(dur,1.9);
+      [[1,1],[2.74,0.55],[5.43,0.28],[8.21,0.12]].forEach(([rt,a])=>{
+        const o=osc('sine', f*rt, t0), g=env(t0,0.002, vol*a, d*0.55, t0+d);
+        o.connect(g); o.start(t0); o.stop(t0+d+0.05);
+      });
+    }catch(_){ }
+  }
+  function noiseSrc(dur,buf){ const s=AC.createBufferSource();
+    if(buf){ s.buffer=buf; s.loop=true; }
+    else{ s.buffer=mkNoise(dur); }
+    return s; }
+  function mkNoise(dur){
+    const d=sane(dur,1), len=Math.max(1,Math.floor(AC.sampleRate*d));
+    const b=AC.createBuffer(1,len,AC.sampleRate), ch=b.getChannelData(0);
+    for(let i=0;i<len;i++) ch[i]=Math.random()*2-1;
+    return b;
+  }
+  function boot(){
+    if(!tryStart()) return false;
+    // the first bell is polite: nothing plays until the first tap; ambience waits for the world
+    ambNodes=null;
+    return true;
+  }
+  function tick(){
+    if(!ok()) return;
+    try{
+      const t0=AC.currentTime;
+      const o=osc('triangle',520,t0), g=env(t0,0.003,0.16,0.04,t0+0.09);
+      o.connect(g); o.start(t0); o.stop(t0+0.1);
+      const n=noiseSrc(0.03), g2=env(t0,0.002,0.05,0.01,t0+0.03);
+      n.connect(g2); n.start(t0); n.stop(t0+0.045);
+    }catch(_){ }
+  }
+  function open(){
+    if(!ok()) return;
+    try{
+      const t0=AC.currentTime;
+      const o=osc('sine',392,t0); o.frequency.linearRampToValueAtTime(659,t0+0.09);
+      const g=env(t0,0.01,0.10,0.10,t0+0.16);
+      o.connect(g); o.start(t0); o.stop(t0+0.17);
+    }catch(_){ }
+  }
+  function close(){
+    if(!ok()) return;
+    try{
+      const t0=AC.currentTime;
+      const o=osc('sine',587,t0); o.frequency.linearRampToValueAtTime(294,t0+0.08);
+      const g=env(t0,0.01,0.085,0.09,t0+0.14);
+      o.connect(g); o.start(t0); o.stop(t0+0.15);
+    }catch(_){ }
+  }
+  function zoomTick(){
+    if(!ok()) return;
+    const t=AC.currentTime; if(t-armT<0.07) return; armT=t;
+    try{ const o=osc('sine',660,t), g=env(t,0.004,0.075,0.04,t+0.07);
+      o.connect(g); o.start(t); o.stop(t+0.08); }catch(_){ }
+  }
+  function miss(){
+    if(!ok()) return;
+    try{ const t0=AC.currentTime;
+      const n=noiseSrc(0.12), f=AC.createBiquadFilter(); f.type='bandpass'; f.frequency.value=340; f.Q.value=1;
+      const g=env(t0,0.01,0.035,0.08,t0+0.14);
+      n.connect(f); f.connect(g); n.start(t0); n.stop(t0+0.15);
+    }catch(_){ }
+  }
+  function season(){
+    if(!ok()) return;
+    [0,0.55,1.15,1.75].forEach(d=> bell(1318.5, 0.28, d, 1.8));
+    armT=AC.currentTime;
+  }
+  function gold(){
+    if(!ok()) return;
+    const t=AC.currentTime; if(t-goldT<1.2) return; goldT=t;
+    bell(1567.98,0.12,0,0.6); bell(2093,0.085,0.05,0.45);
+  }
+  function cannon(k,delay){
+    if(!ok()) return;
+    try{
+      const t0=AC.currentTime+sane(delay,0), amp=0.5*sane(k,1);
+      const n=noiseSrc(1.1), f=AC.createBiquadFilter(); f.type='lowpass'; f.Q.value=0.7;
+      f.frequency.setValueAtTime(1150,t0); f.frequency.exponentialRampToValueAtTime(90,t0+1.0);
+      const g=env(t0,0.006,amp,0.85,t0+1.15); n.connect(f); f.connect(g);
+      n.start(t0); n.stop(t0+1.2);
+      const o=osc('sine',58,t0); o.frequency.exponentialRampToValueAtTime(38,t0+0.85);
+      const g2=env(t0,0.006,amp*0.9,0.8,t0+1.05); o.connect(g2);
+      o.start(t0); o.stop(t0+1.1);
+    }catch(_){ }
+  }
+  function volley(n){
+    if(!ok()) return;
+    const count=Math.max(1,Math.min(6,Math.floor(sane(n,3))));
+    for(let i=0;i<count;i++) cannon(0.7+Math.random()*0.35, i*0.30+Math.random()*0.07);
+  }
+  function ambience(onFlag){
+    if(!ok()){ ambNodes=null; return; }
+    try{
+      if(onFlag){
+        if(ambNodes) return;
+        const src=noiseSrc(0,true), f=AC.createBiquadFilter();
+        f.type='bandpass'; f.frequency.value=520; f.Q.value=0.45;
+        const g=AC.createGain(); g.gain.setValueAtTime(0,AC.currentTime);
+        g.gain.linearRampToValueAtTime(0.05,AC.currentTime+3);
+        const lfo=osc('sine',0.075,AC.currentTime), lg=AC.createGain(); lg.gain.value=180;
+        lfo.connect(lg); lg.connect(f.frequency);
+        src.connect(f); f.connect(g); g.connect(master);
+        src.start(); lfo.start();
+        ambNodes={src,g,lfo};
+      } else if(ambNodes){
+        const a=ambNodes; ambNodes=null;
+        try{ const t=AC.currentTime; a.g.gain.cancelScheduledValues(t);
+          a.g.gain.setValueAtTime(a.g.gain.value,t); a.g.gain.linearRampToValueAtTime(0,t+0.5); }catch(_){ }
+        setTimeout(()=>{ try{ a.src.stop(); a.lfo.stop(); }catch(_){ } },600);
+      }
+    }catch(_){ ambNodes=null; }
+  }
+  /* the unlock: iOS Safari and every honest browser demand the AudioContext be born
+     inside a genuine tap — so the first real pointerdown on the page wakes the bell.  */
+  function bootGesture(){ const b={done:false};
+    const go=e=>{ if(b.done) return; b.done=true;
+      document.removeEventListener('pointerdown', go, true);
+      document.removeEventListener('touchstart', go, true);
+      try{ boot(); }catch(_){ }
+    };
+    document.addEventListener('pointerdown', go, {capture:true, passive:true});
+    document.addEventListener('touchstart', go, {capture:true, passive:true});
+    document.addEventListener('click', e=>{ try{
+      if(e && e.target && e.target.closest && e.target.closest('button')) tick();
+    }catch(_){ } }, true);
+  }
+  try{ bootGesture(); }catch(_){ }
+  return {
+    _boot:()=> tryStart(),
+    ok:()=> ok(),
+    enabled:()=> enabled,
+    setEnabled:(v)=>{ enabled=!!v; if(!enabled){ try{ ambience(false); window.__ambFlag=false; }catch(_){ } } },
+    tick, open, close, miss,
+    zoom:zoomTick,
+    season, gold, volley,
+    ambience
+  };
+})();
+
+
 
 // ---------- world definition ----------
 const WORLD_W=10920, WORLD_H=7280; // the Second Age chart — authored small below, stretched by WS (target ~11000×6800)
@@ -534,6 +755,24 @@ const REGION_DEFS=[
  ['Zanzibar Reach',2300,1310,'coast','spices',true,'I'],
  ['Malabar',       2335,1130,'coast','spices',true,'I'],
  ['Spice Isles',   2260,1450,'coast','wine',  true,'I'],
+ // ---- THE CLEAN CROWN SURVEY: the interiors are carved into true kingdoms ----
+ // old heartlands split so no crown's land is one undifferentiated sprawl
+ ['Extremadura',   375, 955,'plains','grain',false,'W'],
+ ['Toledo',        565, 975,'plains','cloth',false,'W'],
+ ['Asturias',      375, 660,'hills','timber',false,'W'],
+ ['Burgundy',      770, 480,'plains','wine', false,'W'],
+ ['Provence',      750, 830,'coast','wine',  true,'W'],
+ ['Silesia',      1500, 470,'plains','grain',false,'E'],
+ ['Bohemia',      1570, 400,'plains','grain',false,'E'],
+ ['Wallachia',    1885, 640,'plains','grain',false,'E'],
+ ['Kyiv Marches', 1975, 400,'plains','grain',false,'E'],
+ ['Cilicia',      2140,1065,'coast','spices',true,'E'],
+ ['Cyrenaica',    1700,1315,'coast','wine',  true,'E'],
+ // new shores and harbours the race will fight over
+ ['Tortuga',       980, 700,'coast','sugar', true,'I'],
+ ['Maranhão',      680,1425,'coast','timber',true,'B'],
+ ['Barbados',     1010, 760,'coast','sugar', true,'I'],
+ ['Caspian Steppe',2240, 600,'plains','grain',false,'E'],
 ];
 const SEA_DEFS=[
  // name, x, y, adjacent zone indices (filled below)
@@ -587,7 +826,47 @@ const EMPIRES=[
 ];
 const ARMY_TECH=['Militia','Muskets','Line Infantry','Élite Guards'];
 const SHIP_TECH=['Sloops','Frigates','Ships of the Line'];
-const GOODS={grain:'🌾 grain',timber:'🪵 timber',naval:'⚓ naval stores',iron:'⛏ iron',cloth:'🧵 cloth',wine:'🍷 wine',sugar:'🍯 sugar',spices:'🌶 spices'};
+const GOODS={grain:'grain',timber:'timber',naval:'naval stores',iron:'iron',cloth:'cloth',wine:'wine',sugar:'sugar',spices:'spices'};
+/* ================= THE ENGRAVED KIT (CLEAN CROWN) =================
+   One icon hand for every control in the game: gold line-work on dark bronze,
+   drawn as inline SVG so the chrome speaks engraving, not emoji. In-world
+   flavour (Gazette, dispatches, the ticker) keeps its own voice.           */
+const ICON_PATHS={
+  coin:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 5.5v.01M12 18.5v.01M5.5 12h.01M18.5 12h.01"/>',
+  swords:'<path d="M4 4l11 11M20 4L9 15M4 4l-1.2-1.2M4 4l1 3.2L8.2 6M20 4l1.2-1.2M20 4l-1 3.2L15.8 6M6.5 14.5L4 20l5.5-2.5M17.5 14.5L20 20l-5.5-2.5"/>',
+  ship:'<path d="M4 16.5c3 1.6 13 1.6 16 0l-1.8 3.8c-4 1-8.4 1-12.4 0zM12 16.5V4M12 4l6.5 7H12M12 8 7 12.5h5"/>',
+  calendar:'<rect x="4" y="5.5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4M8 14h2M12 14h2M16 14h.01"/>',
+  crown:'<path d="M4 18h16M4 18l-1.2-8.5L8.5 13 12 6l3.5 7 5.7-3.5L20 18M8 21h8"/>',
+  scroll:'<path d="M7 5h11a1.5 1.5 0 0 1 0 3H7M7 5a1.5 1.5 0 0 0 0 3M7 5v11a1.5 1.5 0 0 0 1.5 1.5H18M7 8v8M10.5 11h5M10.5 14h5"/>',
+  hourglass:'<path d="M6 3h12M6 21h12M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9 5 0 8-4 8-9"/>',
+  compass:'<circle cx="12" cy="12" r="9"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 7l2.2 5L12 17l-2.2-5z"/>',
+  bell:'<path d="M6 10v4H4V10zM6 10l5-4v12l-5-4M14.5 9.5a4 4 0 0 1 0 5M17 7a7.5 7.5 0 0 1 0 10"/>',
+  bellOff:'<path d="M6 10v4H4V10zM6 10l5-4v12l-5-4M16 9l6 6M22 9l-6 6"/>',
+  anchor:'<circle cx="12" cy="5" r="2"/><path d="M12 7v12M5 12.5c0 4.4 3.1 7.5 7 7.5s7-3.1 7-7.5M3.5 10.5L5 12.5l1.5-2M17 10.5l1.5 2 1.5-2M8 15.5h8"/>',
+  fleur:'<path d="M12 3v3M12 6c-1.2-1.8-3-2.4-4.6-1.8.2 1.7 1.3 2.9 3 3.2C9 8.6 8.6 10 9.2 11.4M12 6c1.2-1.8 3-2.4 4.6-1.8-.2 1.7-1.3 2.9-3 3.2 1.4 1.2 1.8 2.6 1.2 4M7 13.5h10M9.5 17.5c.8-1 1.6-1.4 2.5-1.4s1.7.4 2.5 1.4M10 21h4"/>',
+  shield:'<path d="M12 3l7 2.5V11c0 4.8-3 8.2-7 10-4-1.8-7-5.2-7-10V5.5z"/><path d="M9 11.5l2.2 2.2L15.5 9.5"/>',
+  banner:'<path d="M6 21V4M6 5c3.5-2 6 1.8 10 0v7c-4 1.8-6.5-2-10 0"/>',
+  castle:'<path d="M5 21V9M5 9V6h3v2h3V6h2v2h3V6h3v3M19 21V9M5 21h14M10 21v-4a2 2 0 0 1 4 0v4"/>',
+  scales:'<path d="M12 3v2M5 6h14M12 5L6.5 6 4 12a3.4 3.4 0 0 0 7 0L8.5 6M12 5l3.5 1L18 12a3.4 3.4 0 0 1-7 0l2.5-6M8 20h8M12 15v5"/>',
+  moon:'<path d="M19 14.5A8.5 8.5 0 1 1 9.5 5 7 7 0 0 0 19 14.5z"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2L19 19M19 5l-1.8 1.8M6.8 17.2L5 19"/>',
+  wind:'<path d="M3 8h9a3 3 0 1 0-3-3M3 12.5h13a3 3 0 1 1-3 3M3 17h6"/>',
+  purse:'<path d="M9 4h6M10 4c-1 2-3.5 3.4-3.5 7A5.5 5.5 0 0 0 12 16.5 5.5 5.5 0 0 0 17.5 11C17.5 7.4 15 6 14 4M8.5 20h7M12 16.5V20"/>',
+  quill:'<path d="M20 4c-6 0-11 4-13 10l-2 6 6-2C17 16 20 10 20 4zM7 14c2.5-.5 5-2 7-4.5"/>',
+  map:'<path d="M9 4L3.5 6v14L9 18l6 2 5.5-2V4L15 6zM9 4v14M15 6v14"/>',
+  warning:'<path d="M12 4L2.8 20h18.4z"/><path d="M12 10v4.5M12 17.5v.01"/>'
+};
+function ic(name, cls){ return '<svg class="ic'+(cls? ' '+cls:'')+'" viewBox="0 0 24 24" aria-hidden="true">'+(ICON_PATHS[name]||ICON_PATHS.anchor)+'</svg>'; }
+/* chrome strings that still arrive wearing an emoji get their engraving here —
+   ONLY the leading sigil is translated; the words stay exactly as written.      */
+const EMOJI_ICON={'🪙':'coin','⚔':'swords','⛵':'ship','📅':'calendar','👑':'crown','📜':'scroll','⏳':'hourglass','🧭':'compass','🔔':'bell','🔕':'bellOff','⚓':'anchor','⚜':'fleur','🛡':'shield','🚩':'banner','🏴':'banner','🏰':'castle','⚖':'scales','🌙':'moon','☀':'sun','🌬':'wind','🏦':'scales','🗺':'map','✉':'scroll','✒':'quill','🖋':'quill','💡':'compass','⚠':'warning','🎇':'banner','🚶':'banner','🪖':'swords','🤝':'scales','📈':'coin','🏆':'crown','🕊':'scroll','⛓':'anchor','✂':'quill','💥':'warning','🗓':'calendar','🏗':'castle'};
+function iconLead(html){
+  if(typeof html!=='string') return html;
+  const m=html.match(/^\s*(<b>)?\s*(\S{1,4})(\s|&nbsp;)/);
+  if(m){ const key=m[2].replace(/️/g,''); if(EMOJI_ICON[key]) return (m[1]||'')+ic(EMOJI_ICON[key])+html.slice(m[0].length); }
+  return html;
+}
+function iconSigil(ch){ return ic(EMOJI_ICON[ch]||'anchor','lg'); }
 const GOODS_PRICE={grain:2,timber:3,naval:4,iron:5,cloth:6,wine:7,sugar:8,spices:14};
 const MUSTER_COST=40, MUSTER_MEN=1000, SHIP_COST=120;
 const REGION_COUNT=REGION_DEFS.length;
@@ -677,6 +956,8 @@ function freshState(){
     // the FEEL wave: formal sieges, the captains' log, advisor voices, first-encounter ceremonies
     sieges:[], siegeDone:0, dispatches:[], flags:{},
     adv:{seen:{}, lastTurn:-99}, ceremonies:{},
+    // the CLEAN CROWN: power ledger, border-watch memory, and the shore-book of first flags
+    powerHist:[], borderWarn:{}, shoreFirst:{A:null,B:null,F:null},
     // the RECKONING: dues advanced daily against the season's settle, and whether the first march has flown
     advancePaid:0, marchSeen:0
   };
@@ -694,7 +975,7 @@ function rebuildIndex(){ rById={}; G.regions.forEach(r=>rById[r.id]=r); seaById=
    units with a current node (fleet.node === 's<zoneId>') and a live
    position (fleet.pos, world coords) — see syncUnits().
    ============================================================ */
-const WORLD_VER=10; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle, 6 = the 8040×5360 10x chart, 7 = town detail + great works, 8 = governors, 9 = the Second Age, 10 = the FEEL wave: siege ladders, captains' log, advisor voices, first-encounter ceremonies)
+const WORLD_VER=11; // saved-world layout version (2 = grandeur chart, 3 = real-coastline cartography, 4 = real-time engine, 5 = named field armies + join orders + clash spectacle, 6 = the 8040×5360 10x chart, 7 = town detail + great works, 8 = governors, 9 = the Second Age, 10 = the FEEL wave: siege ladders, captains' log, advisor voices, first-encounter ceremonies, 11 = the CLEAN CROWN survey: fifteen new regions carved into true kingdoms, power ledgers, border-watch)
 // Great works: ONE landmark per crown seat, raised from the city sheet. The hook is deliberately
 // a toy, not a spreadsheet — a flag on the region, read by income/battle/ship-cost code below.
 const GREAT_WORKS=[
@@ -931,6 +1212,19 @@ function ensureWorldMeta(s){
   if(!s.playerStart) s.playerStart='player';
   if(!Array.isArray(s.storms)||!s.storms.length) s.storms=initStormCells(s.seas, s.regions);
 }
+/* the CLEAN CROWN ledgers: the kingdoms board keeps a short memory of every crown's
+   strength (for the trend arrows), the border-watch remembers whom it has already
+   warned about, and the shore-book records which crown first planted a flag on
+   each new-world coast — the race the Gazette loves to name.                  */
+function ensureCleanCrownMeta(s){
+  if(!s) return;
+  if(!Array.isArray(s.powerHist)) s.powerHist=[];
+  if(!s.borderWarn||typeof s.borderWarn!=='object') s.borderWarn={};
+  if(!s.shoreFirst||typeof s.shoreFirst!=='object') s.shoreFirst={A:null,B:null,F:null};
+  ['A','B','F'].forEach(g=>{ // an old save may already have flags flying — credit the crown that holds the shore
+    if(!s.shoreFirst[g]){ const held=(s.regions||[]).find(r=>r.group===g && r.owner && r.owner!=='natives'); if(held) s.shoreFirst[g]=held.owner; }
+  });
+}
 // the FEEL wave's bookkeeping — defaults for any save generation (called on boot and on the wv9→10 step)
 function ensureFeelMeta(s){
   if(!s) return;
@@ -1014,7 +1308,22 @@ function migrateSave(s){
     ensureFeelMeta(s);
     s.wv=10;
   }
+  if(s.wv===10){ // CLEAN CROWN survey: the atlas itself grows — new kingdoms rise by name between the old ones
+    const byName={}; (s.regions||[]).forEach(r=>byName[r.name]=r);
+    const born=[];
+    REGION_DEFS.forEach((d,i)=>{ if(!byName[d[0]]){ const r=regionFromDef(d,i); s.regions.push(r); byName[r.name]=r; born.push(r); } });
+    const byR={}; REGION_DEFS.forEach(d=>{ byR[d[0]]=d; });
+    (s.regions||[]).forEach(r=>{ const d=byR[r.name]; if(d){ r.x=d[1]; r.y=d[2]; } });
+    classifyNewWorld(s.regions||[]);
+    // newborn free towns wake garrisoned, as every free town does; newborn colonies wake empty, as every shore does
+    born.forEach(r=>{ if(!r.owner && !r.colony){ r.troops=Math.round(rr(1200,2600)); r.pop=Math.max(r.pop,3200); } });
+    computeNeighbors(s.regions||[]);
+    computeSeas(s.regions||[], s.seas||[]);
+    ensureCleanCrownMeta(s);
+    s.wv=11;
+  }
   // RECKONING bookkeeping rides along at wv10: old saves simply start with nothing advanced
+  ensureCleanCrownMeta(s);
   if(s.advancePaid===undefined) s.advancePaid=0;
   if(s.marchSeen===undefined) s.marchSeen=(s.armies||[]).some(a=>a.owner==='player')?1:0;
   return s;
@@ -1374,6 +1683,9 @@ function zoomAt(cx,cy,ns){
   ns=clamp(ns, fit*0.9, fit*6);
   const [wx,wy]=s2w(cx,cy); view.scale=ns; view.x=cx-wx*ns; view.y=cy-wy*ns;
 }
+window.__ambFlag=false;
+const _sndBtn=document.getElementById('btn-sound');
+if(_sndBtn) _sndBtn.onclick=()=>{ const onNow= !!(window.__sndEnabled===undefined? true : window.__sndEnabled); window.__sndEnabled=!onNow; Sound.setEnabled(window.__sndEnabled); _sndBtn.innerHTML=ic(window.__sndEnabled? 'bell':'bellOff'); _sndBtn.style.opacity= window.__sndEnabled? '1':'0.55'; };
 $('#zoom-in').onclick=()=>{ if(window.R3&&window.R3.active) R3.zoomBy(1.3); else zoomAt(innerWidth/2,innerHeight/2,view.scale*1.3); };
 $('#zoom-out').onclick=()=>{ if(window.R3&&window.R3.active) R3.zoomBy(1/1.3); else zoomAt(innerWidth/2,innerHeight/2,view.scale/1.3); };
 $('#zoom-home').onclick=()=>{ if(window.R3&&window.R3.active) R3.home(); else fitWorld(); };
@@ -1383,11 +1695,12 @@ function handleTap(cx,cy){
   if(marchTarget){ resolveOrderTap(cx,cy); return; }
   const now=Date.now();
   if(window.R3&&window.R3.active){ // 3D picking: projected centres, snap-first
-    if(now-lastTap<320){ R3.zoomBy(1.5); lastTap=0; return; } lastTap=now;
+    if(now-lastTap<320){ Sound.zoom(); R3.zoomBy(1.5); lastTap=0; return; } lastTap=now;
     const hit=R3.pick(cx,cy);
     window.__lastTap={cx, cy, hit: hit? hit.type+':'+hit.id : null};
     if(window.__tapPulse) window.__tapPulse(cx, cy, !!hit); // a visible ring says exactly what the tap touched
     if(!hit){ return; } // a missed tap does NOTHING — no sheet-slam, no pan-jump
+      Sound.tick();
     if(hit.type==='fleet') selectFleet(G.fleets.find(f=>f.id===hit.id));
     else if(hit.type==='army'){ const a=G.armies.find(x=>x.id===hit.id); if(a){ if(a.owner==='player') selectArmy(a); else if(a.at){ toast('🪖 '+a.name+' ('+emp(a.owner).name+') is marching on '+rById[a.destRegion].name+' — ~'+Math.max(1,Math.ceil(a.arriveDay-G.day))+' days out'); } else selectRegion(rById[a.atRegion]); } }
     else if(hit.type==='region') selectRegion(rById[hit.id]);
@@ -1395,16 +1708,16 @@ function handleTap(cx,cy){
     return;
   }
   const [wx,wy]=s2w(cx,cy);
-  if(now-lastTap<320){ zoomAt(cx,cy,view.scale*1.5); lastTap=0; return; } lastTap=now;
+  if(now-lastTap<320){ Sound.zoom(); zoomAt(cx,cy,view.scale*1.5); lastTap=0; return; } lastTap=now;
   // fleet? (the same generous thumb radius as the 3D chart, in screen terms)
-  for(const f of G.fleets){ const p=fPos(f); if(Math.hypot(p.x-wx, p.y-wy)<Math.max(70*WS, 30/view.scale)){ selectFleet(f); return; } }
+  for(const f of G.fleets){ const p=fPos(f); if(Math.hypot(p.x-wx, p.y-wy)<Math.max(70*WS, 30/view.scale)){ Sound.tick(); selectFleet(f); return; } }
   // region?
   let best=null,bd=1e9;
   G.regions.forEach(r=>{ const d=Math.hypot(r.x-wx,r.y-wy); if(d<bd){bd=d;best=r;} });
-  if(best&&bd<Math.max(130*WS, 34/view.scale)){ selectRegion(best); return; }
+  if(best&&bd<Math.max(130*WS, 34/view.scale)){ Sound.tick(); selectRegion(best); return; }
   // sea zone?
-  for(const z of G.seas){ if(Math.hypot(z.x-wx,z.y-wy)<120*WS){ selectSea(z); return; } }
-  window.__lastTap={cx, cy, hit:null};
+  for(const z of G.seas){ if(Math.hypot(z.x-wx,z.y-wy)<120*WS){ Sound.tick(); selectSea(z); return; } }
+  window.__lastTap={cx, cy, hit:null}; Sound.miss();
   anims.push({type:'pulse', x:wx, y:wy, t0:performance.now(), dur:480}); // a miss ripples visibly and does nothing else
 }
 
@@ -1452,7 +1765,7 @@ function actBtn(t,d,fn,cls,dis){
     b.disabled=true;
     if(typeof dis==='string') d+='<span class="why">Locked: '+dis+'</span>';
   } else b.onclick=()=>{ fn(); };
-  b.innerHTML='<span class="t">'+t+'</span><span class="d">'+d+'</span>';
+  b.innerHTML='<span class="t">'+iconLead(t)+'</span><span class="d">'+d+'</span>';
   return b;
 }
 function regionCost(r){ return ''; }
@@ -1699,7 +2012,8 @@ function pushEvent(html){
 }
 function renderTicker(){
   const el=document.getElementById('ticker'); if(!el) return;
-  el.innerHTML=tickerLines.map(l=>'<div class="tick-line">'+l.html+'</div>').join('');
+  // CLEAN CROWN: two dispatches visible at most — the newest crisp, its elder fading behind it
+  el.innerHTML=tickerLines.slice(0,2).map((l,i)=>'<div class="tick-line'+(i? ' old':'')+'">'+l.html+'</div>').join('');
 }
 function nearestPortRegion(zoneId){ const z=seaById[zoneId]; if(!z) return null;
   const list=z.ports.map(id=>rById[id]); return list.length? list[0] : null; }
@@ -1813,7 +2127,9 @@ function resolveArmyBattleApply(a, dest, res, atkBefore, defBefore, prevOwner){
       coachAdvance(1); simPauseEvent();
     } else {
       if(prevOwner==='player'){ gazette('⚔ <b>'+emp(a.owner).name+' has taken '+dest.name+'!</b> '+fmt(res.dLoss)+' of your garrison fell holding it.'); pushEvent('⚔ <b>'+dest.name+' lost!</b> '+emp(a.owner).name+' storms the town.'); simPauseEvent(); }
-      else gazette('⚔ '+emp(a.owner).name+' takes '+dest.name+(prevOwner? ' from '+emp(prevOwner).name : '')+'.');
+      else { gazette('⚔ '+emp(a.owner).name+' takes '+dest.name+(prevOwner? ' from '+emp(prevOwner).name : '')+'.');
+        // the rival crowns' wars are news too — surface the ones that move the board
+        if(prevOwner && prevOwner!=='natives' && dest.isPort) pushEvent('◆ <b>The board shifts:</b> '+emp(a.owner).name+' takes '+dest.name+' from '+emp(prevOwner).name+'.'); }
     }
     if(window.animsPush) anims.push(null); // 2D wash handled via flashUntil (cheap, renderer-agnostic)
     dest.flashUntil=performance.now()+1200;
@@ -2019,7 +2335,7 @@ function rtAdvanceDays(days){
     // season seam: every 90 days the old economy breathes
     if(Math.floor(G.day)%90===0){ endSeason(); if(G.over) break; }
     // imperial staffs think monthly
-    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); governorMonthly(); detectWarnings(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
+    if(Math.floor(G.day)%30===0){ aiMonthlyOps(); governorMonthly(); detectWarnings(); borderWatch(); if(G.crownQueue.length && crownAlertPending()) simPauseEvent(); }
     // arrivals (timestamp-exact)
     (G.armies||[]).slice().forEach(a=>{ if(a.at && G.day>=a.arriveDay-1e-9) armyArrive(a); });
     (G.fleets||[]).slice().forEach(f=>{ if(f.at && G.day>=f.at.arriveDay-1e-9) fleetArrive(f); });
@@ -2078,7 +2394,8 @@ function anyVeilOpen(){ return !!document.querySelector('.veil.open'); }
    (The Crown modal used to pile onto the Realm/Orders sheets until three panels shared the
    screen.) openVeil() is the only door in; plain classList.remove() stays the way out.        */
 const VEIL_IDS=['gazette','realm','crown','menu','orders','howto','battle','start','endscreen'];
-function openVeil(id){ VEIL_IDS.forEach(v=>{ const el=document.getElementById(v); if(el) el.classList.toggle('open', v===id); }); closeSheet(); }
+function openVeil(id){ VEIL_IDS.forEach(v=>{ const el=document.getElementById(v); if(el) el.classList.toggle('open', v===id); }); closeSheet(); Sound.open(); }
+function closeVeil(id){ const el=document.getElementById(id); if(el && el.classList.contains('open')) Sound.close(); if(el) el.classList.remove('open'); }
 function closeVeil(id){ const el=document.getElementById(id); if(el) el.classList.remove('open'); }
 function veilIsOpen(id){ const el=document.getElementById(id); return !!(el&&el.classList.contains('open')); }
 function setClock(speed){
@@ -2090,10 +2407,10 @@ function setClock(speed){
 function toggleEventPause(on){ if(!G) return; G.pauseOnEvent=!!on; refreshClockUI(); save(); }
 function refreshClockUI(){
   const d=document.getElementById('clock-date'); if(!d || !G) return;
-  d.textContent='📅 '+seasonName()+' · Day '+Math.floor(G.day%90+1)+' · '+watchName(G.hour||9)+' '+seasonPips();
+  d.textContent=seasonName()+' · Day '+Math.floor(G.day%90+1);
   const st=document.getElementById('clock-state');
   const spd=G.clockSpeed||0;
-  if(st && !eventPaused) st.textContent = spd===0? '⏸ Paused' : (spd===2? '▶ Flowing' : spd===4? '▶▶ Flowing fast' : spd===8? '▶▶▶ Full sail' : '▶ Flowing');
+  if(st && !eventPaused) st.textContent = watchName(G.hour||9)+' · '+(spd===0? 'Paused' : (spd===2? 'Flowing' : spd===4? 'Flowing fast' : spd===8? 'Full sail' : 'Flowing'));
   ['clock-pause','clock-1','clock-2','clock-4'].forEach(id=>{
     const b=document.getElementById(id); if(!b) return;
     const mine = (id==='clock-pause'&&spd===0)||(id==='clock-1'&&spd===2)||(id==='clock-2'&&spd===4)||(id==='clock-4'&&spd===8);
@@ -2145,7 +2462,7 @@ function aiMonthlyOps(){
       const shores=G.regions.filter(r=>r.colony && !r.owner);
       const reach=shores.filter(r=>{ const z=seaById[r.seaZone]; return z && (z.ports.some(pid=>rById[pid].owner===id) || z.neighbors.some(nz=>seaById[nz].ports.some(pid=>rById[pid].owner===id))); });
       if(reach.length){ const r=pick(reach); e.gold-=150; r.owner=id; r.colony=false; r.tier=0; r.troops=800; r.pop=Math.max(r.pop,2600);
-        gazette('🚩 The '+e.name+' plants its flag at <b>'+r.name+'</b> — a new colony rises on the far shore.'); }
+        shoreClaimed(r, id); }
     }
     // fleets: at war? blockade the nearest enemy port. at peace? drift/raid.
     G.fleets.filter(f=>f.owner===id && !f.at).forEach(f=>{
@@ -2167,6 +2484,39 @@ function aiMonthlyOps(){
     });
   });
 }
+/* ---- border tension: a crown that masses spears at your marches gets NAMED for it ----
+   Checked on the monthly staff cadence. A warning needs a real host (not a patrol),
+   peace (a declared war needs no herald), and a quiet month between warnings.        */
+function borderWatch(){
+  if(!G||G.over) return;
+  ensureCleanCrownMeta(G);
+  ['aurelia','meridian','sable'].forEach(id=>{
+    const e=G.empires[id]; if(!e) return;
+    const rel=emp('player').relations[id]; if(!rel||rel.war||rel.ally) return;
+    const hosts=(G.armies||[]).filter(a=>a.owner===id && a.men>=900);
+    let mass=0, near=null;
+    hosts.forEach(a=>{
+      let anchor=null;
+      if(a.at && a.destRegion!=null && rById[a.destRegion] && rById[a.destRegion].owner==='player') anchor=rById[a.destRegion];
+      else if(a.atRegion!=null && rById[a.atRegion]){
+        const home=rById[a.atRegion];
+        if(home.owner==='player') anchor=home;
+        else { const adj=home.neighbors.map(n=>rById[n]).find(r=>r&&r.owner==='player'); if(adj) anchor=adj; }
+      }
+      if(anchor){ mass+=a.men; if(!near||a.men>near.men) near={region:anchor, men:a.men}; }
+    });
+    if(mass>=1800 && near){
+      if((G.borderWarn[id]||-1e9) > G.day-45) return; // the court does not cry wolf every month
+      G.borderWarn[id]=G.day;
+      const r=near.region, en=e.name;
+      G.crownQueue.push({icon:'🛡', urgent:true, title:en+' masses near '+r.name,
+        body:fmt(mass)+' men under '+en+' banners stand at your marches by '+r.name+' — no war declared, every intention readable. Posture, bluff, or the first page of an invasion: the next move is theirs.',
+        choices:[{label:'Watch them', fn:null},
+                 {label:'Answer in kind — strengthen '+r.name+' (40g)', fn:()=>{ const me=emp('player'); if(me.gold>=40){ me.gold-=40; r.troops+=800; toast(r.name+' stiffens — 800 more spears on its walls.'); } else toast('The treasury cannot answer in kind.'); }}]});
+      pushEvent('🛡 <b>'+en+' masses near '+r.name+'</b> — '+fmt(mass)+' men at your border. The Crown has been told.');
+    }
+  });
+}
 function formArmySilent(r, men){
   if(r.troops<men+500) return null;
   r.troops-=men;
@@ -2178,7 +2528,7 @@ function formArmySilent(r, men){
 }
 function orderMarchSilent(a, dest){ orderMarch(a, dest); }
 
-function showOrderHint(html){ const h=$('#hint'); if(!h) return; h.dataset.order='1'; h.innerHTML=html; h.classList.add('show'); }
+function showOrderHint(html){ const h=$('#hint'); if(!h) return; h.dataset.order='1'; h.innerHTML=iconLead(html); h.classList.add('show'); }
 function clearOrderHint(){ const h=$('#hint'); if(!h) return; if(h.dataset.order){ delete h.dataset.order; h.classList.remove('show'); if(window.updateHint) updateHint(); } }
 
 /* ================= CLASH SPECTACLE — battles are SEEN before they are read =================
@@ -2189,6 +2539,7 @@ let clashFx=null; const clashQueue=[];
 function startClash(fx){
   if(clashFx){ clashQueue.push(fx); return; }
   clashFx=fx; fx.t0=performance.now(); fx.prog=0; fx.atkCur=fx.a0; fx.defCur=fx.d0;
+  if(fx.type==='sea') Sound.volley(3); else Sound.volley(1);
   window.__clashFx=fx;
   if(fx.frameCam){ if(typeof closeSheet==='function') closeSheet(); flyCameraToWorld(fx.x, fx.y, fx.dist||160); }
 }
@@ -2810,6 +3161,7 @@ function surrenderTown(sg, honors){
     simPauseEvent();
   } else {
     gazette('🎇 '+r.name+' surrenders to '+emp(sg.atkOwner).name+' after a formal siege — the ladder ran its full course.');
+    if(r.isPort && prev && prev!=='natives') pushEvent('◆ <b>The board shifts:</b> '+emp(sg.atkOwner).name+' starves '+r.name+' out of '+emp(prev).name+' hands.');
   }
   refreshHUD(); save();
 }
@@ -3216,14 +3568,14 @@ if(G.seasonIdx===3 && (A.y<WORLD_H*0.28 || B.y<WORLD_H*0.28)) m*=1.22; // winter
 return m;
 }
 function watchName(h){ h=((h%24)+24)%24;
-if(h>=4.5&&h<7) return '🌅 Dawn watch';
-if(h<11.5) return '☀ Forenoon watch';
-if(h<14.5) return '🌞 Midday watch';
-if(h<18) return '🌇 Dog watch';
-if(h<21) return '🌆 Dusk watch';
-return '🌙 Night watch';}
+if(h>=4.5&&h<7) return 'Dawn watch';
+if(h<11.5) return 'Forenoon watch';
+if(h<14.5) return 'Midday watch';
+if(h<18) return 'Dog watch';
+if(h<21) return 'Dusk watch';
+return 'Night watch';}
 function nightFactor(){ const h=((G&&G.hour)||9); return (h<5.2||h>=19.2)?1: (h<6.8?0.55: (h>=17.8&&h<19.2)?0.4: 0);}
-function seasonPips(){ return ['🌱','☀️','🍂','❄️'].map((s,i)=> i===(G.seasonIdx&3)? '':s).join(' ');}
+function seasonPips(){ return ''; } // CLEAN CROWN: the date line carries words now, not picture-pips
 window.__wx=function(){ return { hour:G? (G.hour||9):9, night:G? nightFactor():0, storms:(G&&G.storms)||[], winds:!!(G&&G.showWinds), season:G? G.seasonIdx:0};};
 
 /* ---------- storms ---------- */
@@ -3730,6 +4082,20 @@ realmBreathesDaily();
 }
 
 /* ---------- founding colonies ---------- */
+/* ---- the shore-book: the first flag on each new-world coast is a headline with a name on it ---- */
+const SHORE_NAMES={A:'the northern new-world shore', B:'the Brazil shore', F:'the Guinea coast'};
+function shoreClaimed(r, ownerId){
+  if(!r||!SHORE_NAMES[r.group]) return;
+  ensureCleanCrownMeta(G);
+  if(G.shoreFirst[r.group]){ // later flags still stir the harbour talk — just not the front page
+    if(ownerId!=='player') pushEvent('◆ '+emp(ownerId).name+' plants another flag at <b>'+r.name+'</b>.');
+    return;
+  }
+  G.shoreFirst[r.group]=ownerId;
+  const who=ownerId==='player'? 'Your Crown' : 'The '+emp(ownerId).name;
+  gazette('🏴 <b>First flag on '+SHORE_NAMES[r.group]+'!</b> '+who+' plants its colours at <b>'+r.name+'</b> — every court with a map room takes note tonight: that shore is a race now, and the race has a leader.');
+  pushEvent('🏴 <b>'+r.name+' claimed</b> — the first flag on '+SHORE_NAMES[r.group]+' flies '+(ownerId==='player'? 'your colours' : emp(ownerId).name+' colours')+'.');
+}
 function foundColony(r){
 const me=emp('player');
 if(!r||!r.colony||r.owner) return false;
@@ -3740,6 +4106,7 @@ const donor=myRegions().filter(x=>x.troops>1100).sort((a,b)=>b.troops-a.troops)[
 if(!donor){ toast('No garrison can spare 500 settlers — muster more men somewhere fat.'); return false;}
 me.gold-=120; donor.troops-=500;
 r.owner='player'; r.colony=false; r.tier=0; r.troops=500; r.pop=Math.max(r.pop,2400); r.sighted=true;
+shoreClaimed(r, 'player');
 markFlag('colony'); advisorTry('colony');
 if(ceremony('colony')){ r.flashUntil=performance.now()+1800;
 gazette('🚩 <b>A flag beyond the old chart.</b> '+r.name+' takes your colours — a banner washed crimson over a new shore, and every court will hear of it by winter.'); }
@@ -3963,8 +4330,21 @@ function endGame(won,text){
   G.over=true; $('#end-title').textContent=won?'👑 Victory':'The Crown Falls';
   $('#end-text').textContent=text; openVeil('endscreen'); save();
 }
+/* ---- the kingdoms board's arithmetic: one number a court can argue over ---- */
+function crownPower(id){
+  const regs=G.regions.filter(r=>r.owner===id);
+  const men=totalMen(id)+(G.armies||[]).filter(a=>a.owner===id).reduce((s,a)=>s+a.men,0);
+  return regs.length*10 + regs.filter(r=>r.isPort).length*4 + totalShips(id)*8 + Math.round(men/100) + Math.round((emp(id).gold||0)/25);
+}
+function snapshotPower(){
+  if(!Array.isArray(G.powerHist)) G.powerHist=[];
+  const snap={turn:G.turn};
+  Object.keys(G.empires).forEach(id=>{ snap[id]={regions:G.regions.filter(r=>r.owner===id).length, ships:totalShips(id), gold:G.empires[id].gold||0, power:crownPower(id)}; });
+  G.powerHist.push(snap); if(G.powerHist.length>6) G.powerHist.shift();
+}
 function endSeason(){
   if(G.over) return;
+  const _goldBefore=emp('player').gold;
   closeSheet();
   G.gazette=[];
   // player upkeep already in collect below; order: incomes, growth, AI
@@ -3976,8 +4356,10 @@ function endSeason(){
   const trades={}; EMPIRES.forEach(e=>{ if(G.empires[e.id]) trades[e.id]=tradeIncome(e.id); });
   const leader=Object.keys(trades).sort((a,b)=>trades[b]-trades[a])[0];
   emp('player').tradeStreak = leader==='player'? emp('player').tradeStreak+1 : 0;
+  snapshotPower(); // the board remembers: every crown's strength, season over season
   // season advance
   G.seasonIdx=(G.seasonIdx+1)%4; G.turn++;
+  Sound.season(); if(emp('player').gold>_goldBefore) Sound.gold();
   if(ceremony('wheel:'+G.seasonIdx)) gazette('🗓 <b>The wheel turns to '+SEASONS[G.seasonIdx]+'</b> for the first time under your flag — the realm begins to learn its rhythm.');
   if(G.turn===5&&ceremony('wheel:year')){ toast('🗓 A full year of your reign.'); gazette('🗓 <b>One year under your flag.</b> The clerks bind the first year’s Gazette and shelve it under your name.'); }
   advisorPoll(); // the realm's voices speak at the turn of the season — never more than one
@@ -4017,6 +4399,7 @@ function setNum(sel,txt){ const el=$(sel); if(!el) return;
 function refreshHUD(){
   $('#tb-season').textContent=seasonName();
   const me=emp('player');
+  if(window.__ambFlag!==undefined){ const want=!!(G && !G.over && (G.clockSpeed||0)>0); if(want!==window.__ambFlag){ window.__ambFlag=want; Sound.ambience(want); } }
   setNum('#tb-gold',fmt(me.gold));
   const net=G.lastIncome.gold+G.lastIncome.trade-G.lastIncome.upkeep-G.lastIncome.interest;
   $('#tb-gold-trend').innerHTML= net>=0? '<span class="trend-up">▲'+fmt(net)+'</span>' : '<span class="trend-dn">▼'+fmt(Math.abs(net))+'</span>';
@@ -4024,7 +4407,7 @@ function refreshHUD(){
   setNum('#tb-ships',''+totalShips('player'));
   $('#tb-debt-cell').style.display=me.debt>0?'flex':'none';
   setNum('#tb-debt',fmt(me.debt));
-  const w=$('#warnings'); w.innerHTML=G.warnings.map(x=>'<div class="warn">'+x+'</div>').join('');
+  const w=$('#warnings'); w.innerHTML=G.warnings.map(x=>'<div class="warn">'+iconLead(x)+'</div>').join('');
   const cb=$('#crown-badge'); const n=G.crownQueue.length;
   cb.style.display=n?'flex':'none'; cb.textContent=n;
   // aims
@@ -4038,6 +4421,8 @@ function refreshHUD(){
   aims.forEach(a=>{ if(a.done&&a.id!=='und'&&!G.aimsRewarded.includes(a.id)){ G.aimsRewarded.push(a.id); me.gold+=150;
     toast('🏆 Aim achieved: '+a.name+' — the court grants +150g'); } });
   $('#aims-list').innerHTML=aims.map(a=>'<div class="aim"><span class="tick">'+(a.done?'✓':'▸')+'</span><span>'+a.t+'</span></div>').join('');
+  const ah=document.querySelector('#aims h4'); // the phone chip carries the headline figure even folded
+  if(ah) ah.innerHTML='Sovereign’s Aims<span class="aims-sum">'+(myRegions().length>=WIN_REGIONS? 'won the chart' : myRegions().length+' of '+WIN_REGIONS+' held')+'</span>';
   // no dead seasons: when nothing demands attention, point at the single most useful act
   if(coachStep===99 && !G.over){
     const weak=myRegions().filter(r=>r.troops<1500).length;
@@ -4045,17 +4430,18 @@ function refreshHUD(){
     if(G.crownQueue.length) { /* crown badge speaks for itself */ }
     else if(me.gold>=MUSTER_COST && weak>0 && G.turn>1 && h.dataset.turn!=String(G.turn)){
       h.dataset.turn=String(G.turn);
-      h.innerHTML='💡 <b>Your Move:</b> '+weak+' of your regions stand thinly garrisoned. Muster regiments before a rival notices.';
+      h.innerHTML=iconLead('🧭 <b>Your Move:</b> '+weak+' of your regions stand thinly garrisoned. Muster regiments before a rival notices.');
       h.classList.add('show'); clearTimeout(h._hh); h._hh=setTimeout(()=>h.classList.remove('show'),6000);
     }
   }
 }
+$('#aims').onclick=()=>{ document.getElementById('aims').classList.toggle('open'); };
 $('#btn-crown').onclick=()=>{
   const b=$('#crown-body');
   b.innerHTML=G.crownQueue.length? '' : '<p>No matters await the Crown. The realm hums along without you — as it should.</p>';
   G.crownQueue.forEach((q,i)=>{
     const row=document.createElement('div'); row.className='dip-row';
-    row.innerHTML='<span style="font-size:22px">'+q.icon+'</span><div style="flex:1"><b>'+q.title+'</b><br><span class="rel">'+q.body+'</span></div>';
+    row.innerHTML='<span style="color:var(--brass);display:flex;align-items:flex-start">'+iconSigil((q.icon||'').replace(/️/g,''))+'</span><div style="flex:1"><b>'+q.title+'</b><br><span class="rel">'+q.body+'</span></div>';
     q.choices.forEach(c=>{ const btn=document.createElement('button'); btn.className='mini-btn'; btn.textContent=c.label;
       btn.onclick=()=>{ if(c.fn) c.fn(); G.crownQueue.splice(i,1); $('#crown').classList.remove('open'); refreshHUD(); save();
         if(G.crownQueue.length) $('#btn-crown').click(); };
@@ -4069,22 +4455,33 @@ $('#btn-realm').onclick=()=>{
   const me=emp('player'); const b=$('#realm-body');
   let h='<p><b>Treasury:</b> '+fmt(me.gold)+'g · <b>Debt:</b> '+fmt(me.debt)+'g · <b>Men:</b> '+fmt(totalMen('player'))+' · <b>Ships:</b> '+totalShips('player')+'</p>';
   h+='<p><b>Army:</b> '+ARMY_TECH[me.armyTech]+' · <b>Navy:</b> '+SHIP_TECH[me.shipTech]+'</p>';
-  // — the kingdoms board: the political world at a glance —
-  h+='<div class="rule"></div><h3 style="font-variant:small-caps">👑 Kingdoms of the Rift</h3>';
-  h+='<p style="font-size:12px">Four crowns share this sea. Grow yours; watch theirs.</p>';
+  // — the kingdoms board: the political world at a glance, with its memory —
+  h+='<div class="rule"></div><h3 style="font-variant:small-caps">'+ic('crown')+' Kingdoms of the Rift</h3>';
+  h+='<p style="font-size:12px">Four crowns share this sea. Grow yours; watch theirs. Power counts land, ports, hulls, men and coin — the arrows remember last season.</p>';
+  const prevSnap=(G.powerHist||[]).slice(-1)[0];
   Object.keys(G.empires).filter(id=>id!=='natives').forEach(id=>{
     const ge=G.empires[id]; if(!ge) return;
     const e2={id, name:ge.name, color:ge.color, dark:ge.dark, capital:ge.capitalName};
     const regs=G.regions.filter(r=>r.owner===e2.id);
     const cap=G.regions.find(r=>r.name===e2.capital);
     const rel=e2.id==='player'? null : me.relations[e2.id];
-    const standing=e2.id==='player'? '👑 Your Crown' : (rel.war? '⚔ At war with you' : rel.ally? '🤝 Your ally' : 'At peace');
+    const standing=e2.id==='player'? 'Your Crown' : (rel.war? 'At war with you' : rel.ally? 'Your ally' : 'At peace');
     const arms=(G.armies||[]).filter(a=>a.owner===e2.id).reduce((s,a)=>s+a.men,0);
+    const power=crownPower(e2.id);
+    const pv=prevSnap&&prevSnap[e2.id];
+    const pArrow= pv? (power-pv.power>=3? ' <span class="trend-up">▲ rising</span>' : pv.power-power>=3? ' <span class="trend-dn">▼ waning</span>' : ' <span class="trend-fl">— steady</span>') : '';
+    const gArrow= pv? (ge.gold-pv.gold>25? ' <span class="trend-up">▲</span>' : pv.gold-ge.gold>25? ' <span class="trend-dn">▼</span>' : '') : '';
     h+='<div class="dip-row"><span class="who" style="color:'+e2.color+'">◆ '+e2.name+'</span>'+
-      '<span class="rel">'+standing+' · 🏰 '+(cap? cap.name:'capital lost')+' · 🗺 '+regs.length+' regions · ⚓ '+regs.filter(r=>r.isPort).length+' ports'+
-      ' · ⚔ '+fmt(totalMen(e2.id)+arms)+' men ('+fmt(arms)+' in the field) · ⛵ '+totalShips(e2.id)+' ships'+
-      (emp(e2.id).tradeStreak>=3? ' · ⛵ leads trade ('+emp(e2.id).tradeStreak+'/5)':'')+
-      (emp(e2.id).debt>0? ' · 🏦 owes '+fmt(emp(e2.id).debt)+'g':'')+'</span></div>';
+      '<span class="rel">'+standing+
+      ' <span class="kv">'+ic('castle')+(cap? cap.name:'capital lost')+'</span>'+
+      ' <span class="kv">'+ic('map')+regs.length+' regions</span>'+
+      ' <span class="kv">'+ic('anchor')+regs.filter(r=>r.isPort).length+' ports</span>'+
+      ' <span class="kv">'+ic('swords')+fmt(totalMen(e2.id)+arms)+' men ('+fmt(arms)+' in the field)</span>'+
+      ' <span class="kv">'+ic('ship')+totalShips(e2.id)+' ships</span>'+
+      ' <span class="kv">'+ic('coin')+fmt(ge.gold)+'g'+gArrow+'</span>'+
+      ' · <b>Power '+power+'</b>'+pArrow+
+      (emp(e2.id).tradeStreak>=3? ' · leads trade ('+emp(e2.id).tradeStreak+'/5)':'')+
+      (emp(e2.id).debt>0? ' · owes '+fmt(emp(e2.id).debt)+'g':'')+'</span></div>';
   });
   h+='<div class="rule"></div><h3 style="font-variant:small-caps">War College &amp; Dockyards</h3>';
   h+='<p>Advance your arms. Each tier multiplies battlefield strength.</p>';
@@ -4132,12 +4529,12 @@ $('#btn-realm').onclick=()=>{
   abtn.onclick=()=>{ me.gold-=300; me.armyTech++; toast('Army advances to '+ARMY_TECH[me.armyTech]); save(); $('#btn-realm').click(); };
   row1.appendChild(abtn); b.appendChild(row1);
   const row2=document.createElement('div'); row2.className='dip-row';
-  row2.innerHTML='<span class="who">⛵ Naval tech</span><span class="rel">'+(me.shipTech<3? 'Next: '+SHIP_TECH[me.shipTech+1]+' · 320g':'Ships of the Line — unmatched')+'</span>';
+  row2.innerHTML='<span class="who">'+ic('ship')+'Naval tech</span><span class="rel">'+(me.shipTech<3? 'Next: '+SHIP_TECH[me.shipTech+1]+' · 320g':'Ships of the Line — unmatched')+'</span>';
   const sbtn=document.createElement('button'); sbtn.className='mini-btn'; sbtn.textContent='Research'; sbtn.disabled=me.shipTech>=3||me.gold<320;
   sbtn.onclick=()=>{ me.gold-=320; me.shipTech++; toast('Navy advances to '+SHIP_TECH[me.shipTech]); save(); $('#btn-realm').click(); };
   row2.appendChild(sbtn); b.appendChild(row2);
   const row3=document.createElement('div'); row3.className='dip-row';
-  row3.innerHTML='<span class="who">🏦 Crown bankers</span><span class="rel">Borrow 500g now; 6% interest each season. Bankers trust a crown with ports.</span>';
+  row3.innerHTML='<span class="who">'+ic('scales')+'Crown bankers</span><span class="rel">Borrow 500g now; 6% interest each season. Bankers trust a crown with ports.</span>';
   const bbtn=document.createElement('button'); bbtn.className='mini-btn'; bbtn.textContent='Borrow 500g';
   bbtn.onclick=()=>{ me.gold+=500; me.debt+=500; toast('500g borrowed. The bankers bow and smile.'); refreshHUD(); save(); advisorTry('debt'); $('#btn-realm').click(); };
   row3.appendChild(bbtn); b.appendChild(row3);
@@ -4171,17 +4568,17 @@ function updateHint(){
   if(coachStep===0){
     const cap=G.regions.find(r=>r.name===(emp('player').capitalName||'Lisbon'));
     window.__coachRegion=cap?cap.id:null;
-    h.innerHTML='👑 Tap your capital — <b>'+(cap?cap.name:'Lisbon')+'</b> — to muster your first regiments.';
+    h.innerHTML=iconLead('👑 Tap your capital — <b>'+(cap?cap.name:'Lisbon')+'</b> — to muster your first regiments.');
     if(h.dataset.step!=='0'){ h.dataset.step='0'; h._acc=0; }
     h.classList.add('show');
   } else if(coachStep===1){
     window.__coachRegion=null;
-    h.innerHTML='⚔ Regiments ready. Open Lisbon, <b>Form a Field Army</b>, then <b>March</b> it into a neighbouring free town — press <b>▶</b> and watch it march.';
+    h.innerHTML=iconLead('⚔ Regiments ready. Open your capital, <b>Form a Field Army</b>, then <b>March</b> it into a neighbouring free town — press Play and watch it march.');
     if(h.dataset.step!=='1'){ h.dataset.step='1'; h._acc=0; }
     h.classList.add('show');
   } else if(coachStep===2){
     window.__coachRegion=null;
-    h.innerHTML='📰 The Gazette tells the realm\'s story each season. Your next move is always the glowing choice.';
+    h.innerHTML=iconLead('📜 The Gazette tells the realm\'s story each season. Your next move is always the glowing choice.');
     if(h.dataset.step!=='2'){ h.dataset.step='2'; h._acc=0; }
     h.classList.add('show');
   } else { window.__coachRegion=null; h.classList.remove('show'); delete h.dataset.step; }
@@ -4197,7 +4594,7 @@ function showBattle(atkName,atkMen,defName,defMen,res,won,note){
   $('#battle-atk-loss').textContent='−'+fmt(res.aLoss)+' fallen';
   $('#battle-def-name').textContent=defName+' garrison'; $('#battle-def').textContent=fmt(defMen)+' men';
   $('#battle-def-loss').textContent='−'+fmt(res.dLoss)+' fallen';
-  $('#battle-outcome').innerHTML= won? '🏴 <span style="color:#8fd18b">Victory — the town is yours</span>' : '🛡 <span style="color:#e08a7d">Repulsed — the defence holds</span>';
+  $('#battle-outcome').innerHTML= won? ic('banner')+' <span style="color:#8fd18b">Victory — the town is yours</span>' : ic('shield')+' <span style="color:#e08a7d">Repulsed — the defence holds</span>';
   $('#battle-note').textContent=note||'';
   const h=$('#hint'); if(h) h.classList.remove('show');
   openVeil('battle');
@@ -4223,7 +4620,7 @@ function startNew(pick){
 $('#btn-new').onclick=()=>{ $('#start').classList.remove('open'); startNew('player'); };
 $('#btn-new-aurelia').onclick=()=>{ $('#start').classList.remove('open'); startNew('aurelia'); };
 $('#btn-new-meridian').onclick=()=>{ $('#start').classList.remove('open'); startNew('meridian'); };
-function syncWindsBtn(){ const b=document.getElementById('menu-winds'); if(b) b.textContent='🌬 Wind Lanes: '+((G&&G.showWinds)?'On':'Off'); }
+function syncWindsBtn(){ const b=document.getElementById('menu-winds'); if(b) b.innerHTML=ic('wind')+' Wind Lanes: '+((G&&G.showWinds)?'On':'Off'); }
 $('#btn-orders').onclick=()=>{ const q=document.getElementById('ord-quill'); if(q) q.textContent=G? (G.quill||0):2; openVeil('orders'); };
 $('#ord-close').onclick=()=>$('#orders').classList.remove('open');
 $('#menu-orders').onclick=()=>{ $('#menu').classList.remove('open'); $('#btn-orders').click(); };
@@ -5832,13 +6229,24 @@ try{
       const fm=new THREE.SpriteMaterial({map:smokeTex, color:0xffa63d, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending});
       const fl=new THREE.Sprite(fm); fl.userData.flash=true; fl.scale.setScalar(9); fl.position.y=6;
       clashGroup.add(fl); clashParts.push(fl);
+      /* a broadside is a LINE of guns, not one firefly: two more muzzles stutter down the line,
+         each on its own uneven clock — the senses should stumble over the roar, not admire it. */
+      if(fx.type==='sea'){
+        [[-4.2,0.052],[-1.8,0.061],[1.6,0.047],[4.4,0.057]].forEach(([ox,per])=>{
+          const m2=new THREE.SpriteMaterial({map:smokeTex, color:0xffb356, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending});
+          const s2=new THREE.Sprite(m2); s2.userData.flash=true; s2.userData.period=per; s2.position.set(ox, 5.6, (Math.random()-0.5)*1.4);
+          s2.scale.setScalar(6); clashGroup.add(s2); clashParts.push(s2);
+          window.__clashShakeAt=performance.now();
+        });
+      }
       clashGroup.position.set(SX(fx.x), BASE_Y, SZ(fx.y));
       scene.add(clashGroup);
     }
     const p=fx.prog||0;
     clashGroup.children.forEach(c=>{ if(c.geometry && c.geometry.type==='BoxGeometry') c.rotation.y=t*1.6; });
     clashParts.forEach(s=>{
-      if(s.userData.flash){ const burst=(p%0.22)<0.05; s.material.opacity=burst? 0.85 : 0; if(burst) s.scale.setScalar(10+Math.random()*4); return; }
+      if(s.userData.flash){ const per=s.userData.period||0.22; const burst=((p+s.userData.period*3)%per)<0.05;
+        s.material.opacity=burst? 0.85 : 0; if(burst) s.scale.setScalar(8+Math.random()*5); return; }
       const ph=((t*0.4)+s.userData.ph)%1;
       s.position.set(s.userData.ox*(0.5+ph), 3+ph*7, s.userData.oz*(0.5+ph));
       const sc=4+ph*9; s.scale.set(sc, sc, 1);
@@ -5953,8 +6361,13 @@ try{
   /* ---------- picking (screen-space, clarity-first) ---------- */
   function pick(cx, cy){
     /* fat-finger picking: the tap resolves to the NEAREST town (or unit chip) inside a generous
-       screen-space radius — a thumb is not a stylus, and a town 20px away must still answer.  */
-    const RP = innerWidth<620? 88 : 116;
+       screen-space radius — a thumb is not a stylus, and a town 20px away must still answer.
+       World zoom spreads the chart so thin that even a big radius starves; at far range we
+       widen further and snap to the single nearest town (the chart answers like a map, not a
+       dartboard) — a total miss can only happen with nothing at all in sight.              */
+    const far = dist>900;
+    const RP = (innerWidth<620? 128 : 132) * (far? 1.35 : 1);
+    const NEAREST_MAX = far? 260 : 170; // past this, no town is generous enough to claim the tap
     let best=null, bd=1e9;
     const tryHit=(type, id, x, y, z, rad, bonus)=>{
       const p=project(x, y, z); if(!p) return;
@@ -5965,6 +6378,13 @@ try{
     (G.armies||[]).forEach(a=>{ const v=armyVis.get(a.id); if(v) tryHit('army', a.id, v.group.position.x, BASE_Y+4, v.group.position.z, RP*0.8, 8); });
     G.regions.forEach(r=> tryHit('region', r.id, SX(r.x), BASE_Y+3, SZ(r.y), RP, 0));
     if(best) return best; // a town or unit nearby always outranks open water
+    /* nearest-town snap: at world range the chart is a map, not a dartboard — the landward
+       soul of the tap answers; only a tap in true open water falls through to the seas.   */
+    { let nb=null, nd=1e9;
+      G.regions.forEach(r=>{ const p=project(SX(r.x), BASE_Y+3, SZ(r.y)); if(!p) return;
+        const d=Math.hypot(p[0]-cx, p[1]-cy); if(d<nd){ nd=d; nb=r; } });
+      if(nb && nd<NEAREST_MAX) return {type:'region', id:nb.id};
+    }
     G.seas.forEach(z=> tryHit('sea', z.id, SX(z.x), 2, SZ(z.y), Math.max(105, RP), 0));
     return best;
   }
@@ -6094,6 +6514,20 @@ try{
     if(diffT>0.35){ diffT=0; refreshSettlements(); refreshLanes(); refreshFleets(); }
     stepCam(performance.now());
     updateCamera(); updateChips();
+    // the deck shudders when the guns speak: a broadside view gets a breath of recoil
+    if(window.__clashFx && window.__clashFx.type==='sea' && clashGroup){
+      const fx=window.__clashFx, p=fx.prog||0;
+      if(p>0.02 && p<0.97){
+        const mag=Math.min(dist*0.004, 2.2)*(1-Math.abs(p-0.45)*1.6);
+        camera.position.x += Math.sin(t*47)*mag; camera.position.y += Math.sin(t*39+1.3)*mag*0.55;
+        camera.lookAt(target.x, 2.5, target.z);
+      }
+    }
+    // marching banners keep the breeze: a small constant sway, more when the hosts collide
+    (G.armies||[]).forEach(a=>{ const v=armyVis.get(a.id); if(!v) return;
+      const clashHere=window.__clashFx && (window.__clashFx.atkArmyId===a.id || window.__clashFx.defArmyId===a.id);
+      v.group.rotation.x = Math.sin(t*1.9 + a.id*1.7) * (a.at&&!clashHere? 0.028 : clashHere? 0 : 0.012);
+    });
     // seasons wash over the land (one tint uniform, lerped so winters creep in)
     { const st=SEASON_TINTS[G.seasonIdx&3]||SEASON_TINTS[0]; _seasonTint.setRGB(st[0],st[1],st[2]);
       if(window.__landMat) window.__landMat.userData.uSeason.value.lerp(_seasonTint, 0.03); }
