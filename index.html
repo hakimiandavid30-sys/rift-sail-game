@@ -485,7 +485,17 @@
     <h2 id="end-title">Victory</h2>
     <div class="rule"></div>
     <p id="end-text"></p>
+    <div id="end-chronicle"></div>
     <button class="big-btn" id="end-new">New Campaign</button>
+    <button class="big-btn secondary" id="end-chronicle-btn">📜 Read the Chronicle</button>
+  </div></div>
+
+  <!-- WAVE 24: the Chronicle of the Reign — the scored front page, one column, keepsake-plain -->
+  <div class="veil" id="chronicle"><div class="card">
+    <h2>📜 The Chronicle of the Reign</h2>
+    <div class="rule"></div>
+    <div id="chron-body"></div>
+    <button class="big-btn secondary" id="chron-close">Close</button>
   </div></div>
 </div>
 <script>
@@ -1001,6 +1011,7 @@ function freshState(){
     tradeLeaderSeasons:0, over:false, startedAt:Date.now(), lastSeenAt:Date.now(),
     // the FEEL wave: formal sieges, the captains' log, advisor voices, first-encounter ceremonies
     sieges:[], siegeDone:0, dispatches:[], flags:{},
+    reign:blankReign(), chronicle:null,
     adv:{seen:{}, lastTurn:-99}, ceremonies:{},
     // the CLEAN CROWN: power ledger, border-watch memory, and the shore-book of first flags
     powerHist:[], borderWarn:{}, shoreFirst:{A:null,B:null,F:null},
@@ -1352,6 +1363,113 @@ function ensureWave15Meta(s){
   if(s.seasonNotes!==null&&(typeof s.seasonNotes!=='object'||Array.isArray(s.seasonNotes))) s.seasonNotes=blankSeasonNotes();
 }
 
+/* ================= WAVE 24: THE REIGN'S BOOK =================
+   The Chronicle reads a reign in eleven columns, and every column recomputes from
+   the world's own truth at the moment it is printed — never from a story the save
+   once told itself. The book the reign keeps (G.reign) is five running columns
+   written where the events already happen: wars opened, hull-days lost to the
+   sea's hunger, the bankers' deepest reach, seasons the paper paid, and the
+   crises the Crown answered. What the chart can recount, the chart recounts. */
+function blankReign(){ return { worldDays:{}, peakGold:600, warsOpened:0, seaLossesEst:0, seaLossSeasons:0, debtPeak:0, debtSeasons:0, companyRents:0, crisesBeat:0, prospPeak:50, endKind:null }; }
+function ensureReignMeta(s){
+  if(!s) return;
+  if(!s.reign || typeof s.reign!=='object' || Array.isArray(s.reign)) s.reign=blankReign();
+  const b=blankReign(); Object.keys(b).forEach(k=>{ if(s.reign[k]===undefined) s.reign[k]=b[k]; });
+  if(!s.reign.worldDays || typeof s.reign.worldDays!=='object') s.reign.worldDays={};
+  if(s.chronicle===undefined) s.chronicle=null;
+}
+function reignAxes(cid){
+  const regs=G.regions.filter(r=>r.owner===cid);
+  const named={};
+  regs.forEach(r=>{ const d=(G.reign && G.reign.worldDays && G.reign.worldDays[r.name])||0; if(d>0) named[r.name]={r:r, d:d}; });
+  const top=Object.keys(named).map(k=>named[k]).sort((a,b)=>b.d-a.d).slice(0,4);
+  const hs=housesOf(cid), loy={}, rose={name:null, d:-1e9};
+  hs.forEach(h=>{ loy[h.name]=(h.loyalty!=null? h.loyalty : (h.base||50));
+    const dsum=(h.ledger||[]).reduce((s,e)=>s+(e.d||0),0);
+    if(h.name && dsum>rose.d) { rose.name=h.name; rose.d=dsum; } });
+  const prosp=top.length? Math.max.apply(null, regs.map(r=>(r.prosp==null?50:r.prosp))) : 50;
+  const me2=emp(cid)||{};
+  return { regions:regs.length, ports:regs.filter(r=>r.isPort).length, top:top,
+    peakGold:Math.max((G.reign||{}).peakGold||0, me2.gold||0), finalGold:me2.gold||0,
+    warsOpened:(G.reign||{}).warsOpened||0,
+    siegesDone:G.siegeDone||0,
+    houses:hs.map(h=>({name:h.name, lord:h.lord, loyalty:loy[h.name], fiefs:(h.fiefs||[]).length})),
+    rose:(rose.name? rose : {name:null, d:0}),
+    prospHigh:Math.max((G.reign||{}).prospPeak||50, prosp),
+    companyRents:(G.reign||{}).companyRents||0,
+    debtPeak:(G.reign||{}).debtPeak||0, debtSeasons:(G.reign||{}).debtSeasons||0,
+    crisesBeat:(G.reign||{}).crisesBeat||0,
+    years:Math.ceil(Math.max(1,(G.day||0)+1)/360) };
+}
+function chronicleVerdict(ax, kind){
+  const LBL={won:'in victory', lost:'in exile', abdicated:'laid down', standing:'still standing'};
+  let pts=0; const why=[];
+  const say=(ok,txt)=>{ if(ok){ pts++; why.push(txt); } };
+  say(ax.regions>=WIN_REGIONS, 'an empire of '+WIN_REGIONS+' regions flies one colour');
+  say(ax.top.length && ax.top[0] && ax.top[0].d>=720, (ax.top[0].r.name)+' kept faith the longest — two years and more under one banner');
+  say(ax.peakGold>=1500, 'the treasury once counted '+fmt(ax.peakGold)+'g');
+  say(ax.warsOpened>=1 && ax.siegesDone>=1, ax.siegesDone+' sieges were seen through to their end');
+  say(ax.houses.length && Math.min.apply(null, ax.houses.map(h=>h.loyalty))>=45, 'no house ends the reign in scorn');
+  say(ax.rose.name && ax.rose.d>0, ax.rose.name+' rose furthest in the Crown’s favour');
+  say(ax.prospHigh>=72, 'a town of this reign knew true flourishing');
+  say(ax.companyRents>=300, 'the chartered paper rendered '+fmt(ax.companyRents)+'g across the reign');
+  say(ax.debtPeak<400, 'the bankers never truly owned the Crown');
+  say(ax.crisesBeat>=2, 'the reckonings of a long reign were answered, season upon season');
+  let v;
+  if(kind==='lost'){ v = pts>=6? 'A Reign Cut Short' : 'A Dark Reign'; }
+  else if(kind==='abdicated'){ v = pts>=5? 'A Strong Reign, Laid Down' : 'A Troubled Reign, Laid Down'; }
+  else if(kind==='standing'){ v = pts>=8? 'A Golden Reign in the Making' : pts>=6? 'A Strong Reign in the Making' : pts>=4? 'A Troubled Reign in the Making' : 'A Dark Turn in the Making'; }
+  else v = pts>=8? 'A Golden Reign' : pts>=6? 'A Strong Reign' : pts>=4? 'A Troubled Reign' : 'A Dark Reign';
+  return { verdict:v, pts:pts, why:why, kind:kind, years:ax.years };
+}
+function buildChronicle(kind){
+  ensureReignMeta(G);
+  const ax=reignAxes('player'), v=chronicleVerdict(ax, kind), L=[];
+  L.push('<b>'+v.verdict+'</b> — '+v.pts+' of ten true lines'+(kind==='lost'? ' · the reign ended in exile' : kind==='abdicated'? ' · laid down by the Crown’s own hand' : kind==='standing'? ' · the reign still writes itself, and the last page is not yet ink' : '')+'. The lines it wrote:');
+  if(v.why.length) L.push(v.why.map(w=>'· '+w).join('<br>')); else L.push('· a short reign, and the page mostly empty — but the ink is honest.');
+  L.push('🏰 <b>Lands of the Crown:</b> '+ax.regions+' regions, '+ax.ports+' ports.'+(ax.top.length? ' Held longest: '+ax.top.map(t=>t.r.name+' ('+fmt(t.d)+' days)').join(', ')+'.' : ''));
+  L.push('🪙 <b>The Treasury:</b> peaked at '+fmt(ax.peakGold)+'g; the reign ends holding '+fmt(ax.finalGold)+'g.');
+  L.push('⚔ <b>Wars & Sieges:</b> '+ax.warsOpened+' wars opened by the Crown’s word; '+ax.siegesDone+' sieges seen through to their end.');
+  if(ax.houses.length) L.push('⚜ <b>The Great Houses:</b> '+ax.houses.map(h=>h.name+' ('+h.lord+', loyalty '+h.loyalty+', '+h.fiefs+' fiefs)').join(' · ')+(ax.rose.name? '. Rose furthest in favour: <b>'+ax.rose.name+'</b> (+'+ax.rose.d+').' : '.'));
+  L.push('🌾 <b>The Towns:</b> prosperity touched '+Math.round(ax.prospHigh)+' at its high-water ('+prospWord(ax.prospHigh)+').');
+  L.push('🧾 <b>The Chartered Paper:</b> rendered '+fmt(ax.companyRents)+'g across the reign.');
+  L.push('🏦 <b>The Bankers:</b> deepest reach '+ax.debtPeak+'% pressure'+(ax.debtSeasons? ', across '+ax.debtSeasons+' months in their books' : ', and never once into their books')+'.');
+  L.push('📜 <b>Reckonings Answered:</b> '+ax.crisesBeat+' late-reign bills faced and answered.');
+  L.push('🕯 <i>What makes a Golden reign:</i> at least eight of the ten true lines — an empire of '+WIN_REGIONS+' regions; a town kept two full years under one banner; a treasury once counting 1,500g; wars opened and sieges seen through; no house ending in scorn; a house risen in favour; a town flourishing; the chartered paper’s rents; the bankers kept from the throne; and the reckonings answered.');
+  G.chronicle={verdict:v.verdict, kind:kind, lines:L, why:v.why, pts:v.pts};
+  renderChronicle();
+  return G.chronicle;
+}
+function renderChronicle(){
+  const box=(typeof document!=='undefined' && document.querySelector)? document.querySelector('#end-chronicle') : null;
+  if(!box) return;
+  const c=G && G.chronicle;
+  box.innerHTML = c? '<div class="rule"></div><h3 style="font-variant:small-caps">📜 The Chronicle of the Reign</h3>'+c.lines.map(l=>'<p style="font-size:13px;margin:6px 0;text-align:left">'+l+'</p>').join('') : '';
+}
+function openChronicle(){
+  const c=G && G.chronicle;
+  if(!c){ toast('No chronicle yet — the reign still writes itself.'); return; }
+  const body=document.querySelector('#chron-body'); if(body) body.innerHTML=c.lines.map(l=>'<p style="font-size:13.5px;line-height:1.5;margin:7px 0;text-align:left">'+l+'</p>').join('');
+  openVeil('chronicle');
+}
+function finishReign(kind){
+  ensureReignMeta(G); if(G.reign) G.reign.endKind=kind;
+  try{ buildChronicle(kind); }catch(e){ if(G) G.chronicle=null; }
+  renderChronicle();
+}
+function abdicateReign(){
+  if(!G || G.over) return;
+  if(!confirm('Lay down the crown? The reign ends here, and its Chronicle is written from its own tallies.')) return;
+  const me=emp('player'); if(me) me.capitalName=me.capitalName; // the seat stands; the hand leaves it
+  G.over=true;
+  const tEl=document.querySelector('#end-title'), xEl=document.querySelector('#end-text');
+  if(tEl) tEl.textContent='The Crown Laid Down';
+  if(xEl) xEl.textContent='You abdicate with your own hand — not conquered, not exiled. The chronicler writes what your years built, no more and no less.';
+  finishReign('abdicated');
+  openVeil('endscreen');
+  save();
+}
+
 // pre-grandeur saves were laid out on the old 2400×1600 chart — stretch them onto the new world
 function migrateSave(s){
   if(!s||!s.regions) return s;
@@ -1440,6 +1558,7 @@ function migrateSave(s){
   ensureCleanCrownMeta(s);
   ensureWave15Meta(s); // WAVE 15: companies + the season-note ride along at wv11 the same way
   ensureCourtMeta(s); // WAVE 22: great houses, decrees & prosperity ride along at wv11 the same way
+  ensureReignMeta(s); // WAVE 24: the reign's book — running columns and the Chronicle they feed
   if(s.advancePaid===undefined) s.advancePaid=0;
   if(s.marchSeen===undefined) s.marchSeen=(s.armies||[]).some(a=>a.owner==='player')?1:0;
   return s;
@@ -2992,7 +3111,7 @@ function anyVeilOpen(){ return !!document.querySelector('.veil.open'); }
    The reckoning rule — a new panel REPLACES whatever is up; it never stacks on top of it.
    (The Crown modal used to pile onto the Realm/Orders sheets until three panels shared the
    screen.) openVeil() is the only door in; plain classList.remove() stays the way out.        */
-const VEIL_IDS=['gazette','realm','crown','menu','orders','howto','battle','start','endscreen'];
+const VEIL_IDS=['gazette','realm','crown','menu','orders','howto','battle','start','endscreen','chronicle'];
 function openVeil(id){ VEIL_IDS.forEach(v=>{ const el=document.getElementById(v); if(el) el.classList.toggle('open', v===id); }); closeSheet(); Sound.open(); }
 function closeVeil(id){ const el=document.getElementById(id); if(el && el.classList.contains('open')) Sound.close(); if(el) el.classList.remove('open'); }
 function closeVeil(id){ const el=document.getElementById(id); if(el) el.classList.remove('open'); }
@@ -3083,7 +3202,12 @@ function aiMonthlyOps(){
         const ports=G.regions.filter(r=>r.isPort && enemies.includes(r.owner));
         if(ports.length){ ports.sort((x,y)=>fleetDistanceTo(f,x.x,x.y)-fleetDistanceTo(f,y.x,y.y)); orderSailPort(f, ports[0]); }
       } else if(rnd()<0.35){
-        const z=seaById[f.zone]; const nz=pick(z.neighbors.map(n=>seaById[n]).filter(Boolean));
+        const z=seaById[f.zone]; let nz=pick(z.neighbors.map(n=>seaById[n]).filter(Boolean));
+        // WAVE 24: the Maelstrom — an AI admiral reasons exactly as the chart prices it:
+        // hulls to spare braves the narrows (one strait, one toll); a thin squadron seeks
+        // deep water instead. Same odds the Crown's forecasts print, no hidden seamanship.
+        const _mz=maelstromZone();
+        if(nz && _mz && nz.id===_mz.id && f.ships<=2){ const _alt=(z.neighbors||[]).map(n=>seaById[n]).filter(x=>x && x.id!==_mz.id); if(_alt.length) nz=pick(_alt); }
         if(nz) orderSailZone(f, nz);
       }
       if(f.stance==='raid' && rnd()<0.3) f.stance='patrol';
@@ -3590,7 +3714,7 @@ function selectSea(z){
   selected={type:'sea',id:z.id};
   $('#sheet-title').textContent='🌊 '+z.name+(z.strait?' — a Strait, the sea’s narrow door':'');
   $('#sheet-sub').textContent='Sea zone · ports: '+(z.ports.map(id=>rById[id].name).join(', ')||'none');
-  $('#sheet-stats').innerHTML=statRow([['⚓ Ports',z.ports.length]]);
+  $('#sheet-stats').innerHTML=statRow([['⚓ Ports',z.ports.length]].concat((maelstromZone()&&z.id===maelstromZone().id)? [['🌀 The Maelstrom','threaded daily by the lanes — ~'+Math.round(maelstromRisk()*100)+' in 100 days takes a hull; blockades bite half again as hard in the narrows']] : []));
   const acts=$('#sheet-acts'); acts.innerHTML='';
   acts.appendChild(actBtn('👁 These Waters','Fleets here: '+(G.fleets.filter(f=>f.zone===z.id).map(f=>f.name+' ('+f.ships+')').join(', ')||'none')+'.',()=>{},'',true));
   const myPortsHere=z.ports.map(id=>rById[id]).filter(p=>p&&p.owner==='player');
@@ -3696,7 +3820,11 @@ function rumorStorm(){
 }
 function tavernRumorDaily(){
   if(!G || G.over || G.day-_rumorDay<3) return; // the mill grinds slow — one tale in three days, never a flood
-  const sources=[rumorFleet, rumorPrice, rumorGovernor, rumorCompany, rumorStorm, rumorHouse];
+  const sources=[rumorFleet, rumorPrice, rumorGovernor, rumorCompany, rumorStorm, rumorHouse, rumorMaelstrom];
+  function rumorMaelstrom(){ const z=maelstromZone(); if(!z) return null; return pick([
+    'the whirlpool in the '+z.name+' took a Ragusan brig in the night — nine days in a hundred, the strait keeps its toll',
+    'pilots of the '+z.name+' will not thread the narrows with a thin squadron; deep water costs days, the Maelstrom costs hulls',
+    'a blockade in the '+z.name+' bites half again as hard, the old hands swear — there is no sea-room to slip a throat']); }
   for(let k=0;k<sources.length;k++){
     let line=null; try{ line=sources[(_rumorIx+k)%sources.length](); }catch(err){ line=null; }
     if(!line) continue;
@@ -4964,7 +5092,17 @@ function seasonPips(){ return ''; } // CLEAN CROWN: the date line carries words 
 window.__wx=function(){ return { hour:G? (G.hour||9):9, night:G? nightFactor():0, storms:(G&&G.storms)||[], winds:!!(G&&G.showWinds), season:G? G.seasonIdx:0};};
 
 /* ---------- storms ---------- */
+const STORM_HULL_CHANCE=0.09; // the daily toll a tempest takes on an unsheltered fleet under way
 function stormAt(x,y){ return (G.storms||[]).find(s=>Math.hypot(s.x-x,s.y-y)<s.r);}
+/* ================= WAVE 24: THE MAELSTROM =================
+   One strait keeps a permanent whirlpool: the throat between the two Mediterraneans,
+   where lanes hurrying west or east must thread the narrows under Sicily. It is not a
+   second storm system — a fleet caught in it pays the tempest's own toll (STORM_HULL_CHANCE,
+   the same roll, the same shelter), priced ahead of time wherever an order is spoken.
+   The throat of a strait is also a tighter leash on its shore-port: a blockade feeding
+   through the narrows bites at 1.5 days for every day on any open roadstead. */
+function maelstromZone(){ return (G && G.seas||[]).find(z=>z.name==='Western Med') || null; }
+function maelstromRisk(){ return STORM_HULL_CHANCE; }
 function stormsDaily(){
 (G.storms||[]).forEach(s=>{
 s.x+=s.vx*46; s.y+=s.vy*46;
@@ -4979,13 +5117,19 @@ const sp=Math.hypot(s.vx,s.vy); if(sp>1.3){ s.vx*=1.3/sp; s.vy*=1.3/sp; } }
 });
 (G.fleets||[]).slice().forEach(f=>{
 if(!f.at||!f.ships) return;
+// WAVE 24: the strait and its whirlpool — under way within sight of the narrows, a fleet
+// pays the tempest's own toll on the tempest's own roll; no second system hides here
+{ const mz=maelstromZone(); if(mz){ const _fp=fPos(f); const _near=Math.hypot(_fp.x-mz.x, _fp.y-mz.y); if(_near<420){ const shel=(G.seaStances||{})[mz.id]==='protect' && f.owner==='player';
+  if(f._maelLog!==G.turn && !shel){ f._maelLog=G.turn; if(f.owner==='player') dispatch(captainName(f),'We threaded the narrows with the whirlpool growling off the Sicily shore — nine days in a hundred, the strait takes a hull for the passage, Majesty. Deep water in season is the only mercy priced.'); }
+  if(!shel && rnd()<maelstromRisk() && f.ships>1){ f.ships--; noteSeasonStorm(f); if(f.owner==='player') pushEvent('🌀 <b>'+f.name+'</b> threads the Maelstrom — the strait claims a hull for the passage.'); }
+} } }
 const s=stormAt(fPos(f).x, fPos(f).y); if(!s) return;
 const sheltered=(G.seaStances||{})[f.zone]==='protect' && f.owner==='player';
 if(f.owner==='player'){ markFlag('storm'); advisorTry('storm');
   if(f._stormLog!==G.turn&&(!sheltered)){ f._stormLog=G.turn; dispatch(captainName(f), pick([
     'We rode out the tempest with two reefs in everything and the pumps manned all night. A storm does not ask permission, Majesty — escorts and sea-room are the only answers.',
     'The sea took our topmast and near took the ship. I have written the carpenter’s name in the log twice: once for the saving of her, once as a warning.'])); } }
-if(!sheltered && rnd()<0.09 && f.ships>1){ f.ships--; noteSeasonStorm(f); if(f.owner==='player') pushEvent('🌩 <b>'+f.name+'</b> rides out a tempest — a hull is lost to the storm.');}
+if(!sheltered && rnd()<STORM_HULL_CHANCE && f.ships>1){ f.ships--; noteSeasonStorm(f); if(f.owner==='player') pushEvent('🌩 <b>'+f.name+'</b> rides out a tempest — a hull is lost to the storm.');}
 if(emp(f.owner).shipTech>=2 && f.owner!=='player' && rnd()<0.3){ /* old salts sheer away */}
 });
 }
@@ -4996,7 +5140,9 @@ function blockadeDaily(){
 G.regions.forEach(r=>{
 if(!r.isPort) return;
 if(isBlockaded(r)){
-r.blockadeDays=(r.blockadeDays||0)+1;
+// WAVE 24: a port on the Maelstrom strait is strangled through a throat — the pressure bites half again as fast
+const _mz=maelstromZone();
+r.blockadeDays=(r.blockadeDays||0)+((_mz && r.seaZone===_mz.id)? 1.5 : 1);
 if(r.blockadeDays===10&&r.owner==='player') pushEvent('⛓ The blockade of <b>'+r.name+'</b> tightens — prices climb, bellies thin.');
 if(r.blockadeDays===30&&r.owner==='player') pushEvent('⛓ <b>'+r.name+'</b> is strangled — the town starves behind enemy sails.');
 if(r.blockadeDays===60&&r.owner==='player'){ pushEvent('🆘 <b>'+r.name+'</b> is in CRISIS — the granaries are ash and the watch deserts.'); simPauseEvent();}
@@ -5238,7 +5384,7 @@ if(G.landGrab.length>=8 &&!G.league){
 const foes=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!allied(id,'player')&&id!==r.owner);
 if(!foes.length) return;
 G.league={since:G.day, members:foes};
-foes.forEach(id=>{ emp('player').relations[id].war=true; emp(id).relations['player'].war=true; ledger(id,'grievance',25,'the League answers your land-hunger');});
+foes.forEach(id=>{ emp('player').relations[id].war=true; emp(id).relations['player'].war=true; ledger(id,'grievance',25,'the League answers your land-hunger'); if(G.reign) G.reign.warsOpened=(G.reign.warsOpened||0)+foes.length; });
 G.crownQueue.push({icon:'⚖', urgent:true, title:'THE LEAGUE OF CROWNS',
 body:'Eight flags torn down in a year. '+foes.map(id=>emp(id).name).join(', ')+' sign a League against you — war, together, until you disgorge. Allies of yours stand apart, watching.',
 choices:[{label:'Then let them come',fn:null}]});
@@ -5312,7 +5458,7 @@ mk('💰 Demand 150g',()=>diploDemand(id),true,'','Refusal starts a 21-day ultim
 mk('🚫 Embargo',()=>diploEmbargo(id),true,'','Shut their trade; salt the wound');
 if(!rel.ally) mk('🤝 Ally',()=>{ if(rel.score>=20||rel.trust>=25){ rel.ally=true; emp(id).relations['player'].ally=true; ledger(id,'trust',6,'the alliance signed'); toast(id==='natives'?'The Shore Councils nod as one.': emp(id).name+' signs the alliance!');} else { rel.score+=8; ledger(id,'trust',3,'courtship at their court'); toast(emp(id).name+' warms to you (relations '+Math.round(rel.score)+'/20, trust '+Math.round(rel.trust)+'/25 to ally).');} save(); $('#btn-realm').click();});
 if(rel.ally) mk('End Alliance',()=>{ rel.ally=false; emp(id).relations['player'].ally=false; rel.score-=15; ledger(id,'trust',-8,'the alliance cast off'); toast('Alliance with '+emp(id).name+' ended.'); save(); $('#btn-realm').click();});
-mk('⚔ Declare War',()=>{ rel.war=true; rel.ally=false; emp(id).relations['player'].war=true; rel.score-=40; ledger(id,'grievance',20,'your declaration of war'); gazette('👑 You have declared war on the '+emp(id).name+'.'); toast('War declared on '+emp(id).name); save(); $('#btn-realm').click();},true);
+mk('⚔ Declare War',()=>{ rel.war=true; rel.ally=false; emp(id).relations['player'].war=true; rel.score-=40; ledger(id,'grievance',20,'your declaration of war'); if(G.reign) G.reign.warsOpened=(G.reign.warsOpened||0)+1; gazette('👑 You have declared war on the '+emp(id).name+'.'); toast('War declared on '+emp(id).name); save(); $('#btn-realm').click();},true);
 } else {
 mk('🕊 Peace for '+fmt(peacePrice(id))+'g',()=>diploPeace(id,'gold'),'', me.gold<peacePrice(id),'Your war runs '+(rel.warScore>0?'well':'poorly')+': '+(acceptChance(id,45,'peace')+(rel.warScore||0)*6)+'% they take coin');
 const cede=myRegions().filter(r=>r.neighbors.some(n=>rById[n]&&rById[n].owner===id)).sort((a,b)=>a.troops-b.troops)[0];
@@ -5574,7 +5720,7 @@ refreshHUD(); save();
    the rare crown with no enemies left to bill it — its own court demanding to be seen.
    Every road is priced in print before the choice; a prepared realm pays in coin, an
    unprepared one pays in notes and goodwill. Never a hard fail. */
-const CRISIS_TITLES=['Remonstrance','Ultimatum','Demands a Progress'];
+const CRISIS_TITLES=['Remonstrance','Ultimatum','Demands a Progress','Quarantine','Impressment'];
 function crisisPending(){ return (G.crownQueue||[]).some(c=>CRISIS_TITLES.some(t=>(c.title||'').includes(t))); }
 function lateCrisis(){
 const co=G.coldopen||(G.coldopen={stage:0,done:{}});
@@ -5592,10 +5738,12 @@ if(crisisPending()) return;
 const governed=myRegions().filter(r=>r.gov);
 const rivals=['aurelia','meridian','sable'].filter(id=>G.empires[id]&&!allied(id,'player'));
 const fits=[]; if(governed.length>=2) fits.push('gov'); if(rivals.length) fits.push('emb'); fits.push('court');
-const face=fits.find(f=>f!==co.crisisFace)||fits[0];
+if(myPorts().length>=3) fits.push('quar'); // WAVE 24: the Yellow Jack needs three open harbours to darken
+if(totalShips('player')>=3) fits.push('imp'); // WAVE 24: an impressment quarrel needs a fleet afloat to do the pressing
+const others=fits.filter(f=>f!==co.crisisFace); const face=others.length? others[Math.floor(rnd()*others.length)] : fits[0]; // WAVE 24: a drawn face, never the one just answered
 co.done.crisis=1; co.crisisDay=G.day; co.crisisFace=face; co.crisisCount=(co.crisisCount||0)+1;
 noteSeasonBeat('the late reckoning came due, and the Crown’s answer is still talked of'); // WAVE 15
-if(face==='gov') crisisGovernors(governed); else if(face==='emb') crisisEmbargo(rivals); else crisisCourt();
+if(face==='gov') crisisGovernors(governed); else if(face==='emb') crisisEmbargo(rivals); else if(face==='quar') crisisQuarantine(); else if(face==='imp') crisisImpressment(); else crisisCourt();
 }
 /* rival courts write their own news (WAVE 11): sieges opened beyond your writ and the
    slow race of borders, chronicled at the season seam from the realm's real counts —
@@ -6008,6 +6156,53 @@ gazette('👑 <b>The chamberlains petition.</b> The Court Demands a Progress —
 pushEvent('👑 <b>The Court Demands a Progress</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
 refreshHUD(); save();
 }
+/* WAVE 24: two more faces for the late reckoning — the Yellow Jack and the press-gang.
+   Both are priced in exact numbers before the choice and paid through the real ledgers:
+   prosperity and population in the towns, gold from the treasury, ink in the rivals' books. */
+function crisisQuarantine(){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}}); co.done.crisis=1;
+const ports=myPorts().slice().sort((a,b)=>b.pop-a.pop).slice(0,2);
+const fee=40*ports.length;
+G.crownQueue.push({icon:'🩺', urgent:true, title:'The Board of Health Demands a Quarantine',
+body:'Fever has come ashore at <b>'+ports.map(p=>p.name).join(' and ')+'</b> — two ships down at the moorings, the lazaretto bell ringing by the hour. The Board of Health presents its bill and will not be put off: the Crown pays <b>'+fmt(fee)+'g</b> to cordon the sick harbours properly (inspectors, whitewash and a chain across the quay), or the fever writes the season’s story itself. Left to burn, the Board reckons, the towns come out of it thinner and sullen. <b>Your treasury:</b> '+fmt(emp('player').gold)+'g.',
+choices:[
+{label:'🩺 Pay the cordon ('+fmt(fee)+'g)', fn:()=>{ const me=emp('player');
+  if(me.gold>=fee){ me.gold-=fee; } else { me.debt+=(fee-me.gold)+20; me.gold=0; }
+  ports.forEach(p=>{ p.pop=Math.round(p.pop*1.01); });
+  gazette('🩺 <b>The chain goes across the sick harbours.</b> Inspectors at '+ports.map(p=>p.name).join(' and ')+', whitewash on the warehouse doors, and the fever smothered for '+fmt(fee)+'g — the Board of Health reports the towns quiet, and the towns report for a change that the Crown was seen to act.');
+  toast('🩺 Quarantine held — the fever is smothered.'); if(me.debt>0) advisorTry('debt'); save(); }},
+{label:'⚓ Let it burn out', fn:()=>{ ports.forEach(p=>{ p.pop=Math.max(600, Math.round(p.pop*0.93)); });
+  gazette('🩺 <b>The fever writes the season.</b> No cordon at '+ports.map(p=>p.name).join(' or ')+' — the lanes learn to give the harbours a wide berth, and the harbours learn what that lesson costs. The towns come out of it seven souls lighter in every hundred, and colder toward a Crown that counted coin while the bell rang.');
+  toast('😷 The fever burns out. The towns remember.'); save(); }}]});
+gazette('🩺 <b>The lazaretto bell rings.</b> The Board of Health demands a Quarantine — the answer is the Crown’s; so is the bill.');
+pushEvent('🩺 <b>The Board of Health demands a Quarantine</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
+refreshHUD(); save();
+}
+function crisisImpressment(){
+const co=G.coldopen||(G.coldopen={stage:0,done:{}}); co.done.crisis=1;
+const sq=(G.fleets||[]).filter(f=>f.owner==='player'&&f.ships>0).sort((a,b)=>b.ships-a.ships)[0];
+const home=sq? rById[((G.regions||[]).find(r=>r.isPort&&r.seaZone===sq.zone)||{id:-1}).id] : null;
+const taken=240;
+G.crownQueue.push({icon:'⚓', urgent:true, title:'The Impressment at '+(home? home.name:'the Roadstead'),
+body:'One of your gangs has been thorough: on a dark tide the watch hauled <b>'+fmt(taken)+'</b> prime seamen off a '+(emp('meridian').name)+' factor’s brig calling herself neutral — wives already at the Admiralty door, the factor’s flag flying over the whole row, and the '+(emp('meridian').name)+' resident demanding satisfaction before the lanes carry the tale further. Return the men with <b>90g</b> of damages, keep them for the fleet’s muster-rolls, or lay the blame on the shore and let the port bear the talk.',
+choices:[
+{label:'💰 Return the men (90g damages)', fn:()=>{ const me=emp('player');
+  if(me.gold>=90){ me.gold-=90; } else { me.debt+=(90-me.gold)+15; me.gold=0; }
+  ledger('meridian','trust',6,'the pressed seamen returned with damages, before witnesses'); ledger('meridian','grievance',-4,'the impressment was answered in coin');
+  gazette('⚓ <b>The pressed men walk back down the quay</b> with the damages counted out before the factor’s whole battery — money well spent, the Admiralty admits through its teeth. The '+emp('meridian').name+' resident bows lower than protocol requires, and the tale that sails the lanes says the Crown of '+(emp('player').name)+' keeps its accounts straight.');
+  toast('💰 The men return; the factor is satisfied.'); if(me.debt>0) advisorTry('debt'); save(); }},
+{label:'🛡 Keep them for the fleet', fn:()=>{ const cap=G.regions.find(r=>r.name===emp('player').capitalName); if(cap) cap.troops+=taken;
+  ledger('meridian','grievance',14,'your press-gang stripped their brig of '+taken+' seamen'); ledger('meridian','trust',-6,'the impressment was kept, not answered');
+  gazette('⚓ <b>The '+fmt(taken)+' stand in your muster-rolls tonight.</b> Able seamen for the fleet, the Admiralty reports — and the '+emp('meridian').name+' resident sails home with his grievance entered in the book where such grievances wait for wars. The lanes carry that tale too.');
+  toast('🛡 '+fmt(taken)+' men mustered. The factor sails home angry.'); save(); }},
+{label:'🪝 Blame the port watch', fn:()=>{ if(home){ home.troops=Math.max(300, home.troops-120); home.pop=Math.max(600, Math.round(home.pop*0.985)); }
+  ledger('meridian','grievance',3,'the Crown blamed the shore for its press-gang');
+  gazette('⚓ <b>The Crown’s answer blames the shore:</b> the watch at '+(home? home.name:'the roadstead')+' is stood down, a hundred and twenty muskets lighter, and the town learns that when the Admiralty’s gang oversteps, the port pays for the overstepping. The factor is half-satisfied; the town is not at all.');
+  toast('🪝 The port bears the blame — and remembers.'); save(); }}]});
+gazette('⚓ <b>The press-gang has gone too far.</b> An Impressment at '+(home? home.name:'the roadstead')+' — wives at the Admiralty door, a foreign resident demanding satisfaction. The answer is the Crown’s.');
+pushEvent('⚓ <b>The Impressment</b> — the Crown\'s word is wanted. See <b>⚑ Crown</b> above.');
+refreshHUD(); save();
+}
 /* ================= WAVE 15: THE REALM REMEMBERS =================
    The season keeps five plain figures (hardest fighting by land, hulls lost by sea, a town
    that changed hands, an authored beat, the storm's toll) and the Gazette opens on the
@@ -6058,7 +6253,7 @@ function companySeason(c){
   const f=companyPay(c.seaId, c.owner, c.marque); c.lastPay=f.pay; // the Realm board reads this line — starved seasons read 0, never stale ink
   if(!f.n){ if(c.owner==='player') gazette('🧾 The <b>'+c.name+'</b> renders nothing — no quay on the '+z.name+' flies its owner’s flag. The charter is ink on dry paper.'); return 0; }
   if(f.pay<=0){ if(c.owner==='player') gazette('🧾 The <b>'+c.name+'</b> is starved this season — every quay it holds on the '+z.name+' sits shut by blockade. Break the siege of its harbours or watch the seal fade.'); return 0; }
-  emp(c.owner).gold+=f.pay; c.lastPay=f.pay;
+  emp(c.owner).gold+=f.pay; c.lastPay=f.pay; if(c.owner==='player' && G.reign) G.reign.companyRents=(G.reign.companyRents||0)+f.pay; // WAVE 24: the reign's rents column
   if(c.owner==='player') gazette('🧾 The <b>'+c.name+'</b> renders its season: <b>+'+fmt(f.pay)+'g</b> from the '+z.name+(f.shut? ' ('+f.shut+' of its '+f.n+' quays shut by blockade)' : '')+'.');
   return f.pay;
 }
@@ -6260,8 +6455,28 @@ rivalChronicle(); // WAVE 11: the other crowns make news too
 aiCharterSeason(); // WAVE 16: on rare seasons, a rival counting-house sets its own seal
 }
 /* the daily heartbeat: storms wander, blockades bite, courts sit, deadlines die */
+/* WAVE 24: the reign's book is written in two hands — the day hand notes who holds
+   each town and the treasury's height; the month hand closes the sea's account and
+   watches the bankers' deepest reach. Nothing here invents: both read the world. */
+function reignDailyTick(){
+  const R=G.reign; if(!R) return;
+  myRegions().forEach(r=>{ R.worldDays[r.name]=(R.worldDays[r.name]||0)+1; });
+  const g=emp('player').gold;
+  if(g>(R.peakGold||0)) R.peakGold=g;
+  const mx=(myRegions||myRegions()).length? Math.max.apply(null, myRegions().map(r=>(r.prosp==null?50:r.prosp))) : 50;
+  if(mx>(R.prospPeak||50)) R.prospPeak=mx;
+  const dp=debtPressure(emp('player'));
+  if(dp>(R.debtPeak||0)) R.debtPeak=dp;
+}
+function reignMonthlyTick(){
+  const R=G.reign; if(!R) return;
+  R.seaLossSeasons=(R.seaLossSeasons||0)+1;
+  if((emp('player').debt||0)>0) R.debtSeasons=(R.debtSeasons||0)+1;
+}
 function dayTick2(){
 if(!G||G.over) return;
+reignDailyTick();
+if(Math.floor(G.day)%30===0) reignMonthlyTick();
 stormsDaily();
 siegesDaily();
 blockadeDaily();
@@ -6424,10 +6639,10 @@ ordReply('⛓ <b>'+f.name+'</b> sails to blockade <b>'+r.name+'</b> — ~'+Math.
 else ordReply('⛵ No sailing road for '+f.name+' to '+r.name+'. '+heard); return;}
 if(/escort/.test(txt)){ f.stance='escort'; ordReply('🛡 <b>'+f.name+'</b> takes escort station'+(z?' on the '+z.name:'')+' — your lanes here breathe easier.'); save(); return;}
 if(r&&r.isPort){ if(orderSailPort(f,r)){ lastOrder={label:f.name+' sailing for '+r.name, undo:()=>{ const u=G.fleets.find(x=>x.id===fid); if(u) restoreUnit(u,snap);}};
-ordReply('⛵ <b>'+f.name+'</b> sails for <b>'+r.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days under the '+SEASONS[G.seasonIdx]+' wind. Say “cancel” to unwrite it.');}
+ordReply('⛵ <b>'+f.name+'</b> sails for <b>'+r.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days under the '+SEASONS[G.seasonIdx]+' wind.'+(((maelstromZone()||{}).id===r.seaZone||(f.at&&f.at.legs&&f.at.legs.some(lg=>String(lg.to)==='s'+((maelstromZone()||{}).id))))? ' The road threads the Maelstrom — ~'+Math.round(maelstromRisk()*100)+' in 100 days, the strait takes a hull.':'')+' Say “cancel” to unwrite it.');}
 else ordReply('⛵ No sailing road there for '+f.name+'. '+heard); return;}
 if(z){ if(orderSailZone(f,z)){ lastOrder={label:f.name+' sailing to the '+z.name, undo:()=>{ const u=G.fleets.find(x=>x.id===fid); if(u) restoreUnit(u,snap);}};
-ordReply('⛵ <b>'+f.name+'</b> makes sail for the <b>'+z.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days. Say “cancel” to unwrite it.');}
+ordReply('⛵ <b>'+f.name+'</b> makes sail for the <b>'+z.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days.'+((maelstromZone()&&z.id===maelstromZone().id)? ' The narrows run there — the Maelstrom takes its ~'+Math.round(maelstromRisk()*100)+' in 100 days from hulls under way.':'')+' Say “cancel” to unwrite it.');}
 else ordReply('⛵ '+f.name+' cannot reach the '+z.name+' from here. '+heard); return;}
 }
 // ---- armies ----
@@ -6566,7 +6781,7 @@ function checkEnd(){
 }
 function endGame(won,text){
   G.over=true; $('#end-title').textContent=won?'👑 Victory':'The Crown Falls';
-  $('#end-text').textContent=text; openVeil('endscreen'); save();
+  $('#end-text').textContent=text; finishReign(won?'won':'lost'); openVeil('endscreen'); save();
 }
 /* ---- the kingdoms board's arithmetic: one number a court can argue over ---- */
 function crownPower(id){
@@ -6686,7 +6901,7 @@ $('#btn-crown').onclick=()=>{
     const beatBlz=(q.prizeFleet||CRISIS_TITLES.some(t2=>(q.title||'').includes(t2)))? '<span style="display:inline-block;vertical-align:-4px;margin-right:6px">'+shieldSVG(emp('player'),20)+'</span>' : '';
     row.innerHTML='<span style="color:var(--brass);display:flex;align-items:flex-start">'+iconSigil((q.icon||'').replace(/️/g,''))+'</span><div style="flex:1">'+beatBlz+'<b>'+q.title+'</b><br><span class="rel">'+q.body+'</span></div>';
     q.choices.forEach(c=>{ const btn=document.createElement('button'); btn.className='mini-btn'; btn.textContent=c.label;
-      btn.onclick=()=>{ if(c.fn) c.fn(); G.crownQueue.splice(i,1); $('#crown').classList.remove('open'); refreshHUD(); save();
+      btn.onclick=()=>{ if(c.fn) c.fn(); const _ci=CRISIS_TITLES.some(t=>(q.title||'').includes(t)); if(_ci && G.reign) G.reign.crisesBeat=(G.reign.crisesBeat||0)+1; G.crownQueue.splice(i,1); $('#crown').classList.remove('open'); refreshHUD(); save();
         if(G.crownQueue.length) $('#btn-crown').click(); };
       row.appendChild(btn); });
     b.appendChild(row);
@@ -6824,6 +7039,21 @@ $('#btn-realm').onclick=()=>{
     row.innerHTML='<span class="who">🧾 '+c.name+'</span><span class="rel">'+(ow? ow.name : 'a fallen crown')+' · '+(zc? zc.name : 'lost water')+(c.marque? ' · letters of marque':'')+' · sealed '+(Math.max(0,G.turn-(c.since||0)))+' seasons past · '+render+'</span>';
     b.appendChild(row);
   });
+  // 📜 THE CHRONICLE OF THE REIGN — the reign's book, readable while it is still being written (WAVE 24)
+  const c24h=document.createElement('h3'); c24h.textContent='📜 The Chronicle of the Reign'; b.appendChild(c24h);
+  const c24p=document.createElement('p'); c24p.style.fontSize='12px';
+  c24p.textContent='At the end, every reign is weighed from its own tallies — lands, coin, wars, houses, towns, paper, bankers and reckonings. Read the book as it stands this morning, or close the reign and have its final page written in full.';
+  b.appendChild(c24p);
+  { const ax=reignAxes('player');
+    const soFar=document.createElement('p'); soFar.style.fontSize='13px';
+    soFar.innerHTML='So far: <b>'+fmt(ax.regions)+'</b> regions · treasury peaked <b>'+fmt(ax.peakGold)+'g</b> · '+ax.warsOpened+' wars opened · '+ax.siegesDone+' sieges ended · charters rendered <b>'+fmt(ax.companyRents)+'g</b> · the houses stand at '+(ax.houses.length? ax.houses.map(h=>h.loyalty).join('/') : '—')+'.';
+    b.appendChild(soFar); }
+  const c24row=document.createElement('div');
+  const rdBtn=document.createElement('button'); rdBtn.className='mini-btn'; rdBtn.textContent='📜 The Book So Far';
+  rdBtn.onclick=()=>{ buildChronicle(G.over? (G.reign&&G.reign.endKind||'won') : 'standing'); openChronicle(); };
+  c24row.appendChild(rdBtn);
+  if(!G.over){ const endBtn=document.createElement('button'); endBtn.className='mini-btn'; endBtn.textContent='👑 Close the Reign'; endBtn.onclick=()=>{ $('#realm').classList.remove('open'); abdicateReign(); }; c24row.appendChild(endBtn); }
+  b.appendChild(c24row);
   const row1=document.createElement('div'); row1.className='dip-row';
   row1.innerHTML='<span class="who">⚔ Army tech</span><span class="rel">'+(me.armyTech<3? 'Next: '+ARMY_TECH[me.armyTech+1]+' · 300g':'Élite — the finest in the world')+'</span>';
   const abtn=document.createElement('button'); abtn.className='mini-btn'; abtn.textContent='Research'; abtn.disabled=me.armyTech>=3||me.gold<300;
@@ -6843,6 +7073,8 @@ $('#btn-realm').onclick=()=>{
   openVeil('realm');
 };
 $('#realm-close').onclick=()=>$('#realm').classList.remove('open');
+{ const eb=document.querySelector('#end-chronicle-btn'); if(eb) eb.onclick=()=>openChronicle();
+  const cc=document.querySelector('#chron-close'); if(cc) cc.onclick=()=>{ closeVeil('chronicle'); if(G && G.over) openVeil('endscreen'); }; }
 $('#clock-pause').onclick=()=>{ setClock(0); };
 $('#clock-1').onclick=()=>{ simResumeFromEvent(); setClock(2); };
 $('#clock-2').onclick=()=>{ simResumeFromEvent(); setClock(4); };
@@ -9744,6 +9976,8 @@ try{
         if(sv.flash>0) sv.flash=Math.max(0, sv.flash-dt);
         const fl=sv.flash>0? 1+(sv.flash/0.14)*1.15 : 1;
         sv.vortex.material.color.setScalar(fl); // a 140ms emissive pulse, no light object spent
+        if(!maelSwirl && G && G.seas){ try{ buildMaelstrom(); }catch(_e){} } // the seat is retried quietly until the renderer knows the world // WAVE 24: the chart is drawn before the reign wakes — the whirlpool takes its seat on the first frame that knows the world
+        if(maelSwirl){ maelSwirl.rotation.y=(t*0.35+maelT0)%(Math.PI*2); maelSwirl.material.opacity=0.5+nf*0.12; } // WAVE 24: the whirlpool keeps its own slow turning
         sv.vortex.material.opacity=0.84+nf*0.08;
         sv.rain.material.opacity=0.40+nf*0.12+(fl-1)*0.35;
         sv.foam.material.opacity=0.34+0.22*(0.5+0.5*Math.sin(t*2.1+s.seed*5))+(fl-1)*0.4; });
@@ -9837,6 +10071,30 @@ try{
 
   /* wind lanes made visible: pale arrows riding the season's wind over every sea road */
   let windGroup=null; const windArrows=[];
+  /* WAVE 24: the Maelstrom painted — one merged ring of rock teeth and a swirl reusing the
+     storm's textures, sunk in the Western Med where the road turns. Two draws, no more. */
+  let maelGroup=null, maelSwirl=null, maelT0=0;
+  function buildMaelstrom(){
+    if(maelSwirl) return true; // once seated, she does not take her seat twice
+    const mz=((G && G.seas)||[]).find(z=>z.name==='Western Med'); if(!mz){ return false; }
+    const cx=SX(mz.x), cz=SZ(mz.y);
+    const rockMat=new THREE.MeshLambertMaterial({color:0x77684f});
+    // one instanced draw for the whole ring of teeth — the chart cannot afford nine
+    const teeth=new THREE.InstancedMesh(new THREE.ConeGeometry(4.6, 10, 5), rockMat, 9);
+    const mtx=new THREE.Matrix4();
+    for(let i=0;i<9;i++){ const an=i/9*Math.PI*2+((i*37)%5)*0.11, rr2=34+((i*53)%4)*3.4;
+      mtx.makeScale(1, 1.15+((i*29)%4)*0.24, 1);
+      mtx.setPosition(cx+Math.cos(an)*rr2, 2.2, cz+Math.sin(an)*rr2); teeth.setMatrixAt(i, mtx); }
+    teeth.instanceMatrix.needsUpdate=true; scene.add(teeth);
+    maelGroup=new THREE.Group();
+    const swirl=new THREE.Mesh(new THREE.CircleGeometry(48, 44).rotateX(-Math.PI/2),
+      new THREE.MeshBasicMaterial({map:stormVortexTexture(), color:0xdfeaf2, transparent:true, opacity:0.55, depthWrite:false, fog:false}));
+    swirl.position.set(cx, BASE_Y+3.4, cz); swirl.renderOrder=5; maelGroup.add(swirl);
+    maelSwirl=swirl; maelT0=Math.PI*0.25; scene.add(maelGroup);
+    window.__maelVis={c:[Math.round(cx*10)/10, Math.round(cz*10)/10], rocks:9};
+    return true;
+  }
+
   function buildWindArrows(){ windGroup=new THREE.Group();
     const mat=new THREE.MeshBasicMaterial({color:0xfff2cf, transparent:true, opacity:0.5});
     const cg=new THREE.ConeGeometry(1.1, 3.6, 6); cg.rotateZ(-Math.PI/2); // the point rides +X
@@ -10241,7 +10499,7 @@ try{
   container.style.display='block';
   document.getElementById('map').style.display='none';
   refreshSettlements(); refreshLanes(); refreshFleets(); buildMerchants3D();
-  initGulls(); buildLanterns(); buildStorms(); buildWindArrows();
+  initGulls(); buildLanterns(); buildStorms(); buildWindArrows(); buildMaelstrom();
   const CAMH = location.hash.match(/cam=(-?[\d.]+),(-?[\d.]+),(\d+(?:\.\d+)?)/); // QA hook: frame world coords directly
   if(CAMH){ target.set(SX(+CAMH[1]), 0, SZ(+CAMH[2])); dist=+CAMH[3]; camAnim=null; }
   updateCamera(); frame();
