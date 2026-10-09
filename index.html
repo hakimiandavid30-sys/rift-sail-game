@@ -327,6 +327,34 @@
   #sheet{transition:transform .28s cubic-bezier(.22,.9,.26,1);}
   #hint.show{animation:hintin .35s ease-out, hintGlow 2.8s ease-in-out .4s infinite;}
   @keyframes hintGlow{0%,100%{box-shadow:0 8px 26px rgba(0,0,0,.55)} 50%{box-shadow:0 8px 30px rgba(217,185,106,.35)}}
+
+  /* ---------- WAVE 25: the keepsake press + the shelf of past reigns ---------- */
+  #chron-head{text-align:center;font-variant:small-caps;font-size:14.5px;letter-spacing:.05em;color:var(--brass-light);margin:0 0 8px;}
+  #chron-head:empty{display:none;}
+  #past-list .past-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px dotted rgba(217,185,106,.35);flex-wrap:wrap;}
+  #past-list .past-row .who{font-weight:bold;min-width:150px;}
+  #past-list .past-row .rel{font-size:12px;color:#e6d3a3;}
+  @media print{
+    @page{margin:16mm 14mm;}
+    /* invoked from the chronicle, ONLY the chronicle prints: the whole game is struck
+       from the page, then the front page is laid down again in plain printer's ink */
+    html:has(body.printing-chronicle), body.printing-chronicle{background:#fff !important;}
+    body.printing-chronicle *{visibility:hidden !important;}
+    body.printing-chronicle #chronicle{display:block !important;position:absolute !important;left:0;top:0;width:100%;
+      background:#fff !important;padding:0;}
+    body.printing-chronicle #chronicle *{visibility:visible !important;}
+    body.printing-chronicle #chronicle .card{background:#fff !important;color:#1c1408 !important;border:none;outline:none;
+      box-shadow:none;border-radius:0;max-width:700px;width:100%;margin:0 auto;max-height:none;overflow:visible;padding:6px 4px;}
+    body.printing-chronicle #chronicle .card h2{color:#1c1408 !important;font-size:27px;letter-spacing:2px;margin-bottom:4px;}
+    body.printing-chronicle #chronicle .card p,
+    body.printing-chronicle #chronicle .card b,
+    body.printing-chronicle #chronicle .card i{color:#1c1408 !important;}
+    body.printing-chronicle #chronicle .card p{font-size:13.5px;line-height:1.55;}
+    body.printing-chronicle #chron-head{color:#1c1408 !important;font-size:15px;}
+    body.printing-chronicle #chronicle .rule{background:none !important;height:0;border-top:3.5px double #1c1408;margin:10px 0 14px;}
+    body.printing-chronicle #chron-print,
+    body.printing-chronicle #chron-close{display:none !important;}
+  }
 </style>
 </head>
 <body>
@@ -478,6 +506,7 @@
     <button class="big-btn secondary" id="btn-new-aurelia"><svg class="ic" viewBox="0 0 24 24"><path d="M19 14.5A8.5 8.5 0 1 1 9.5 5 7 7 0 0 0 19 14.5z"/></svg> Become the Aurelian Empire — Venice, purse first</button>
     <button class="big-btn secondary" id="btn-new-meridian"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v2M5 6h14M12 5L6.5 6 4 12a3.4 3.4 0 0 0 7 0L8.5 6M12 5l3.5 1L18 12a3.4 3.4 0 0 1-7 0l2.5-6M8 20h8M12 15v5"/></svg> Become the Meridian League — Holland, the counting-houses</button>
     <button class="big-btn secondary" id="btn-continue" style="display:none">Continue Campaign</button>
+    <button class="big-btn secondary" id="btn-past" style="display:none">👑 Past Reigns — the shelf of keepsakes</button>
   </div></div>
 
   <!-- End screen -->
@@ -494,8 +523,19 @@
   <div class="veil" id="chronicle"><div class="card">
     <h2>📜 The Chronicle of the Reign</h2>
     <div class="rule"></div>
+    <div id="chron-head"></div>
     <div id="chron-body"></div>
+    <button class="big-btn" id="chron-print">🖨 Print / Save the Keepsake</button>
     <button class="big-btn secondary" id="chron-close">Close</button>
+  </div></div>
+
+  <!-- WAVE 25: Past Reigns — the shelf of ended reigns, kept on this device alone -->
+  <div class="veil" id="past"><div class="card">
+    <h2>👑 Past Reigns</h2>
+    <div class="rule"></div>
+    <p style="font-size:12.5px">Keepsakes of reigns ended — the newest leads the shelf, and when a thirteenth reign ends the eldest keepsake is let go. These are kept <b>on this device alone</b>, not with your campaign save.</p>
+    <div id="past-list"></div>
+    <button class="big-btn secondary" id="past-close">Close</button>
   </div></div>
 </div>
 <script>
@@ -1406,7 +1446,7 @@ function chronicleVerdict(ax, kind){
   let pts=0; const why=[];
   const say=(ok,txt)=>{ if(ok){ pts++; why.push(txt); } };
   say(ax.regions>=WIN_REGIONS, 'an empire of '+WIN_REGIONS+' regions flies one colour');
-  say(ax.top.length && ax.top[0] && ax.top[0].d>=720, (ax.top[0].r.name)+' kept faith the longest — two years and more under one banner');
+  say(ax.top.length && ax.top[0] && ax.top[0].d>=720, (ax.top[0]? ax.top[0].r.name : 'A home port')+' kept faith the longest — two years and more under one banner'); // WAVE 25: the label is worded even when no town has yet kept a full day, so a young reign still ends with a written chronicle
   say(ax.peakGold>=1500, 'the treasury once counted '+fmt(ax.peakGold)+'g');
   say(ax.warsOpened>=1 && ax.siegesDone>=1, ax.siegesDone+' sieges were seen through to their end');
   say(ax.houses.length && Math.min.apply(null, ax.houses.map(h=>h.loyalty))>=45, 'no house ends the reign in scorn');
@@ -1436,7 +1476,7 @@ function buildChronicle(kind){
   L.push('🏦 <b>The Bankers:</b> deepest reach '+ax.debtPeak+'% pressure'+(ax.debtSeasons? ', across '+ax.debtSeasons+' months in their books' : ', and never once into their books')+'.');
   L.push('📜 <b>Reckonings Answered:</b> '+ax.crisesBeat+' late-reign bills faced and answered.');
   L.push('🕯 <i>What makes a Golden reign:</i> at least eight of the ten true lines — an empire of '+WIN_REGIONS+' regions; a town kept two full years under one banner; a treasury once counting 1,500g; wars opened and sieges seen through; no house ending in scorn; a house risen in favour; a town flourishing; the chartered paper’s rents; the bankers kept from the throne; and the reckonings answered.');
-  G.chronicle={verdict:v.verdict, kind:kind, lines:L, why:v.why, pts:v.pts};
+  G.chronicle={verdict:v.verdict, kind:kind, lines:L, why:v.why, pts:v.pts, crown:reignTitle(), span:'Spring, Year 1 — '+seasonName()};
   renderChronicle();
   return G.chronicle;
 }
@@ -1444,18 +1484,109 @@ function renderChronicle(){
   const box=(typeof document!=='undefined' && document.querySelector)? document.querySelector('#end-chronicle') : null;
   if(!box) return;
   const c=G && G.chronicle;
-  box.innerHTML = c? '<div class="rule"></div><h3 style="font-variant:small-caps">📜 The Chronicle of the Reign</h3>'+c.lines.map(l=>'<p style="font-size:13px;margin:6px 0;text-align:left">'+l+'</p>').join('') : '';
+  box.innerHTML = c? '<div class="rule"></div><h3 style="font-variant:small-caps">📜 The Chronicle of the Reign</h3>'+(chronHeadLine(c)? '<p style="text-align:center;font-variant:small-caps;font-size:12.5px;margin:2px 0 6px">'+chronHeadLine(c)+'</p>':'')+c.lines.map(l=>'<p style="font-size:13px;margin:6px 0;text-align:left">'+l+'</p>').join('') : '';
+}
+/* WAVE 25: one front page, three doors — the living reign's book, a keepsake off the
+   shelf, and the printer. Every door renders through this one hand so the page a
+   player prints is the page they read. */
+let chronReturn=null; // 'past' when the sheet was opened off the shelf of past reigns
+function renderChronBody(c){
+  const body=document.querySelector('#chron-body');
+  if(body) body.innerHTML=(c.lines||[]).map(l=>'<p style="font-size:13.5px;line-height:1.5;margin:7px 0;text-align:left">'+l+'</p>').join('');
+  const head=document.querySelector('#chron-head');
+  if(head) head.textContent=chronHeadLine(c);
 }
 function openChronicle(){
   const c=G && G.chronicle;
   if(!c){ toast('No chronicle yet — the reign still writes itself.'); return; }
-  const body=document.querySelector('#chron-body'); if(body) body.innerHTML=c.lines.map(l=>'<p style="font-size:13.5px;line-height:1.5;margin:7px 0;text-align:left">'+l+'</p>').join('');
+  chronReturn=null;
+  renderChronBody(c);
   openVeil('chronicle');
 }
 function finishReign(kind){
   ensureReignMeta(G); if(G.reign) G.reign.endKind=kind;
   try{ buildChronicle(kind); }catch(e){ if(G) G.chronicle=null; }
   renderChronicle();
+  shelveChronicle(G.chronicle); // WAVE 25: an ended reign takes its place on the shelf of keepsakes
+}
+
+/* ================= WAVE 25: THE SHELF OF PAST REIGNS =================
+   When a reign ends — won, lost or laid down — its Chronicle is copied onto a small
+   shelf kept in this device's own store, apart from the campaign save (wv11 does not
+   change, and no keepsake ever rides a save file). Twelve keepsakes stand on the
+   shelf; when a thirteenth reign ends, the eldest is let go. The shelf is read
+   through one guarded hand: a torn or corrupted entry is skipped, never obeyed, and
+   can never break the boot. */
+const PAST_KEY='riftsail-past-reigns', PAST_CAP=12;
+function reignTitle(){
+  const me=(G && emp('player'))||{};
+  const cap=me.capitalName||'Lisbon';
+  return (me.name && me.name!=='Your Crown')? me.name+' · '+cap : 'The Crown of '+cap;
+}
+function chronHeadLine(c){
+  if(!c) return '';
+  return (c.crown||'')+(c.span? (c.crown? ' · ':'')+c.span : '')+(c.kind==='standing'? ' · the reign still writes itself':'');
+}
+function pastReigns(){
+  try{
+    if(typeof localStorage==='undefined') return [];
+    const raw=localStorage.getItem(PAST_KEY);
+    if(!raw) return [];
+    const arr=JSON.parse(raw);
+    if(!Array.isArray(arr)) return [];
+    return arr.filter(e=> e && typeof e==='object' && typeof e.crown==='string' && typeof e.verdict==='string' && Array.isArray(e.lines));
+  }catch(err){ return []; }
+}
+function shelfStore(list){
+  try{ if(typeof localStorage!=='undefined') localStorage.setItem(PAST_KEY, JSON.stringify(list.slice(0, PAST_CAP))); }catch(err){}
+}
+function shelveChronicle(c){
+  if(!c || !Array.isArray(c.lines) || !c.verdict) return;
+  const ax=reignAxes('player');
+  const entry={ crown:c.crown||reignTitle(), verdict:c.verdict, kind:c.kind||'won', years:ax.years,
+    lands:ax.regions, span:c.span||('Spring, Year 1 — '+seasonName()), lines:c.lines.slice(),
+    reignAt:(G && G.startedAt)||0, day:(G && G.day)||0, at:Date.now() };
+  // a reign is shelved once: the same reign ending again writes nothing new
+  entry.sig=entry.reignAt+'|'+entry.kind+'|'+entry.verdict+'|'+entry.lands+'|'+entry.day+'|'+entry.span;
+  const list=pastReigns();
+  if(list.some(e=>e.sig===entry.sig)) return;
+  list.unshift(entry);
+  shelfStore(list);
+  const pb=(typeof document!=='undefined' && document.querySelector)? document.querySelector('#btn-past') : null;
+  if(pb) pb.style.display='block';
+}
+let pastReturn=null; // the veil to step back to when the shelf closes ('start' | 'realm')
+function openPastReigns(from){
+  pastReturn=from||pastReturn;
+  const listEl=document.querySelector('#past-list'); if(!listEl) return;
+  const shelf=pastReigns();
+  if(!shelf.length){
+    listEl.innerHTML='<p style="font-size:13px">No reign has ended yet. When one does — in victory, in exile, or laid down by your own hand — its Chronicle is kept here.</p>';
+  } else {
+    listEl.innerHTML='';
+    shelf.forEach((e,i)=>{
+      const row=document.createElement('div'); row.className='past-row';
+      row.innerHTML='<span class="who">👑 '+e.crown+'</span><span class="rel"><b>'+e.verdict+'</b> · '+(e.years||1)+' year'+((e.years||1)===1?'':'s')+' ruled · '+fmt(e.lands||0)+' lands at the end · '+(e.span||'')+'</span>';
+      const btn=document.createElement('button'); btn.className='mini-btn'; btn.textContent='📜 Read';
+      btn.onclick=()=>openPastChronicle(i);
+      row.appendChild(btn); listEl.appendChild(row);
+    });
+  }
+  openVeil('past');
+}
+function openPastChronicle(i){
+  const e=pastReigns()[i]; if(!e) return;
+  chronReturn='past';
+  renderChronBody(e);
+  openVeil('chronicle');
+}
+function printChronicle(){
+  if(typeof document==='undefined' || !document.body) return;
+  document.body.classList.add('printing-chronicle');
+  const done=()=>{ try{ document.body.classList.remove('printing-chronicle'); }catch(e){} };
+  try{ window.addEventListener('afterprint', function h(){ done(); window.removeEventListener('afterprint', h); }); }catch(e){}
+  setTimeout(done, 3000); // never leave the game dressed for the press
+  try{ window.print(); }catch(e){ done(); }
 }
 function abdicateReign(){
   if(!G || G.over) return;
@@ -3111,7 +3242,7 @@ function anyVeilOpen(){ return !!document.querySelector('.veil.open'); }
    The reckoning rule — a new panel REPLACES whatever is up; it never stacks on top of it.
    (The Crown modal used to pile onto the Realm/Orders sheets until three panels shared the
    screen.) openVeil() is the only door in; plain classList.remove() stays the way out.        */
-const VEIL_IDS=['gazette','realm','crown','menu','orders','howto','battle','start','endscreen','chronicle'];
+const VEIL_IDS=['gazette','realm','crown','menu','orders','howto','battle','start','endscreen','chronicle','past'];
 function openVeil(id){ VEIL_IDS.forEach(v=>{ const el=document.getElementById(v); if(el) el.classList.toggle('open', v===id); }); closeSheet(); Sound.open(); }
 function closeVeil(id){ const el=document.getElementById(id); if(el && el.classList.contains('open')) Sound.close(); if(el) el.classList.remove('open'); }
 function closeVeil(id){ const el=document.getElementById(id); if(el) el.classList.remove('open'); }
@@ -3714,7 +3845,7 @@ function selectSea(z){
   selected={type:'sea',id:z.id};
   $('#sheet-title').textContent='🌊 '+z.name+(z.strait?' — a Strait, the sea’s narrow door':'');
   $('#sheet-sub').textContent='Sea zone · ports: '+(z.ports.map(id=>rById[id].name).join(', ')||'none');
-  $('#sheet-stats').innerHTML=statRow([['⚓ Ports',z.ports.length]].concat((maelstromZone()&&z.id===maelstromZone().id)? [['🌀 The Maelstrom','threaded daily by the lanes — ~'+Math.round(maelstromRisk()*100)+' in 100 days takes a hull; blockades bite half again as hard in the narrows']] : []));
+  $('#sheet-stats').innerHTML=statRow([['⚓ Ports',z.ports.length]].concat((maelstromZone()&&z.id===maelstromZone().id)? [['🌀 The Maelstrom','threaded daily by the lanes — the '+SEASONS[G.seasonIdx]+' sea runs '+stormSeasonWord()+' here: today the strait takes ~'+Math.round(maelstromRisk()*100)+' in 100 days; blockades bite half again as hard in the narrows']] : []));
   const acts=$('#sheet-acts'); acts.innerHTML='';
   acts.appendChild(actBtn('👁 These Waters','Fleets here: '+(G.fleets.filter(f=>f.zone===z.id).map(f=>f.name+' ('+f.ships+')').join(', ')||'none')+'.',()=>{},'',true));
   const myPortsHere=z.ports.map(id=>rById[id]).filter(p=>p&&p.owner==='player');
@@ -3822,7 +3953,7 @@ function tavernRumorDaily(){
   if(!G || G.over || G.day-_rumorDay<3) return; // the mill grinds slow — one tale in three days, never a flood
   const sources=[rumorFleet, rumorPrice, rumorGovernor, rumorCompany, rumorStorm, rumorHouse, rumorMaelstrom];
   function rumorMaelstrom(){ const z=maelstromZone(); if(!z) return null; return pick([
-    'the whirlpool in the '+z.name+' took a Ragusan brig in the night — nine days in a hundred, the strait keeps its toll',
+    'the whirlpool in the '+z.name+' took a Ragusan brig in the night — '+Math.round(maelstromRisk()*100)+' days in a hundred this '+SEASONS[G.seasonIdx].toLowerCase()+', the strait keeps its toll',
     'pilots of the '+z.name+' will not thread the narrows with a thin squadron; deep water costs days, the Maelstrom costs hulls',
     'a blockade in the '+z.name+' bites half again as hard, the old hands swear — there is no sea-room to slip a throat']); }
   for(let k=0;k<sources.length;k++){
@@ -5093,6 +5224,14 @@ window.__wx=function(){ return { hour:G? (G.hour||9):9, night:G? nightFactor():0
 
 /* ---------- storms ---------- */
 const STORM_HULL_CHANCE=0.09; // the daily toll a tempest takes on an unsheltered fleet under way
+/* WAVE 25: the sea keeps seasons, and so does her hunger. The storm system's own
+   seasonal pulse — gentle in Spring, steady in Summer, restless in Autumn, angry in
+   Winter — rides the one toll every printed forecast quotes, so the number a captain
+   reads this morning is the number the sea charges this morning, in any season. */
+const STORM_SEASON_WORDS=['gentle','steady','restless','angry'];
+function stormSeasonFactor(){ if(!G||typeof G.seasonIdx!=='number') return 1; return [0.6,1.0,1.4,1.8][G.seasonIdx&3]||1; }
+function stormSeasonWord(){ return STORM_SEASON_WORDS[(G? G.seasonIdx:0)&3]||'steady'; }
+function stormHullRisk(){ return STORM_HULL_CHANCE*stormSeasonFactor(); }
 function stormAt(x,y){ return (G.storms||[]).find(s=>Math.hypot(s.x-x,s.y-y)<s.r);}
 /* ================= WAVE 24: THE MAELSTROM =================
    One strait keeps a permanent whirlpool: the throat between the two Mediterraneans,
@@ -5102,7 +5241,7 @@ function stormAt(x,y){ return (G.storms||[]).find(s=>Math.hypot(s.x-x,s.y-y)<s.r
    The throat of a strait is also a tighter leash on its shore-port: a blockade feeding
    through the narrows bites at 1.5 days for every day on any open roadstead. */
 function maelstromZone(){ return (G && G.seas||[]).find(z=>z.name==='Western Med') || null; }
-function maelstromRisk(){ return STORM_HULL_CHANCE; }
+function maelstromRisk(){ return stormHullRisk(); } // WAVE 25: the whirlpool tolls the tempest's toll, breathed by the season — printed == applied, today
 function stormsDaily(){
 (G.storms||[]).forEach(s=>{
 s.x+=s.vx*46; s.y+=s.vy*46;
@@ -5120,7 +5259,7 @@ if(!f.at||!f.ships) return;
 // WAVE 24: the strait and its whirlpool — under way within sight of the narrows, a fleet
 // pays the tempest's own toll on the tempest's own roll; no second system hides here
 { const mz=maelstromZone(); if(mz){ const _fp=fPos(f); const _near=Math.hypot(_fp.x-mz.x, _fp.y-mz.y); if(_near<420){ const shel=(G.seaStances||{})[mz.id]==='protect' && f.owner==='player';
-  if(f._maelLog!==G.turn && !shel){ f._maelLog=G.turn; if(f.owner==='player') dispatch(captainName(f),'We threaded the narrows with the whirlpool growling off the Sicily shore — nine days in a hundred, the strait takes a hull for the passage, Majesty. Deep water in season is the only mercy priced.'); }
+  if(f._maelLog!==G.turn && !shel){ f._maelLog=G.turn; if(f.owner==='player') dispatch(captainName(f),'We threaded the narrows with the whirlpool growling off the Sicily shore — '+Math.round(maelstromRisk()*100)+' days in a hundred this '+SEASONS[G.seasonIdx].toLowerCase()+', the strait takes a hull for the passage, Majesty. Deep water in season is the only mercy priced.'); }
   if(!shel && rnd()<maelstromRisk() && f.ships>1){ f.ships--; noteSeasonStorm(f); if(f.owner==='player') pushEvent('🌀 <b>'+f.name+'</b> threads the Maelstrom — the strait claims a hull for the passage.'); }
 } } }
 const s=stormAt(fPos(f).x, fPos(f).y); if(!s) return;
@@ -5129,7 +5268,7 @@ if(f.owner==='player'){ markFlag('storm'); advisorTry('storm');
   if(f._stormLog!==G.turn&&(!sheltered)){ f._stormLog=G.turn; dispatch(captainName(f), pick([
     'We rode out the tempest with two reefs in everything and the pumps manned all night. A storm does not ask permission, Majesty — escorts and sea-room are the only answers.',
     'The sea took our topmast and near took the ship. I have written the carpenter’s name in the log twice: once for the saving of her, once as a warning.'])); } }
-if(!sheltered && rnd()<STORM_HULL_CHANCE && f.ships>1){ f.ships--; noteSeasonStorm(f); if(f.owner==='player') pushEvent('🌩 <b>'+f.name+'</b> rides out a tempest — a hull is lost to the storm.');}
+if(!sheltered && rnd()<stormHullRisk() && f.ships>1){ f.ships--; noteSeasonStorm(f); if(f.owner==='player') pushEvent('🌩 <b>'+f.name+'</b> rides out a tempest — a hull is lost to the storm.');}
 if(emp(f.owner).shipTech>=2 && f.owner!=='player' && rnd()<0.3){ /* old salts sheer away */}
 });
 }
@@ -6639,10 +6778,10 @@ ordReply('⛓ <b>'+f.name+'</b> sails to blockade <b>'+r.name+'</b> — ~'+Math.
 else ordReply('⛵ No sailing road for '+f.name+' to '+r.name+'. '+heard); return;}
 if(/escort/.test(txt)){ f.stance='escort'; ordReply('🛡 <b>'+f.name+'</b> takes escort station'+(z?' on the '+z.name:'')+' — your lanes here breathe easier.'); save(); return;}
 if(r&&r.isPort){ if(orderSailPort(f,r)){ lastOrder={label:f.name+' sailing for '+r.name, undo:()=>{ const u=G.fleets.find(x=>x.id===fid); if(u) restoreUnit(u,snap);}};
-ordReply('⛵ <b>'+f.name+'</b> sails for <b>'+r.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days under the '+SEASONS[G.seasonIdx]+' wind.'+(((maelstromZone()||{}).id===r.seaZone||(f.at&&f.at.legs&&f.at.legs.some(lg=>String(lg.to)==='s'+((maelstromZone()||{}).id))))? ' The road threads the Maelstrom — ~'+Math.round(maelstromRisk()*100)+' in 100 days, the strait takes a hull.':'')+' Say “cancel” to unwrite it.');}
+ordReply('⛵ <b>'+f.name+'</b> sails for <b>'+r.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days under the '+SEASONS[G.seasonIdx]+' wind.'+(((maelstromZone()||{}).id===r.seaZone||(f.at&&f.at.legs&&f.at.legs.some(lg=>String(lg.to)==='s'+((maelstromZone()||{}).id))))? ' The road threads the Maelstrom — in this '+SEASONS[G.seasonIdx]+' sea, running '+stormSeasonWord()+', the strait takes ~'+Math.round(maelstromRisk()*100)+' in 100 days from hulls under way.':'')+' Say “cancel” to unwrite it.');}
 else ordReply('⛵ No sailing road there for '+f.name+'. '+heard); return;}
 if(z){ if(orderSailZone(f,z)){ lastOrder={label:f.name+' sailing to the '+z.name, undo:()=>{ const u=G.fleets.find(x=>x.id===fid); if(u) restoreUnit(u,snap);}};
-ordReply('⛵ <b>'+f.name+'</b> makes sail for the <b>'+z.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days.'+((maelstromZone()&&z.id===maelstromZone().id)? ' The narrows run there — the Maelstrom takes its ~'+Math.round(maelstromRisk()*100)+' in 100 days from hulls under way.':'')+' Say “cancel” to unwrite it.');}
+ordReply('⛵ <b>'+f.name+'</b> makes sail for the <b>'+z.name+'</b> — ~'+Math.max(1,Math.ceil(f.at.arriveDay-G.day))+' days.'+((maelstromZone()&&z.id===maelstromZone().id)? ' The narrows run there — in this '+SEASONS[G.seasonIdx]+' sea, running '+stormSeasonWord()+', the Maelstrom takes its ~'+Math.round(maelstromRisk()*100)+' in 100 days from hulls under way.':'')+' Say “cancel” to unwrite it.');}
 else ordReply('⛵ '+f.name+' cannot reach the '+z.name+' from here. '+heard); return;}
 }
 // ---- armies ----
@@ -7053,6 +7192,9 @@ $('#btn-realm').onclick=()=>{
   rdBtn.onclick=()=>{ buildChronicle(G.over? (G.reign&&G.reign.endKind||'won') : 'standing'); openChronicle(); };
   c24row.appendChild(rdBtn);
   if(!G.over){ const endBtn=document.createElement('button'); endBtn.className='mini-btn'; endBtn.textContent='👑 Close the Reign'; endBtn.onclick=()=>{ $('#realm').classList.remove('open'); abdicateReign(); }; c24row.appendChild(endBtn); }
+  // WAVE 25: the shelf of past reigns, reachable from the Realm as from the start screen
+  { const pastBtn=document.createElement('button'); pastBtn.className='mini-btn'; pastBtn.textContent='👑 Past Reigns';
+    pastBtn.onclick=()=>openPastReigns('realm'); c24row.appendChild(pastBtn); }
   b.appendChild(c24row);
   const row1=document.createElement('div'); row1.className='dip-row';
   row1.innerHTML='<span class="who">⚔ Army tech</span><span class="rel">'+(me.armyTech<3? 'Next: '+ARMY_TECH[me.armyTech+1]+' · 300g':'Élite — the finest in the world')+'</span>';
@@ -7074,7 +7216,17 @@ $('#btn-realm').onclick=()=>{
 };
 $('#realm-close').onclick=()=>$('#realm').classList.remove('open');
 { const eb=document.querySelector('#end-chronicle-btn'); if(eb) eb.onclick=()=>openChronicle();
-  const cc=document.querySelector('#chron-close'); if(cc) cc.onclick=()=>{ closeVeil('chronicle'); if(G && G.over) openVeil('endscreen'); }; }
+  const cc=document.querySelector('#chron-close'); if(cc) cc.onclick=()=>{ closeVeil('chronicle');
+    if(chronReturn==='past'){ chronReturn=null; openPastReigns(); }
+    else if(G && G.over) openVeil('endscreen'); };
+  // WAVE 25: the keepsake press + the shelf of past reigns
+  const cp=document.querySelector('#chron-print'); if(cp) cp.onclick=()=>printChronicle();
+  const bp=document.querySelector('#btn-past'); if(bp) bp.onclick=()=>openPastReigns('start');
+  const pc=document.querySelector('#past-close'); if(pc) pc.onclick=()=>{ closeVeil('past');
+    if(pastReturn){ const back=pastReturn; pastReturn=null; openVeil(back); } };
+  const shelf=pastReigns(); if(bp && shelf.length) bp.style.display='block';
+  try{ window.addEventListener('beforeprint', ()=>{ if(veilIsOpen('chronicle')) document.body.classList.add('printing-chronicle'); });
+       window.addEventListener('afterprint', ()=>{ document.body.classList.remove('printing-chronicle'); }); }catch(e){} }
 $('#clock-pause').onclick=()=>{ setClock(0); };
 $('#clock-1').onclick=()=>{ simResumeFromEvent(); setClock(2); };
 $('#clock-2').onclick=()=>{ simResumeFromEvent(); setClock(4); };
@@ -9977,7 +10129,12 @@ try{
         const fl=sv.flash>0? 1+(sv.flash/0.14)*1.15 : 1;
         sv.vortex.material.color.setScalar(fl); // a 140ms emissive pulse, no light object spent
         if(!maelSwirl && G && G.seas){ try{ buildMaelstrom(); }catch(_e){} } // the seat is retried quietly until the renderer knows the world // WAVE 24: the chart is drawn before the reign wakes — the whirlpool takes its seat on the first frame that knows the world
-        if(maelSwirl){ maelSwirl.rotation.y=(t*0.35+maelT0)%(Math.PI*2); maelSwirl.material.opacity=0.5+nf*0.12; } // WAVE 24: the whirlpool keeps its own slow turning
+        if(maelSwirl){ // WAVE 25: the whirlpool breathes with the storm season — it spins faster, rides darker and thicker as the sea's hunger rises, and slackens when the fair season returns
+          const mf=(typeof stormSeasonFactor==='function')? stormSeasonFactor() : 1;
+          const mk=Math.max(0, Math.min(1, (mf-0.6)/1.2));
+          maelSwirl.rotation.y=(t*0.35*mf+maelT0)%(Math.PI*2);
+          maelSwirl.material.opacity=0.42+0.28*mk+nf*0.10;
+          maelSwirl.material.color.copy(MAEL_CALM).lerp(MAEL_STORM, mk); }
         sv.vortex.material.opacity=0.84+nf*0.08;
         sv.rain.material.opacity=0.40+nf*0.12+(fl-1)*0.35;
         sv.foam.material.opacity=0.34+0.22*(0.5+0.5*Math.sin(t*2.1+s.seed*5))+(fl-1)*0.4; });
@@ -10074,6 +10231,7 @@ try{
   /* WAVE 24: the Maelstrom painted — one merged ring of rock teeth and a swirl reusing the
      storm's textures, sunk in the Western Med where the road turns. Two draws, no more. */
   let maelGroup=null, maelSwirl=null, maelT0=0;
+  const MAEL_CALM=new THREE.Color(0xdfeaf2), MAEL_STORM=new THREE.Color(0x7d97ad); // WAVE 25: the disc darkens as the season's sea turns angry
   function buildMaelstrom(){
     if(maelSwirl) return true; // once seated, she does not take her seat twice
     const mz=((G && G.seas)||[]).find(z=>z.name==='Western Med'); if(!mz){ return false; }
