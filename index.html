@@ -2045,6 +2045,9 @@ function draw(){
   G.regions.forEach(r=>drawRegion(r));
   // trade lanes
   drawLanes();
+  // WAVE 27: the weather on parchment — roving cells and the strait's swirl, dressed by the season
+  const _tSec2D=performance.now()/1000;
+  drawStorms2D(_tSec2D); drawMaelstrom2D(_tSec2D);
   if(G.showWinds) drawWinds();
   // fleets
   G.fleets.forEach(f=>drawFleet(f));
@@ -5311,6 +5314,60 @@ function stormAt(x,y){ return (G.storms||[]).find(s=>Math.hypot(s.x-x,s.y-y)<s.r
    through the narrows bites at 1.5 days for every day on any open roadstead. */
 function maelstromZone(){ return (G && G.seas||[]).find(z=>z.name==='Western Med') || null; }
 function maelstromRisk(){ return stormHullRisk(); } // WAVE 25: the whirlpool tolls the tempest's toll, breathed by the season — printed == applied, today
+/* ================= WAVE 27: THE SEASONS ON THE WATER =================
+   Wave 25 taught the whirlpool's DISC to breathe with stormSeasonFactor(); the
+   roving storm cells and the parchment fallback never learned the lesson — the
+   cells turned at one pace in every month, and the 2D chart drew neither the
+   cells nor the swirl its own sea sheet prices. One factor now dresses every
+   wet thing on either chart: spin quickens, the disc thickens, the tone
+   deepens toward slate as the sea's hunger rises. Purely visual — the toll
+   already breathes in the sim (stormHullRisk), and no number is re-derived. */
+function stormCellVis(){ // the ONE seasonal dress for tempests, read by 3D and 2D alike
+  const f=stormSeasonFactor(), mk=Math.max(0, Math.min(1, (f-0.6)/1.2));
+  return { f, mk, spin:0.9+0.55*mk, thick:0.7+0.5*mk, slate:mk };
+}
+function maelVis2D(nf){ // the whirlpool's parchment dress — mirrors the diorama's own terms (0.35 spin, 0.42→0.70 body, +night)
+  const v=stormCellVis();
+  const out={ f:v.f, mk:v.mk, rotSpeed:0.35*v.f, opacity:0.42+0.28*v.mk, teeth:9, ringK:0.72, spinK:1 };
+  if(typeof nf==='number') out.opacity+=0.10*nf;
+  window.__maelVis2D=out; return out;
+}
+function drawStorms2D(nowSec){ // the roving cells, on parchment at last — slate wash, a dark heart, arms turning with the season
+  const cells=G.storms||[]; if(!cells.length) return;
+  const v=stormCellVis();
+  cells.forEach(s=>{
+    const a=(nowSec*0.25*v.spin)+(s.seed||0)*3;
+    let gr=ctx.createRadialGradient(s.x,s.y,s.r*0.06,s.x,s.y,s.r);
+    gr.addColorStop(0,'rgba(38,52,70,'+(0.55+0.30*v.thick).toFixed(3)+')');
+    gr.addColorStop(0.55,'rgba(52,68,88,'+(0.34+0.20*v.thick).toFixed(3)+')');
+    gr.addColorStop(1,'rgba(70,86,106,0)');
+    ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
+    gr=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,s.r*0.18);
+    gr.addColorStop(0,'rgba(14,22,34,0.85)'); gr.addColorStop(1,'rgba(14,22,34,0)');
+    ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(s.x,s.y,s.r*0.18,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(228,236,244,'+(0.16+0.14*v.slate).toFixed(3)+')'; ctx.lineWidth=Math.max(1.2,2.2*WS*0.4);
+    for(let arm=0;arm<3;arm++){ ctx.beginPath(); ctx.arc(s.x,s.y,s.r*(0.42+arm*0.20), a+arm*2.09, a+arm*2.09+2.2); ctx.stroke(); }
+  });
+}
+function drawMaelstrom2D(nowSec){ // the swirl + its ring of teeth, on parchment — the strait the sheet prices, drawn for the eye
+  const mz=maelstromZone(); if(!mz||typeof ctx==='undefined') return;
+  const nf=(typeof nightFactor==='function')? nightFactor() : 0;
+  const v=maelVis2D(nf);
+  const x=mz.x, y=mz.y, R=190, a=nowSec*v.rotSpeed+0.78;
+  let gr=ctx.createRadialGradient(x,y,R*0.05,x,y,R);
+  gr.addColorStop(0,'rgba(30,44,60,'+(v.opacity+0.18).toFixed(3)+')');
+  gr.addColorStop(0.6,'rgba(70,92,112,'+v.opacity.toFixed(3)+')');
+  gr.addColorStop(1,'rgba(70,92,112,0)');
+  ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(x,y,R,0,Math.PI*2); ctx.fill();
+  gr=ctx.createRadialGradient(x,y,0,x,y,R*0.2);
+  gr.addColorStop(0,'rgba(12,20,30,0.9)'); gr.addColorStop(1,'rgba(12,20,30,0)');
+  ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(x,y,R*0.2,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='rgba(232,240,246,'+(0.20+0.16*v.mk).toFixed(3)+')'; ctx.lineWidth=Math.max(1.4,2.6*WS*0.4);
+  for(let arm=0;arm<3;arm++){ ctx.beginPath(); ctx.arc(x,y,R*(0.40+arm*0.19), a+arm*2.09, a+arm*2.09+2.4); ctx.stroke(); }
+  ctx.fillStyle='#4a3b26'; // ink teeth on the ring — nine, as the diorama keeps
+  for(let i=0;i<9;i++){ const an=i/9*Math.PI*2+((i*37)%5)*0.11, rr=R*v.ringK, px=x+Math.cos(an)*rr, py=y+Math.sin(an)*rr, tp=R*0.13;
+    ctx.beginPath(); ctx.moveTo(px,py-tp); ctx.lineTo(px-tp*0.55,py+tp*0.6); ctx.lineTo(px+tp*0.55,py+tp*0.6); ctx.closePath(); ctx.fill(); }
+}
 /* ================= WAVE 26: ADMIRALS READ THE SEASONS =================
    Wave 24 taught rival admirals the narrows' price and Wave 25 taught the price to
    breathe with the season — but the admirals still feared the strait on a fixed rule
@@ -10212,13 +10269,15 @@ try{
       if(KIT.mats && KIT.mats.town){ KIT.mats.town.emissive.setHex(0xff9a4d); KIT.mats.town.emissiveIntensity=0.02*nf; } // the wash is gone: lamplight lives in the panes themselves now
       if(harborGlow) harborGlow.material.opacity=nf*0.45; // harbours breathe warm after dark
       gwReg.forEach(en=>{ if(en.beam&&en.beam.children[0]) en.beam.children[0].material.opacity=0.13+nf*0.42; }); // LOOK-TO-9: the Grand Light's sweep owns the night water
+      const _scv=(typeof stormCellVis==='function')? stormCellVis() : {spin:1, thick:1, slate:0}; // WAVE 27: the cells breathe with the same factor as the whirlpool
+      window.__stormVis27=_scv;
       stormVis.forEach((sv,i)=>{ const s=(G.storms||[])[i]; if(!s){ sv.g.visible=false; return; } sv.g.visible=true;
         sv.g.position.set(SX(s.x), 0, SZ(s.y));
-        sv.vortex.rotation.y=t*0.25+s.seed*3; sv.foam.rotation.y=-t*0.13+s.seed*2; // the cell turns one way; the white-capped chop worries the other
+        sv.vortex.rotation.y=t*0.25*_scv.spin+s.seed*3; sv.foam.rotation.y=-t*0.13*_scv.spin+s.seed*2; // the cell turns one way; the white-capped chop worries the other — both quicken as the season darkens
         if(nf>0.55 && t>sv.next){ sv.flash=0.14; sv.next=t+1.6+hash(i*131+((t*0.37)|0))*4.5; } // lightning lives inside the cell, never on a schedule the eye can learn
         if(sv.flash>0) sv.flash=Math.max(0, sv.flash-dt);
         const fl=sv.flash>0? 1+(sv.flash/0.14)*1.15 : 1;
-        sv.vortex.material.color.setScalar(fl); // a 140ms emissive pulse, no light object spent
+        sv.vortex.material.color.setRGB(1,1,1).lerp(STORM_SLATE, _scv.slate*0.55).multiplyScalar(fl); // a 140ms emissive pulse, no light object spent — deepening toward slate as the season's hunger rises (WAVE 27)
         if(!maelSwirl && G && G.seas){ try{ buildMaelstrom(); }catch(_e){} } // the seat is retried quietly until the renderer knows the world // WAVE 24: the chart is drawn before the reign wakes — the whirlpool takes its seat on the first frame that knows the world
         if(maelSwirl){ // WAVE 25: the whirlpool breathes with the storm season — it spins faster, rides darker and thicker as the sea's hunger rises, and slackens when the fair season returns
           const mf=(typeof stormSeasonFactor==='function')? stormSeasonFactor() : 1;
@@ -10226,9 +10285,9 @@ try{
           maelSwirl.rotation.y=(t*0.35*mf+maelT0)%(Math.PI*2);
           maelSwirl.material.opacity=0.42+0.28*mk+nf*0.10;
           maelSwirl.material.color.copy(MAEL_CALM).lerp(MAEL_STORM, mk); }
-        sv.vortex.material.opacity=0.84+nf*0.08;
+        sv.vortex.material.opacity=Math.min(1, 0.60+0.30*_scv.thick+nf*0.08); // the disc thickens with the season's hunger (WAVE 27)
         sv.rain.material.opacity=0.40+nf*0.12+(fl-1)*0.35;
-        sv.foam.material.opacity=0.34+0.22*(0.5+0.5*Math.sin(t*2.1+s.seed*5))+(fl-1)*0.4; });
+        sv.foam.material.opacity=0.34+0.22*(0.5+0.5*Math.sin(t*2.1*_scv.spin+s.seed*5))+(fl-1)*0.4; });
     }
     // the single shadow caster rides with the camera target, frustum fitted to the view
     sun.position.set(target.x+205, 95, target.z+55); sun.target.position.copy(target); // low amber key rides with the camera
@@ -10323,6 +10382,7 @@ try{
      storm's textures, sunk in the Western Med where the road turns. Two draws, no more. */
   let maelGroup=null, maelSwirl=null, maelT0=0;
   const MAEL_CALM=new THREE.Color(0xdfeaf2), MAEL_STORM=new THREE.Color(0x7d97ad); // WAVE 25: the disc darkens as the season's sea turns angry
+  const STORM_SLATE=new THREE.Color(0x5d748c); // WAVE 27: the tempests take the same slate as the whirlpool's angry face
   function buildMaelstrom(){
     if(maelSwirl) return true; // once seated, she does not take her seat twice
     const mz=((G && G.seas)||[]).find(z=>z.name==='Western Med'); if(!mz){ return false; }
