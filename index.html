@@ -526,6 +526,7 @@
     <div id="chron-head"></div>
     <div id="chron-body"></div>
     <button class="big-btn" id="chron-print">🖨 Print / Save the Keepsake</button>
+    <p id="chron-hint" style="font-size:11.5px;font-variant:small-caps;letter-spacing:.05em;opacity:.72;margin:2px 0 8px;text-align:center"></p>
     <button class="big-btn secondary" id="chron-close">Close</button>
   </div></div>
 
@@ -535,6 +536,9 @@
     <div class="rule"></div>
     <p style="font-size:12.5px">Keepsakes of reigns ended — the newest leads the shelf, and when a thirteenth reign ends the eldest keepsake is let go. These are kept <b>on this device alone</b>, not with your campaign save.</p>
     <div id="past-list"></div>
+    <button class="big-btn" id="past-export">📤 Keep a Copy — write the shelf to a file</button>
+    <button class="big-btn secondary" id="past-import">📥 Bring Keepsakes In — read such a file</button>
+    <input type="file" id="past-file" accept=".riftsail-keepsakes,.txt,text/plain,application/json" style="display:none">
     <button class="big-btn secondary" id="past-close">Close</button>
   </div></div>
 </div>
@@ -1493,6 +1497,7 @@ let chronReturn=null; // 'past' when the sheet was opened off the shelf of past 
 function renderChronBody(c){
   const body=document.querySelector('#chron-body');
   if(body) body.innerHTML=(c.lines||[]).map(l=>'<p style="font-size:13.5px;line-height:1.5;margin:7px 0;text-align:left">'+l+'</p>').join('');
+  const hint=document.querySelector('#chron-hint'); if(hint) hint.textContent=pdfHintText(); // WAVE 26: the press keeps its directions on the sheet
   const head=document.querySelector('#chron-head');
   if(head) head.textContent=chronHeadLine(c);
 }
@@ -1555,6 +1560,59 @@ function shelveChronicle(c){
   const pb=(typeof document!=='undefined' && document.querySelector)? document.querySelector('#btn-past') : null;
   if(pb) pb.style.display='block';
 }
+/* ================= WAVE 26: THE KEEPSAKES TRAVEL =================
+   The shelf keeps on one device alone — but a king who changes handsets should not
+   lose his reigns. Export writes the shelf to a small text file: one format line,
+   then the shelf as JSON. Import reads only that hand, guarded exactly as the shelf
+   reader guards (a keepsake is believed only if it wears a crown, a verdict and its
+   lines), merged with the shelf — no reign shelved twice, twelve at most, the
+   newest leading. A bad file earns one plain word and leaves the shelf untouched:
+   never a crash, never half a poison. The campaign save (wv11) is never involved. */
+const PAST_FORMAT='Rift & Sail keepsakes — the shelf of past reigns';
+function keepsakesExportText(){
+  return PAST_FORMAT+'\n'+JSON.stringify({wave:26, kept:new Date().toISOString(), reigns:pastReigns()});
+}
+function pastDedupeKey(e){ return e.sig || ((e.crown||'')+'|'+(e.verdict||'')+'|'+(e.span||'')); }
+function keepsakesImport(text){
+  if(typeof text!=='string' || !text.trim()) return {ok:false, why:'that file holds no words the chronicler can read'};
+  const cut=text.indexOf('\n');
+  const head=(cut<0? text : text.slice(0,cut)).trim();
+  if(head!==PAST_FORMAT) return {ok:false, why:'that is not a shelf of Rift & Sail keepsakes'};
+  let obj=null; try{ obj=JSON.parse(text.slice(cut+1)); }catch(e){}
+  if(!obj || !Array.isArray(obj.reigns)) return {ok:false, why:'the keepsake file is torn — nothing was taken from it'};
+  const believed=obj.reigns.filter(e=> e && typeof e==='object' && typeof e.crown==='string' && typeof e.verdict==='string' && Array.isArray(e.lines));
+  if(!believed.length) return {ok:false, why:'no true keepsake stands in that file'};
+  const merged=pastReigns(); const seen=new Set(merged.map(pastDedupeKey));
+  let added=0;
+  believed.forEach(e=>{ const k=pastDedupeKey(e); if(seen.has(k)) return; seen.add(k); merged.push(e); added++; });
+  merged.sort((a,b)=>(Number(b&&b.at)||0)-(Number(a&&a.at)||0));
+  shelfStore(merged);
+  return {ok:true, added, kept:pastReigns().length};
+}
+function exportKeepsakes(){
+  if(!pastReigns().length){ toast('No reign has ended yet — the shelf is bare, there is nothing to copy.'); return; }
+  try{
+    const blob=new Blob([keepsakesExportText()], {type:'text/plain;charset=utf-8'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download='rift-sail-keepsakes.riftsail-keepsakes';
+    if(document.body && document.body.appendChild) document.body.appendChild(a);
+    if(a.click) a.click();
+    setTimeout(()=>{ try{ URL.revokeObjectURL(a.href); }catch(e){} }, 4000);
+    toast('📤 The shelf is written to a file — keep it where your next reign can find it.');
+  }catch(e){ toast('This hand cannot write a file here — the shelf stays on this device.'); }
+}
+function importKeepsakesFrom(input){
+  const file=input && input.files && input.files[0]; if(!file) return;
+  try{
+    const rd=new FileReader();
+    rd.onerror=()=>toast('That file could not be read — the shelf is untouched.');
+    rd.onload=()=>{ const r=keepsakesImport(String(rd.result||''));
+      if(r.ok){ toast('📥 '+r.added+' keepsake'+(r.added===1?'':'s')+' brought in — '+r.kept+' now stand'+(r.kept===1?'s':'')+' on the shelf.'); openPastReigns(); }
+      else toast('📥 Refused, plainly: '+r.why+'. The shelf is untouched.'); };
+    rd.readAsText(file);
+  }catch(e){ toast('That file could not be read — the shelf is untouched.'); }
+  try{ input.value=''; }catch(e){}
+}
 let pastReturn=null; // the veil to step back to when the shelf closes ('start' | 'realm')
 function openPastReigns(from){
   pastReturn=from||pastReturn;
@@ -1579,6 +1637,16 @@ function openPastChronicle(i){
   chronReturn='past';
   renderChronBody(e);
   openVeil('chronicle');
+}
+/* WAVE 26: one engraved line under the press, so the keepsake survives the hand
+   that printed it — the words follow the device the reader actually holds. */
+function pdfHintText(){
+  const ua=(typeof navigator!=='undefined' && navigator.userAgent)||'';
+  const maxT=(typeof navigator!=='undefined' && navigator.maxTouchPoints)||0;
+  const appleTouch=/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && maxT>1);
+  return appleTouch
+    ? 'On this iPhone, Print — then pinch out on the preview, and the Chronicle keeps as a PDF'
+    : 'In your browser, Print — then “Save as PDF”, and the Chronicle keeps as a file';
 }
 function printChronicle(){
   if(typeof document==='undefined' || !document.body) return;
@@ -3334,11 +3402,12 @@ function aiMonthlyOps(){
         if(ports.length){ ports.sort((x,y)=>fleetDistanceTo(f,x.x,x.y)-fleetDistanceTo(f,y.x,y.y)); orderSailPort(f, ports[0]); }
       } else if(rnd()<0.35){
         const z=seaById[f.zone]; let nz=pick(z.neighbors.map(n=>seaById[n]).filter(Boolean));
-        // WAVE 24: the Maelstrom — an AI admiral reasons exactly as the chart prices it:
-        // hulls to spare braves the narrows (one strait, one toll); a thin squadron seeks
-        // deep water instead. Same odds the Crown's forecasts print, no hidden seamanship.
+        // WAVE 24 taught them the price; WAVE 26 teaches them the day's weather. The admiral
+        // reads this morning's printed number as any captain reads the chart (maelstromCall):
+        // in a gentle spring a 2-hull squadron may thread the narrows, in an angry winter
+        // even 3–4 hulls seek deep water. One chart, one toll, no hidden seamanship.
         const _mz=maelstromZone();
-        if(nz && _mz && nz.id===_mz.id && f.ships<=2){ const _alt=(z.neighbors||[]).map(n=>seaById[n]).filter(x=>x && x.id!==_mz.id); if(_alt.length) nz=pick(_alt); }
+        if(nz && _mz && nz.id===_mz.id && !maelstromCall(f)){ const _alt=(z.neighbors||[]).map(n=>seaById[n]).filter(x=>x && x.id!==_mz.id); if(_alt.length) nz=pick(_alt); }
         if(nz) orderSailZone(f, nz);
       }
       if(f.stance==='raid' && rnd()<0.3) f.stance='patrol';
@@ -5242,6 +5311,24 @@ function stormAt(x,y){ return (G.storms||[]).find(s=>Math.hypot(s.x-x,s.y-y)<s.r
    through the narrows bites at 1.5 days for every day on any open roadstead. */
 function maelstromZone(){ return (G && G.seas||[]).find(z=>z.name==='Western Med') || null; }
 function maelstromRisk(){ return stormHullRisk(); } // WAVE 25: the whirlpool tolls the tempest's toll, breathed by the season — printed == applied, today
+/* ================= WAVE 26: ADMIRALS READ THE SEASONS =================
+   Wave 24 taught rival admirals the narrows' price and Wave 25 taught the price to
+   breathe with the season — but the admirals still feared the strait on a fixed rule
+   (two hulls or fewer shuns it in every month of the year). A real captain prices one
+   hull against the squadron that must feel its loss: brave iff this morning's printed
+   toll, spread over his hulls, sits under his tolerance. In a gentle spring a two-hull
+   squadron may thread the narrows; in an angry winter even three or four hulls seek
+   deep water. A bold admiral's tolerance runs wider, a weatherly one's surer — the
+   threshold bends with the man; the printed number never does. */
+const MAEL_TOL=0.035; // one hull's expected pain, priced against the fleet that must feel it
+function maelstromCall(f){
+  if(!f) return true;
+  const risk=maelstromRisk(); if(!(risk>0)) return true; // no whirlpool on this chart — sail free
+  let tol=MAEL_TOL;
+  const tr=(f.admiral&&f.admiral.traits)||[];
+  if(tr.includes('Bold')) tol*=1.35; else if(tr.includes('Weatherly')) tol*=1.2;
+  return risk/Math.max(1, f.ships||1) <= tol;
+}
 function stormsDaily(){
 (G.storms||[]).forEach(s=>{
 s.x+=s.vx*46; s.y+=s.vy*46;
@@ -7224,6 +7311,10 @@ $('#realm-close').onclick=()=>$('#realm').classList.remove('open');
   const bp=document.querySelector('#btn-past'); if(bp) bp.onclick=()=>openPastReigns('start');
   const pc=document.querySelector('#past-close'); if(pc) pc.onclick=()=>{ closeVeil('past');
     if(pastReturn){ const back=pastReturn; pastReturn=null; openVeil(back); } };
+  // WAVE 26: the keepsakes travel — export the shelf to a file, read one back in
+  const pe=document.querySelector('#past-export'); if(pe) pe.onclick=()=>exportKeepsakes();
+  const pi=document.querySelector('#past-import'), pf=document.querySelector('#past-file');
+  if(pi && pf){ pi.onclick=()=>{ if(pf.click) pf.click(); }; pf.onchange=()=>importKeepsakesFrom(pf); }
   const shelf=pastReigns(); if(bp && shelf.length) bp.style.display='block';
   try{ window.addEventListener('beforeprint', ()=>{ if(veilIsOpen('chronicle')) document.body.classList.add('printing-chronicle'); });
        window.addEventListener('afterprint', ()=>{ document.body.classList.remove('printing-chronicle'); }); }catch(e){} }
